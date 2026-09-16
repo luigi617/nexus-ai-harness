@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 
 from core.permission import PermissionDecision
-from protocols.mediator import Context
+from protocols.context import Context
 from protocols.permission import Permission
 
 

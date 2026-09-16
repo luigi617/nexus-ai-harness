@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from core.invoke import invoke
 from core.message import Message
-from protocols.mediator import Context
+from protocols.context import Context
 from protocols.model import Model
 from protocols.router import Router
 

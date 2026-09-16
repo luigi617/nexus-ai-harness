@@ -4,14 +4,13 @@ from core.events import IterationStarted, LoopStopped, ResponseReceived
 from core.invoke import invoke
 from core.message import Message
 from core.run import RunState
-from protocols.context import ContextManager
+from protocols.context import Context
+from protocols.context_manager import ContextManager
 from protocols.loop import Loop
-from protocols.mediator import Context
 from protocols.model import Model
 from protocols.router import Router
 from protocols.tool import Tool
 from services.guard_chain import GuardChain
-from services.intervene import apply_interventions
 from services.tool_runner import ToolRunner
 
 
@@ -28,7 +27,7 @@ class AgenticLoop(Loop):
                 ctx.emit(LoopStopped("interrupted"))
                 return "stopped: interrupted"
 
-            await apply_interventions(ctx)  # e.g. injected messages steer this turn
+            await ctx.apply_interventions()  # e.g. injected messages steer this turn
 
             ctx.emit(IterationStarted(i))
             decision = guards.check(ctx)

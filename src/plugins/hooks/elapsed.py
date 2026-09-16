@@ -4,8 +4,8 @@ import time
 from dataclasses import dataclass
 
 from core.events import Event
+from protocols.context import Context
 from protocols.hook import Hook
-from protocols.mediator import Context
 
 
 @dataclass

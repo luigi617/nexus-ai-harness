@@ -5,7 +5,7 @@ from collections.abc import Awaitable
 from typing import ClassVar, Protocol, runtime_checkable
 
 from core.message import Message
-from protocols.mediator import Context
+from protocols.context import Context
 from protocols.model import Model
 
 

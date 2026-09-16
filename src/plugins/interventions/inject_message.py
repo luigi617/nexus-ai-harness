@@ -3,13 +3,14 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from core.message import Message
-from protocols.mediator import Context
+from protocols.context import Context
+from protocols.intervention import Intervention
 
 
 @dataclass
-class InjectMessage:
+class InjectMessage(Intervention):
     """Steer a running agent by adding a message before its next turn, so the
-    next model call sees it. ``session.submit(InjectMessage("focus on X"))``.
+    next model call sees it.
     """
 
     content: str

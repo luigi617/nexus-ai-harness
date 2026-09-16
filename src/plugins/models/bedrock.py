@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 
 from core.message import Message
 from core.response import Response
-from protocols.mediator import Context
+from protocols.context import Context
 from protocols.model import Model
 from protocols.tool import Tool
 

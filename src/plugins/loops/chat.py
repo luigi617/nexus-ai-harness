@@ -3,17 +3,16 @@ from __future__ import annotations
 from core.invoke import invoke
 from core.message import Message
 from core.run import RunState
-from protocols.context import ContextManager
+from protocols.context import Context
+from protocols.context_manager import ContextManager
 from protocols.loop import Loop
-from protocols.mediator import Context
 from protocols.model import Model
 from protocols.router import Router
-from services.intervene import apply_interventions
 
 
 class ChatLoop(Loop):
     async def run(self, ctx: Context) -> str:
-        await apply_interventions(ctx)
+        await ctx.apply_interventions()
         router = ctx.get(Router)
         history = ctx.history
         for cm in ctx.all(ContextManager):

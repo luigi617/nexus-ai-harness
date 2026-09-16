@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 
 from core.spawn import SpawnState
-from protocols.mediator import Context
+from protocols.context import Context
 from protocols.spawner import Spawner
 from services.runner import run_session
 

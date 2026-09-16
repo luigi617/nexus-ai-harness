@@ -4,7 +4,7 @@ from abc import abstractmethod
 from collections.abc import Awaitable
 from typing import ClassVar, Protocol, runtime_checkable
 
-from protocols.mediator import Context
+from protocols.context import Context
 
 
 @runtime_checkable

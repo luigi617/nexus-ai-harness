@@ -4,7 +4,7 @@ import asyncio
 
 from core.permission import ApprovalRequest
 from protocols.approver import Approver
-from protocols.mediator import Context
+from protocols.context import Context
 
 
 class AutoApprove(Approver):

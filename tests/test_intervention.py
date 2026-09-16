@@ -4,8 +4,8 @@ import asyncio
 
 from core.response import Response
 from core.spawn import SpawnState
-from harness import GraphAIHarness, Session
-from harness.mediator import RunContext
+from harness import NexusAIHarness, Session
+from harness.context import RunContext
 from harness.registry import Registry
 from plugins.interventions import InjectMessage
 from plugins.loops import AgenticLoop
@@ -34,7 +34,7 @@ def test_injected_message_steers_the_next_turn():
 
     session = Session()
     session.submit(InjectMessage("use the metric system"))
-    h = GraphAIHarness().use(AgenticLoop()).use(Echo())
+    h = NexusAIHarness().use(AgenticLoop()).use(Echo())
     result = h.run_sync("convert 5 miles", session=session)
     # the injected message was appended after the user input, so it's the last
     assert result.output == "answering: use the metric system"
@@ -71,5 +71,5 @@ def test_child_has_its_own_empty_inbox():
     parent = RunContext(Session(), Registry())
     parent._session.submit(InjectMessage("root only"))
     child = parent.fork(None)
-    assert child.take_interventions() == []  # interventions don't propagate
+    assert child._session.take_interventions() == []  # interventions don't propagate
     assert child.state(SpawnState).depth == 1

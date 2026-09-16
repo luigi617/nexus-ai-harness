@@ -17,8 +17,7 @@ class Session:
     id: str = field(default_factory=lambda: new_id("sess"))
     history: list[Message] = field(default_factory=list)
     # Interrupt is a shared signal: fork passes the parent's Event to children,
-    # so interrupting the root stops in-flight subagents too. Thread-safe, so
-    # it's safe to set from a signal handler or another task.
+    # so interrupting the root stops in-flight subagents too.
     _interrupt: Event = field(default_factory=Event)
     # Per-session intervention inbox (not shared with subagents).
     _inbox: deque[Intervention] = field(default_factory=deque)

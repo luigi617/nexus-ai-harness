@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from core.response import Response
-from harness import GraphAIHarness, Session
+from harness import NexusAIHarness, Session
 from plugins.loops import AgenticLoop
 from protocols.model import Model
 from tests.conftest import ScriptedModel
@@ -29,7 +29,7 @@ def test_interrupt_stops_between_iterations():
                 text="", tool_calls=[{"name": "noop", "id": "1", "arguments": {}}]
             )
 
-    h = GraphAIHarness().use(AgenticLoop()).use(Interrupting(session))
+    h = NexusAIHarness().use(AgenticLoop()).use(Interrupting(session))
     result = h.run_sync("go", session=session)
     assert result.stop_reason == "interrupted"
     assert result.output == "stopped: interrupted"
@@ -38,6 +38,6 @@ def test_interrupt_stops_between_iterations():
 def test_run_resets_stale_interrupt():
     session = Session()
     session.interrupt()  # stale request from before this turn
-    h = GraphAIHarness().use(AgenticLoop()).use(ScriptedModel(Response(text="hi")))
+    h = NexusAIHarness().use(AgenticLoop()).use(ScriptedModel(Response(text="hi")))
     result = h.run_sync("q", session=session)
     assert result.output == "hi"  # reset at run start, so it ran normally

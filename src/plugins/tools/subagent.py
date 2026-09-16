@@ -4,7 +4,7 @@ from collections.abc import Iterable
 from typing import ClassVar
 
 from core.invoke import invoke
-from protocols.mediator import Context
+from protocols.context import Context
 from protocols.spawner import Spawner
 from protocols.tool import Tool
 

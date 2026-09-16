@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 
-from harness.mediator import RunContext
+from harness.context import RunContext
 from harness.registry import Registry
 from harness.result import RunResult
 from harness.session import Session

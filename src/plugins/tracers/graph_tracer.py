@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from core.events import Event, MessageAdded
 from graph import Graph
+from protocols.context import Context
 from protocols.hook import Hook
-from protocols.mediator import Context
 
 
 class GraphTracer(Hook):

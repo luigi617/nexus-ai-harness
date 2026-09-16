@@ -3,8 +3,8 @@ from __future__ import annotations
 from core.events import SessionEnded, SessionStarted
 from core.invoke import invoke
 from core.message import Message
+from protocols.context import Context
 from protocols.loop import Loop
-from protocols.mediator import Context
 
 
 async def run_session(ctx: Context, user_input: str) -> str:

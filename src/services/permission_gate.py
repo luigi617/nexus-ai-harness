@@ -5,7 +5,7 @@ from core.invoke import invoke
 from core.permission import ApprovalRequest, PermissionDecision, PermissionVerdict
 from core.spawn import SpawnState
 from protocols.approver import Approver
-from protocols.mediator import Context
+from protocols.context import Context
 from protocols.permission import Permission
 
 

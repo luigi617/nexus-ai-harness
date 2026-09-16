@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 from core.response import Response
-from harness.mediator import RunContext
+from harness.context import RunContext
 from harness.registry import Registry
 from harness.session import Session
 from protocols.model import Model

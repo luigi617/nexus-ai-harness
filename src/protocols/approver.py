@@ -5,7 +5,7 @@ from collections.abc import Awaitable
 from typing import ClassVar, Protocol, runtime_checkable
 
 from core.permission import ApprovalRequest
-from protocols.mediator import Context
+from protocols.context import Context
 
 
 @runtime_checkable

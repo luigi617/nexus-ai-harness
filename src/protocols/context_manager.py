@@ -5,25 +5,22 @@ from collections.abc import Awaitable
 from typing import ClassVar, Protocol, runtime_checkable
 
 from core.message import Message
-from core.response import Response
 from protocols.context import Context
 
 
 @runtime_checkable
-class Model(Protocol):
+class ContextManager(Protocol):
     """
-    A model backend.
+    Owns everything about managing the context sent to the model
     """
 
-    kind: ClassVar[str] = "model"
-
-    provider: str = ""
-    name: str = ""
+    kind: ClassVar[str] = "context"
 
     @abstractmethod
-    def complete(
+    def process(
         self, history: list[Message], ctx: Context
-    ) -> Response | Awaitable[Response]:
-        """Return a completion.
-        May be implemented as sync or ``async def`` — the harness adapts.
+    ) -> list[Message] | Awaitable[list[Message]]:
+        """
+        Transform the history before the model call.
+        May be sync or ``async def`` — the harness adapts.
         """

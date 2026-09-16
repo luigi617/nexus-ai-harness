@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from core.guard import GuardDecision
 from plugins.hooks import ElapsedState
+from protocols.context import Context
 from protocols.guard import Guard
-from protocols.mediator import Context
 
 
 class Timeout(Guard):

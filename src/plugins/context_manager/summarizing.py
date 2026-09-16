@@ -4,8 +4,8 @@ from dataclasses import dataclass
 
 from core.invoke import invoke
 from core.message import Message
-from protocols.context import ContextManager
-from protocols.mediator import Context
+from protocols.context import Context
+from protocols.context_manager import ContextManager
 from protocols.model import Model
 
 

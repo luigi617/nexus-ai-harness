@@ -6,7 +6,7 @@ from core.events import ToolCallCompleted, ToolCallDenied, ToolCallStarted
 from core.invoke import invoke
 from core.message import Message
 from core.permission import PermissionVerdict
-from protocols.mediator import Context
+from protocols.context import Context
 from protocols.tool import Tool
 from services.permission_gate import PermissionGate
 

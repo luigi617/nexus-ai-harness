@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import ClassVar
 
-from protocols.mediator import Context
+from protocols.context import Context
 from protocols.memory import MemoryStore
 from protocols.tool import Tool
 

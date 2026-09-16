@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from harness.mediator import RunContext
+from harness.context import RunContext
 from harness.registry import Registry
 from harness.session import Session
 
