@@ -61,3 +61,27 @@ def test_session_lifecycle_events():
     rec = SessionRecorder()
     build(rec).run_sync("q")
     assert rec.events == ["SessionStarted", "SessionEnded"]
+
+
+def test_default_harness_runs(tmp_path):
+    from plugins import default_harness
+
+    h = default_harness(ScriptedProvider(Response(text="hi")), memory_dir=str(tmp_path))
+    assert h.run_sync("q") == "hi"
+
+
+def test_default_harness_bounds_a_runaway_loop(tmp_path):
+    from plugins import default_harness
+
+    # A provider that never stops calling a tool would loop forever; the default
+    # MaxIterations guard must halt it. Use `recall` (trusted, so no approval
+    # prompt) so the test stays non-interactive.
+    prov = ScriptedProvider(
+        Response(
+            text="",
+            tool_calls=[{"name": "recall", "id": "1", "arguments": {"query": "x"}}],
+        )
+    )
+    h = default_harness(prov, max_iterations=3, memory_dir=str(tmp_path))
+    result = h.run_sync("go")
+    assert result.startswith("stopped")

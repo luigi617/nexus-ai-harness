@@ -1,4 +1,4 @@
-name: Test Suite
+name: CI
 
 on:
   push:
@@ -11,6 +11,7 @@ concurrency:
 
 jobs:
   test:
+    name: Tests
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -21,4 +22,16 @@ jobs:
       - uses: ./.github/actions/setup
         with:
           python-version: ${{ matrix.python-version }}
+      - run: pytest
+
+  min-version:
+    name: Min Version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install uv
+      - run: uv pip install --system --resolution lowest-direct -e ".[dev]"
       - run: pytest

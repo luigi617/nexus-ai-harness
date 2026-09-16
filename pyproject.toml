@@ -11,13 +11,23 @@ requires-python = ">=3.11"
 license = { file = "LICENSE" }
 authors = [{ name = "luigi617" }]
 
-dependencies = ["boto3", "python-dotenv"]
+dependencies = [
+    "boto3>=1.35",
+    "python-dotenv>=1.0",
+]
 
 [project.optional-dependencies]
-dev = ["pytest", "ruff", "mypy"]
+dev = [
+    "pytest",
+    "ruff==0.16.4",
+    "mypy==2.3.1"
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+"*" = ["py.typed"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
