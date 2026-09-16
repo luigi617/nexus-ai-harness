@@ -1,4 +1,4 @@
-# nexus-ai-harness
+Nexus AI Harness
 
 A plugin-based harness for building LLM agents.
 
