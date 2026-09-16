@@ -10,12 +10,15 @@ from protocols.mediator import Context
 
 
 @runtime_checkable
-class Provider(Protocol):
+class Model(Protocol):
     """
     A model backend.
     """
 
-    kind: ClassVar[str] = "provider"
+    kind: ClassVar[str] = "model"
+
+    provider: str = ""
+    name: str = ""
 
     @abstractmethod
     def complete(

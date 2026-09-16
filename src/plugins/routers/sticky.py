@@ -1,0 +1,31 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+from core.invoke import invoke
+from core.message import Message
+from protocols.mediator import Context
+from protocols.model import Model
+from protocols.router import Router
+
+
+@dataclass
+class StickyState:
+    model: Model | None = None
+
+
+class StickyRouter(Router):
+    """Decide once, then stick: delegates to an inner router on the first turn
+    (when the history holds the first task) and reuses that model for the rest
+    of the run. Wrap any router, e.g. ``StickyRouter(LLMRouter(...))`` to pick a
+    model from the first task and keep it.
+    """
+
+    def __init__(self, inner: Router) -> None:
+        self._inner = inner
+
+    async def route(self, history: list[Message], ctx: Context) -> Model:
+        state = ctx.state(StickyState)
+        if state.model is None:
+            state.model = await invoke(self._inner.route, history, ctx)
+        return state.model

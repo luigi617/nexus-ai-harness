@@ -21,6 +21,6 @@ class ContextManager(Protocol):
         self, history: list[Message], ctx: Context
     ) -> list[Message] | Awaitable[list[Message]]:
         """
-        Transform the history before the provider call.
+        Transform the history before the model call.
         May be sync or ``async def`` — the harness adapts.
         """

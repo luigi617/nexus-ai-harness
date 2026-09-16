@@ -6,7 +6,7 @@ from core.response import Response
 from harness.mediator import RunContext
 from harness.registry import Registry
 from harness.session import Session
-from protocols.provider import Provider
+from protocols.model import Model
 from protocols.tool import Tool
 
 
@@ -18,13 +18,11 @@ def make_ctx(*plugins: object) -> RunContext:
     return RunContext(Session(), registry)
 
 
-class ScriptedProvider(Provider):
+class ScriptedModel(Model):
     """Returns queued Responses in order; the last repeats once exhausted.
 
     Records the histories it was called with, for assertions.
     """
-
-    kind = "provider"
 
     def __init__(self, *responses: Response) -> None:
         self._responses = list(responses) or [Response(text="done")]

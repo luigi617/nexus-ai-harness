@@ -10,8 +10,6 @@ from tests.conftest import RecordingTool, make_ctx
 
 
 class EventRecorder(Hook):
-    kind = "hook"
-
     def __init__(self) -> None:
         self.events: list[str] = []
 

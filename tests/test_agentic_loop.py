@@ -11,12 +11,10 @@ from plugins.loops import AgenticLoop
 from plugins.permissions import AllowList, AutoApprove
 from protocols.hook import Hook
 from protocols.tool import Tool
-from tests.conftest import RecordingTool, ScriptedProvider, make_ctx
+from tests.conftest import RecordingTool, ScriptedModel, make_ctx
 
 
 class LoopStopRecorder(Hook):
-    kind = "hook"
-
     def __init__(self) -> None:
         self.reasons: list[str] = []
 
@@ -27,11 +25,11 @@ class LoopStopRecorder(Hook):
 
 def test_tool_call_then_finish():
     tool = RecordingTool("echo", "42")
-    prov = ScriptedProvider(
+    model = ScriptedModel(
         Response(text="", tool_calls=[{"name": "echo", "id": "1", "arguments": {}}]),
         Response(text="final answer"),
     )
-    ctx = make_ctx(prov, tool, AllowList(["echo"]), AutoApprove())
+    ctx = make_ctx(model, tool, AllowList(["echo"]), AutoApprove())
     result = asyncio.run(AgenticLoop().run(ctx))
     assert result == "final answer"
     assert tool.calls == [{}]
@@ -48,18 +46,18 @@ def test_no_provider_raises():
 
 
 def test_guard_stops_loop():
-    prov = ScriptedProvider(Response(text="never reached"))
+    model = ScriptedModel(Response(text="never reached"))
     rec = LoopStopRecorder()
-    ctx = make_ctx(prov, MaxIterations(0), IterationCounter(), rec)
+    ctx = make_ctx(model, MaxIterations(0), IterationCounter(), rec)
     result = asyncio.run(AgenticLoop().run(ctx))
     assert result.startswith("stopped")
     assert any("guard" in r for r in rec.reasons)
 
 
 def test_natural_exit_emits_completed():
-    prov = ScriptedProvider(Response(text="done"))
+    model = ScriptedModel(Response(text="done"))
     rec = LoopStopRecorder()
-    ctx = make_ctx(prov, rec)
+    ctx = make_ctx(model, rec)
     asyncio.run(AgenticLoop().run(ctx))
     assert rec.reasons == ["completed"]
 
@@ -75,7 +73,7 @@ def test_parallel_tool_calls_run_concurrently():
             time.sleep(0.2)
             return "slow"
 
-    prov = ScriptedProvider(
+    model = ScriptedModel(
         Response(
             text="",
             tool_calls=[
@@ -87,7 +85,7 @@ def test_parallel_tool_calls_run_concurrently():
         Response(text="done"),
     )
     ctx = make_ctx(
-        prov,
+        model,
         SlowTool("a"),
         SlowTool("b"),
         SlowTool("c"),

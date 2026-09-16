@@ -6,6 +6,7 @@ from plugins.guards import BudgetGuard, MaxIterations, Timeout
 from plugins.hooks import CostCounter, ElapsedTime, IterationCounter
 from plugins.loops import AgenticLoop, ChatLoop
 from plugins.memory import FileMemoryStore
+from plugins.models import BedrockModel
 from plugins.permissions import (
     AllowList,
     AskUnless,
@@ -13,18 +14,18 @@ from plugins.permissions import (
     ConsoleApprover,
     DenyList,
 )
-from plugins.providers import BedrockProvider
+from plugins.routers import LLMRouter, StickyRouter
 from plugins.spawner import InProcessSpawner
 from plugins.tools import Forget, Recall, Remember, Subagent
 from plugins.tracers import GraphTracer
-from protocols.provider import Provider
+from protocols.model import Model
 
 __all__ = [
     "AgenticLoop",
     "AllowList",
     "AskUnless",
     "AutoApprove",
-    "BedrockProvider",
+    "BedrockModel",
     "BudgetGuard",
     "ChatLoop",
     "ConsoleApprover",
@@ -36,9 +37,11 @@ __all__ = [
     "GraphTracer",
     "InProcessSpawner",
     "IterationCounter",
+    "LLMRouter",
     "MaxIterations",
     "Recall",
     "Remember",
+    "StickyRouter",
     "Subagent",
     "SummarizingContextManager",
     "Timeout",
@@ -47,7 +50,7 @@ __all__ = [
 
 
 def default_harness(
-    provider: Provider,
+    model: Model,
     *,
     max_iterations: int = 20,
     timeout_s: float = 300.0,
@@ -55,19 +58,14 @@ def default_harness(
     memory_dir: str = "~/.nexus-ai-harness/memory",
 ) -> GraphAIHarness:
     """A batteries-included harness: agentic loop + context summarization + the
-    given provider, plus long-term memory, subagent delegation, safety guards,
-    and observability counters.
-
-    Interactive by default: memory reads/writes run freely, but any other tool
-    call (subagent, or tools you add) prompts on the terminal via
-    ConsoleApprover. For non-interactive/automated use, override the approver
-    with ``.use(AutoApprove())`` (last registration wins).
+    given Model, plus long-term memory, subagent delegation, safety guards, and
+    observability counters.
     """
     return (
         GraphAIHarness()
         .use(AgenticLoop())
         .use(SummarizingContextManager())
-        .use(provider)
+        .use(model)
         # long-term memory + its tools
         .use(FileMemoryStore(memory_dir))
         .use(Remember())

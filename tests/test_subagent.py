@@ -49,11 +49,9 @@ def test_spawner_refuses_beyond_max_depth():
 
 def test_spawner_runs_child_within_depth():
     from core.response import Response
-    from protocols.provider import Provider
+    from protocols.model import Model
 
-    class P(Provider):
-        kind = "provider"
-
+    class P(Model):
         async def complete(self, history, ctx):
             return Response(text="child-result")
 
@@ -69,11 +67,9 @@ def test_spawner_runs_child_within_depth():
 def test_subagent_tool_delegates_and_returns_distilled_result():
     from core.response import Response
     from plugins.tools import Subagent
-    from protocols.provider import Provider
+    from protocols.model import Model
 
-    class P(Provider):
-        kind = "provider"
-
+    class P(Model):
         async def complete(self, history, ctx):
             return Response(text="child-answer")
 

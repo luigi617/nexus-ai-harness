@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 @dataclass
 class Response:
     """
-    Response of the provider for one completion
+    Response of the model for one completion
     """
 
     text: str = ""

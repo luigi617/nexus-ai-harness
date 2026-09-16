@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 from core.message import Message
 from core.response import Response
 from protocols.mediator import Context
-from protocols.provider import Provider
+from protocols.model import Model
 from protocols.tool import Tool
 
 DEFAULT_REGION = "us-east-1"
@@ -21,8 +21,16 @@ PRICING: dict[str, tuple[float, float]] = {
     "us.anthropic.claude-3-5-haiku-20241022-v1:0": (0.8, 4.0),
 }
 
+DESCRIPTIONS: dict[str, str] = {
+    "us.anthropic.claude-opus-4-8": "most capable; hard reasoning and complex tasks",
+    "us.anthropic.claude-3-5-sonnet-20241022-v2:0": "balanced capability and cost",
+    "us.anthropic.claude-3-5-haiku-20241022-v1:0": "fastest and cheapest; simple tasks",
+}
 
-class BedrockProvider(Provider):
+
+class BedrockModel(Model):
+    provider = "bedrock"
+
     def __init__(
         self,
         model: str,
@@ -31,7 +39,8 @@ class BedrockProvider(Provider):
         max_tokens: int = 1024,
         **params,
     ) -> None:
-        self.model = model
+        self.name = model
+        self.description = DESCRIPTIONS.get(model, "")
         self.params = params
         load_dotenv()
         self.region = region or os.getenv("AWS_REGION") or DEFAULT_REGION
@@ -52,7 +61,7 @@ class BedrockProvider(Provider):
     def _generate(self, history: list[Message], tools: list[Tool]) -> Response:
         system, messages = self._to_converse(history)
         kwargs: dict[str, Any] = {
-            "modelId": self.model,
+            "modelId": self.name,
             "messages": messages,
             "inferenceConfig": {"maxTokens": self.max_tokens, **self.params},
         }
@@ -66,7 +75,7 @@ class BedrockProvider(Provider):
         return parsed
 
     def _cost(self, usage: dict) -> float:
-        input_price, output_price = PRICING.get(self.model, (0.0, 0.0))
+        input_price, output_price = PRICING.get(self.name, (0.0, 0.0))
         return (
             usage.get("input_tokens", 0) * input_price
             + usage.get("output_tokens", 0) * output_price

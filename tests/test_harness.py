@@ -7,12 +7,10 @@ from core.response import Response
 from harness import GraphAIHarness
 from plugins.loops import AgenticLoop
 from protocols.hook import Hook
-from tests.conftest import ScriptedProvider
+from tests.conftest import ScriptedModel
 
 
 class SessionRecorder(Hook):
-    kind = "hook"
-
     def __init__(self) -> None:
         self.events: list[str] = []
 
@@ -22,7 +20,7 @@ class SessionRecorder(Hook):
 
 
 def build(*extra):
-    h = GraphAIHarness().use(AgenticLoop()).use(ScriptedProvider(Response(text="hi")))
+    h = GraphAIHarness().use(AgenticLoop()).use(ScriptedModel(Response(text="hi")))
     for plugin in extra:
         h.use(plugin)
     return h
@@ -48,7 +46,7 @@ def test_run_sync_raises_inside_running_loop():
 
 
 def test_missing_loop_raises():
-    h = GraphAIHarness().use(ScriptedProvider(Response(text="x")))
+    h = GraphAIHarness().use(ScriptedModel(Response(text="x")))
     try:
         h.run_sync("q")
         raised = False
@@ -66,22 +64,22 @@ def test_session_lifecycle_events():
 def test_default_harness_runs(tmp_path):
     from plugins import default_harness
 
-    h = default_harness(ScriptedProvider(Response(text="hi")), memory_dir=str(tmp_path))
+    h = default_harness(ScriptedModel(Response(text="hi")), memory_dir=str(tmp_path))
     assert h.run_sync("q") == "hi"
 
 
 def test_default_harness_bounds_a_runaway_loop(tmp_path):
     from plugins import default_harness
 
-    # A provider that never stops calling a tool would loop forever; the default
+    # A model that never stops calling a tool would loop forever; the default
     # MaxIterations guard must halt it. Use `recall` (trusted, so no approval
     # prompt) so the test stays non-interactive.
-    prov = ScriptedProvider(
+    model = ScriptedModel(
         Response(
             text="",
             tool_calls=[{"name": "recall", "id": "1", "arguments": {"query": "x"}}],
         )
     )
-    h = default_harness(prov, max_iterations=3, memory_dir=str(tmp_path))
+    h = default_harness(model, max_iterations=3, memory_dir=str(tmp_path))
     result = h.run_sync("go")
     assert result.startswith("stopped")

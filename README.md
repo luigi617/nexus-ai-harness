@@ -1,8 +1,8 @@
-Nexus AI Harness
+# Nexus AI Harness
 
 A plugin-based harness for building LLM agents.
 
-Everything an agent needs is a **plugin**, including agent loop, provider, context management, permission, memory, subagent, and tools. Plugins are registered on a harness and resolved by their protocol
+Everything an agent needs is a **plugin**, including agent loop, model, context management, permission, memory, subagent, and tools. Plugins are registered on a harness and resolved by their protocol
 type, so you compose an agent by picking the pieces you want.
 
 ## Example Usage
@@ -10,9 +10,9 @@ type, so you compose an agent by picking the pieces you want.
 Using the default harness
 ```python
 from plugins import default_harness
-from plugins.providers import BedrockProvider
+from plugins.models import BedrockModel
 
-harness = default_harness(BedrockProvider(model="..."))
+harness = default_harness(BedrockModel(model="..."))
 answer = harness.run_sync("What is 128 * 47?")  # or: await harness.run(...)
 ```
 
@@ -25,7 +25,7 @@ from plugins.loops import AgenticLoop
 harness = (
     GraphAIHarness()
     .use(AgenticLoop())
-    .use(BedrockProvider(model="..."))
+    .use(BedrockModel(model="..."))
     .use(...)
 )
 ```

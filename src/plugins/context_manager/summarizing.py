@@ -6,7 +6,7 @@ from core.invoke import invoke
 from core.message import Message
 from protocols.context import ContextManager
 from protocols.mediator import Context
-from protocols.provider import Provider
+from protocols.model import Model
 
 
 @dataclass
@@ -27,7 +27,7 @@ _SUMMARY_PROMPT = (
 
 class SummarizingContextManager(ContextManager):
     """
-    Collapses the middle of a long history into a cached LLM summary.
+    Collapses the middle of a long history into a cached Model summary.
     """
 
     def __init__(self, max_messages: int = 40, keep_recent: int = 12) -> None:
@@ -75,8 +75,8 @@ class SummarizingContextManager(ContextManager):
     async def _summarize(
         self, prior: str, messages: list[Message], ctx: Context
     ) -> str | None:
-        provider = ctx.get(Provider)
-        if provider is None or not messages:
+        model = ctx.get(Model)
+        if model is None or not messages:
             return None
 
         transcript = "\n".join(f"{m.role}: {m.content}" for m in messages if m.content)
@@ -90,7 +90,7 @@ class SummarizingContextManager(ContextManager):
             Message(role="user", content=body),
         ]
         try:
-            response = await invoke(provider.complete, request, ctx)
+            response = await invoke(model.complete, request, ctx)
         except Exception:
             return None
         text = (response.text or "").strip()

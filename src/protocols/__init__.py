@@ -6,8 +6,8 @@ from protocols.guard import Guard
 from protocols.hook import Hook
 from protocols.loop import Loop
 from protocols.mediator import Context
+from protocols.model import Model
 from protocols.permission import Permission
-from protocols.provider import Provider
 from protocols.tool import Tool
 
 __all__ = [
@@ -17,7 +17,7 @@ __all__ = [
     "Guard",
     "Hook",
     "Loop",
+    "Model",
     "Permission",
-    "Provider",
     "Tool",
 ]

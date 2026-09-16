@@ -10,7 +10,7 @@ from services.runner import run_session
 
 class InProcessSpawner(Spawner):
     """In-process spawner: runs each subagent on the current event loop, bounded
-    by a global semaphore so fan-out can't overwhelm the provider with concurrent
+    by a global semaphore so fan-out can't overwhelm the model with concurrent
     calls.
     """
 
