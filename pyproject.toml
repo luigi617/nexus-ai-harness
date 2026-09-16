@@ -22,6 +22,8 @@ where = ["src"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 
+pythonpath = ["src", "."]
+
 [tool.ruff]
 line-length = 88
 target-version = "py311"
@@ -38,6 +40,7 @@ known-first-party = [
     "protocols",
     "plugins",
     "services",
+    "tests",
 ]
 
 [tool.ruff.lint.flake8-builtins]
@@ -59,7 +62,3 @@ warn_unused_ignores = true
 # Third-party packages without type stubs.
 module = ["boto3.*", "botocore.*", "dotenv.*"]
 ignore_missing_imports = true
-
-[tool.black]
-target-version = ["py311"]
-line-length = 88

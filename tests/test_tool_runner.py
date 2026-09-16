@@ -2,12 +2,11 @@ from __future__ import annotations
 
 import asyncio
 
-from tests.conftest import RecordingTool, make_ctx
-
 from core.events import Event
 from plugins.permissions import AllowList
 from protocols.hook import Hook
 from services.tool_runner import ToolRunner
+from tests.conftest import RecordingTool, make_ctx
 
 
 class EventRecorder(Hook):

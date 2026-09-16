@@ -13,7 +13,6 @@ from services.tool_runner import ToolRunner
 
 
 class AgenticLoop(Loop):
-
     async def run(self, ctx: Context) -> str:
         provider = ctx.get(Provider)
         if provider is None:

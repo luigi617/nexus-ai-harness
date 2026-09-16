@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import pytest
-from tests.conftest import RecordingTool
 
 from harness.registry import Registry
 from plugins.guards import MaxIterations
 from plugins.loops import AgenticLoop
 from protocols.loop import Loop
 from protocols.tool import Tool
+from tests.conftest import RecordingTool
 
 
 def test_get_resolves_by_type():

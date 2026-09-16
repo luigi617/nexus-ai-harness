@@ -3,8 +3,6 @@ from __future__ import annotations
 import asyncio
 import time
 
-from tests.conftest import RecordingTool, ScriptedProvider, make_ctx
-
 from core.events import Event, LoopStopped
 from core.response import Response
 from plugins.guards import MaxIterations
@@ -13,6 +11,7 @@ from plugins.loops import AgenticLoop
 from plugins.permissions import AllowList, AutoApprove
 from protocols.hook import Hook
 from protocols.tool import Tool
+from tests.conftest import RecordingTool, ScriptedProvider, make_ctx
 
 
 class LoopStopRecorder(Hook):
@@ -88,8 +87,12 @@ def test_parallel_tool_calls_run_concurrently():
         Response(text="done"),
     )
     ctx = make_ctx(
-        prov, SlowTool("a"), SlowTool("b"), SlowTool("c"),
-        AllowList(["a", "b", "c"]), AutoApprove(),
+        prov,
+        SlowTool("a"),
+        SlowTool("b"),
+        SlowTool("c"),
+        AllowList(["a", "b", "c"]),
+        AutoApprove(),
     )
     start = time.perf_counter()
     asyncio.run(AgenticLoop().run(ctx))

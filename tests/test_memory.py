@@ -2,11 +2,10 @@ from __future__ import annotations
 
 import re
 
-from tests.conftest import make_ctx
-
 from plugins.memory import FileMemoryStore
 from plugins.tools import Forget, Recall, Remember
 from protocols.memory import MemoryStore
+from tests.conftest import make_ctx
 
 
 def store(tmp_path):

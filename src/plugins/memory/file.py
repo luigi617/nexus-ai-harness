@@ -86,13 +86,7 @@ class FileMemoryStore(MemoryStore):
 
     @staticmethod
     def _serialize(item: FileMemoryItem) -> str:
-        return (
-            "---\n"
-            f"id: {item.id}\n"
-            f"created_at: {item.created_at}\n"
-            "---\n"
-            f"{item.text}\n"
-        )
+        return f"---\nid: {item.id}\ncreated_at: {item.created_at}\n---\n{item.text}\n"
 
     @staticmethod
     def _parse(path: Path) -> FileMemoryItem | None:

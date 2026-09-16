@@ -2,10 +2,9 @@ from __future__ import annotations
 
 import asyncio
 
-from tests.conftest import ScriptedProvider, make_ctx
-
 from core.response import Response
 from plugins.loops import ChatLoop
+from tests.conftest import ScriptedProvider, make_ctx
 
 
 def test_chat_loop_returns_text_and_appends_assistant_message():

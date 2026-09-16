@@ -27,8 +27,7 @@ class Remember(Tool):
             "id": {
                 "type": "string",
                 "description": (
-                    "Id of an existing memory to overwrite. "
-                    "Omit to create a new one."
+                    "Id of an existing memory to overwrite. Omit to create a new one."
                 ),
             },
         },

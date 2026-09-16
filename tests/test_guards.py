@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-from tests.conftest import make_ctx
-
 from plugins.guards import BudgetGuard, MaxIterations, Timeout
 from plugins.hooks import CostState, ElapsedState, IterationState
 from services.guard_chain import GuardChain
+from tests.conftest import make_ctx
 
 
 def test_max_iterations_halts_at_limit():

@@ -4,10 +4,9 @@ import asyncio
 import builtins
 import time
 
-from tests.conftest import make_ctx
-
 from core.permission import ApprovalRequest
 from plugins.permissions import AutoApprove, ConsoleApprover
+from tests.conftest import make_ctx
 
 
 def req(name="tool", origin=""):
@@ -65,9 +64,7 @@ def test_console_serializes_concurrent_prompts(monkeypatch):
     monkeypatch.setattr(builtins, "input", blocking)
 
     async def go():
-        return await asyncio.gather(
-            *(ap.approve(req(f"t{i}"), ctx) for i in range(3))
-        )
+        return await asyncio.gather(*(ap.approve(req(f"t{i}"), ctx) for i in range(3)))
 
     assert asyncio.run(go()) == [True, True, True]
     assert max_live == 1  # lock serialized the prompts

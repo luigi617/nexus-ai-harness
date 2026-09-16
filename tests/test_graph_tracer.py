@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-from tests.conftest import make_ctx
-
 from core.events import IterationStarted, MessageAdded
 from core.message import Message
 from graph import Graph
 from plugins.tracers import GraphTracer
+from tests.conftest import make_ctx
 
 
 def feed(tracer, ctx, *messages):

@@ -2,11 +2,10 @@ from __future__ import annotations
 
 import asyncio
 
-from tests.conftest import make_ctx
-
 from core.message import Message
 from core.response import Response
 from plugins.context_manager import SummarizingContextManager
+from tests.conftest import make_ctx
 
 
 class SummarizerProvider:

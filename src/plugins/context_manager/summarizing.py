@@ -11,7 +11,6 @@ from protocols.provider import Provider
 
 @dataclass
 class SummaryState:
-
     upto: int = 0
     text: str = ""
 

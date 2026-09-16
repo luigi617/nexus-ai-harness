@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from tests.conftest import make_ctx
-
 from core.events import IterationStarted, MessageAdded, ResponseReceived
 from core.response import Response
 from plugins.hooks import (
@@ -12,6 +10,7 @@ from plugins.hooks import (
     IterationCounter,
     IterationState,
 )
+from tests.conftest import make_ctx
 
 
 def test_iteration_counter_records_index():

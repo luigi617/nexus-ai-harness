@@ -2,13 +2,12 @@ from __future__ import annotations
 
 import asyncio
 
-from tests.conftest import make_ctx
-
 from core.message import Message
 from core.permission import PermissionVerdict
 from core.spawn import SpawnState
 from plugins.permissions import AllowList, AskUnless, AutoApprove, DenyList
 from services.permission_gate import PermissionGate
+from tests.conftest import make_ctx
 
 
 def decide(call, *plugins):

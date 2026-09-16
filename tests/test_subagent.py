@@ -2,8 +2,6 @@ from __future__ import annotations
 
 import asyncio
 
-from tests.conftest import make_ctx
-
 from core.spawn import SpawnState
 from plugins.loops import AgenticLoop
 from plugins.permissions import AutoApprove
@@ -11,6 +9,7 @@ from plugins.spawner import InProcessSpawner
 from plugins.tools import Recall, Remember
 from protocols.approver import Approver
 from protocols.tool import Tool
+from tests.conftest import make_ctx
 
 
 def test_fork_inherits_all_and_increments_depth():

@@ -2,13 +2,12 @@ from __future__ import annotations
 
 import asyncio
 
-from tests.conftest import ScriptedProvider
-
 from core.events import Event, SessionEnded, SessionStarted
 from core.response import Response
 from harness import GraphAIHarness
 from plugins.loops import AgenticLoop
 from protocols.hook import Hook
+from tests.conftest import ScriptedProvider
 
 
 class SessionRecorder(Hook):

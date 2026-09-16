@@ -9,7 +9,6 @@ from protocols.provider import Provider
 
 
 class ChatLoop(Loop):
-
     async def run(self, ctx: Context) -> str:
         provider = ctx.get(Provider)
         if provider is None:
