@@ -27,11 +27,11 @@ def build(*extra):
 
 
 def test_run_sync_returns_result():
-    assert build().run_sync("q") == "hi"
+    assert build().run_sync("q").output == "hi"
 
 
 def test_run_async_returns_result():
-    assert asyncio.run(build().run("q")) == "hi"
+    assert asyncio.run(build().run("q")).output == "hi"
 
 
 def test_run_sync_raises_inside_running_loop():
@@ -65,7 +65,7 @@ def test_default_harness_runs(tmp_path):
     from plugins import default_harness
 
     h = default_harness(ScriptedModel(Response(text="hi")), memory_dir=str(tmp_path))
-    assert h.run_sync("q") == "hi"
+    assert h.run_sync("q").output == "hi"
 
 
 def test_default_harness_bounds_a_runaway_loop(tmp_path):
@@ -82,4 +82,32 @@ def test_default_harness_bounds_a_runaway_loop(tmp_path):
     )
     h = default_harness(model, max_iterations=3, memory_dir=str(tmp_path))
     result = h.run_sync("go")
-    assert result.startswith("stopped")
+    assert result.output.startswith("stopped")
+    assert result.stop_reason.startswith("guard:")
+
+
+def test_conversation_continues_across_runs():
+    # A model that echoes how many user messages it has seen; a continued
+    # session must accumulate history across run() calls.
+    class Counter(ScriptedModel):
+        async def complete(self, history, ctx):
+            users = sum(1 for m in history if m.role == "user")
+            return Response(text=f"seen {users}")
+
+    h = GraphAIHarness().use(AgenticLoop()).use(Counter())
+    r1 = h.run_sync("first")
+    assert r1.output == "seen 1"
+    r2 = h.run_sync("second", session=r1.session)  # continue the conversation
+    assert r2.output == "seen 2"
+    assert r2.session is r1.session
+
+
+def test_result_exposes_run_state(tmp_path):
+    from plugins import default_harness
+    from plugins.hooks import CostState
+
+    h = default_harness(ScriptedModel(Response(text="done")), memory_dir=str(tmp_path))
+    result = h.run_sync("q")
+    assert result.stop_reason == "completed"
+    # cost is reachable via the returned session's typed state
+    assert result.session.state(CostState).total == 0.0

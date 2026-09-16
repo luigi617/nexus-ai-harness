@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from core.invoke import invoke
 from core.message import Message
+from core.run import RunState
 from protocols.context import ContextManager
 from protocols.loop import Loop
 from protocols.mediator import Context
@@ -20,4 +21,5 @@ class ChatLoop(Loop):
             raise LookupError("no model registered")
         response = await invoke(model.complete, history, ctx)
         ctx.add_message(Message(role="assistant", content=response.text))
+        ctx.state(RunState).stop_reason = "completed"
         return response.text

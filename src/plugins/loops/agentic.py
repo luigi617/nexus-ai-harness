@@ -3,6 +3,7 @@ import asyncio
 from core.events import IterationStarted, LoopStopped, ResponseReceived
 from core.invoke import invoke
 from core.message import Message
+from core.run import RunState
 from protocols.context import ContextManager
 from protocols.loop import Loop
 from protocols.mediator import Context
@@ -22,13 +23,16 @@ class AgenticLoop(Loop):
         i = 0
         while True:
             if ctx.interrupted:  # control
+                ctx.state(RunState).stop_reason = "interrupted"
                 ctx.emit(LoopStopped("interrupted"))
                 return "stopped: interrupted"
 
             ctx.emit(IterationStarted(i))
             decision = guards.check(ctx)
             if decision.stop:
-                ctx.emit(LoopStopped(f"guard: {decision.reason}"))
+                reason = f"guard: {decision.reason}"
+                ctx.state(RunState).stop_reason = reason
+                ctx.emit(LoopStopped(reason))
                 return f"stopped: {decision.reason}"
 
             history = ctx.history
@@ -50,6 +54,7 @@ class AgenticLoop(Loop):
             )
 
             if not response.tool_calls:  # natural exit — model is done
+                ctx.state(RunState).stop_reason = "completed"
                 ctx.emit(LoopStopped("completed"))
                 return response.text
 
