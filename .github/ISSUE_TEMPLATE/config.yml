@@ -1,0 +1,6 @@
+# Set to false to forbid blank issues and force use of a template.
+blank_issues_enabled: false
+contact_links:
+  - name: Question / discussion
+    url: https://github.com/luigi617/nexus-ai-harness/discussions
+    about: Ask usage questions or propose ideas here instead of opening an issue.

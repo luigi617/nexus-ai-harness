@@ -30,9 +30,13 @@ harness = (
 )
 ```
 
+## Documentation
+
+See [docs/](docs/README.md) for architecture, plugin guides, and how to write your own.
+
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution guidelines.
 
-## Lisence
+## License
 MIT
