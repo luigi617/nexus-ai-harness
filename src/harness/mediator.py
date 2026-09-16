@@ -9,6 +9,7 @@ from harness.registry import Registry
 from harness.session import Session
 from protocols.approver import Approver
 from protocols.hook import Hook
+from protocols.intervention import Intervention
 from protocols.mediator import Context
 from protocols.plugin import Plugin
 
@@ -35,6 +36,9 @@ class RunContext(Context):
 
     def state(self, cls: type[T]) -> T:
         return self._session.state(cls)
+
+    def take_interventions(self) -> list[Intervention]:
+        return self._session.take_interventions()
 
     def add_message(self, message: Message) -> None:
         self._session.history.append(message)
@@ -64,6 +68,9 @@ class RunContext(Context):
             if approver is not None:
                 child_registry.add(approver)
 
-        child = RunContext(Session(), child_registry)
+        child_session = Session()
+        # Share the interrupt signal so interrupting the root stops subagents.
+        child_session._interrupt = self._session._interrupt
+        child = RunContext(child_session, child_registry)
         child.state(SpawnState).depth = self.state(SpawnState).depth + 1
         return child

@@ -4,6 +4,7 @@ from harness import NexusAIHarness
 from plugins.context_manager import SummarizingContextManager
 from plugins.guards import BudgetGuard, MaxIterations, Timeout
 from plugins.hooks import CostCounter, ElapsedTime, IterationCounter
+from plugins.interventions import InjectMessage
 from plugins.loops import AgenticLoop, ChatLoop
 from plugins.memory import FileMemoryStore
 from plugins.models import BedrockModel
@@ -36,6 +37,7 @@ __all__ = [
     "Forget",
     "GraphTracer",
     "InProcessSpawner",
+    "InjectMessage",
     "IterationCounter",
     "LLMRouter",
     "MaxIterations",

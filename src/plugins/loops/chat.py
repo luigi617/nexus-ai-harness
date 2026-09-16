@@ -8,10 +8,12 @@ from protocols.loop import Loop
 from protocols.mediator import Context
 from protocols.model import Model
 from protocols.router import Router
+from services.intervene import apply_interventions
 
 
 class ChatLoop(Loop):
     async def run(self, ctx: Context) -> str:
+        await apply_interventions(ctx)
         router = ctx.get(Router)
         history = ctx.history
         for cm in ctx.all(ContextManager):

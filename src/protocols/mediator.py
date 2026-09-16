@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 from abc import abstractmethod
-from typing import Protocol, TypeVar, runtime_checkable
+from typing import TYPE_CHECKING, Protocol, TypeVar, runtime_checkable
 
 from core.events import Event
 from core.message import Message
 from protocols.plugin import Plugin
+
+if TYPE_CHECKING:
+    from protocols.intervention import Intervention
 
 T = TypeVar("T")
 P = TypeVar("P", bound=Plugin)
@@ -24,6 +27,9 @@ class Context(Protocol):
 
     @abstractmethod
     def state(self, cls: type[T]) -> T: ...
+
+    @abstractmethod
+    def take_interventions(self) -> list[Intervention]: ...
 
     @abstractmethod
     def add_message(self, message: Message) -> None: ...

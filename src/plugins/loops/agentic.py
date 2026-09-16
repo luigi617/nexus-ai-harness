@@ -11,6 +11,7 @@ from protocols.model import Model
 from protocols.router import Router
 from protocols.tool import Tool
 from services.guard_chain import GuardChain
+from services.intervene import apply_interventions
 from services.tool_runner import ToolRunner
 
 
@@ -26,6 +27,8 @@ class AgenticLoop(Loop):
                 ctx.state(RunState).stop_reason = "interrupted"
                 ctx.emit(LoopStopped("interrupted"))
                 return "stopped: interrupted"
+
+            await apply_interventions(ctx)  # e.g. injected messages steer this turn
 
             ctx.emit(IterationStarted(i))
             decision = guards.check(ctx)

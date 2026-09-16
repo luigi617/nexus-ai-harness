@@ -21,6 +21,7 @@ class NexusAIHarness:
         self, user_input: str, *, session: Session | None = None
     ) -> RunResult:
         cur_session = session or Session()
+        cur_session.clear_interrupt()  # a new turn isn't pre-interrupted
         ctx = RunContext(cur_session, self._registry)
         output = await run_session(ctx, user_input)
         return RunResult(output=output, session=cur_session)
