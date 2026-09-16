@@ -19,11 +19,11 @@ answer = harness.run_sync("What is 128 * 47?")  # or: await harness.run(...)
 Or build your own:
 
 ```python
-from harness import GraphAIHarness
+from harness import NexusAIHarness
 from plugins.loops import AgenticLoop
 
 harness = (
-    GraphAIHarness()
+    NexusAIHarness()
     .use(AgenticLoop())
     .use(BedrockModel(model="..."))
     .use(...)

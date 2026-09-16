@@ -4,7 +4,7 @@ import asyncio
 
 from core.events import Event, SessionEnded, SessionStarted
 from core.response import Response
-from harness import GraphAIHarness
+from harness import NexusAIHarness
 from plugins.loops import AgenticLoop
 from protocols.hook import Hook
 from tests.conftest import ScriptedModel
@@ -20,7 +20,7 @@ class SessionRecorder(Hook):
 
 
 def build(*extra):
-    h = GraphAIHarness().use(AgenticLoop()).use(ScriptedModel(Response(text="hi")))
+    h = NexusAIHarness().use(AgenticLoop()).use(ScriptedModel(Response(text="hi")))
     for plugin in extra:
         h.use(plugin)
     return h
@@ -46,7 +46,7 @@ def test_run_sync_raises_inside_running_loop():
 
 
 def test_missing_loop_raises():
-    h = GraphAIHarness().use(ScriptedModel(Response(text="x")))
+    h = NexusAIHarness().use(ScriptedModel(Response(text="x")))
     try:
         h.run_sync("q")
         raised = False
@@ -94,7 +94,7 @@ def test_conversation_continues_across_runs():
             users = sum(1 for m in history if m.role == "user")
             return Response(text=f"seen {users}")
 
-    h = GraphAIHarness().use(AgenticLoop()).use(Counter())
+    h = NexusAIHarness().use(AgenticLoop()).use(Counter())
     r1 = h.run_sync("first")
     assert r1.output == "seen 1"
     r2 = h.run_sync("second", session=r1.session)  # continue the conversation

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from harness import GraphAIHarness
+from harness import NexusAIHarness
 from plugins.context_manager import SummarizingContextManager
 from plugins.guards import BudgetGuard, MaxIterations, Timeout
 from plugins.hooks import CostCounter, ElapsedTime, IterationCounter
@@ -56,13 +56,13 @@ def default_harness(
     timeout_s: float = 300.0,
     max_cost: float = 5.0,
     memory_dir: str = "~/.nexus-ai-harness/memory",
-) -> GraphAIHarness:
+) -> NexusAIHarness:
     """A batteries-included harness: agentic loop + context summarization + the
     given Model, plus long-term memory, subagent delegation, safety guards, and
     observability counters.
     """
     return (
-        GraphAIHarness()
+        NexusAIHarness()
         .use(AgenticLoop())
         .use(SummarizingContextManager())
         .use(model)

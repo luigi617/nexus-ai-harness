@@ -9,11 +9,11 @@ from harness.session import Session
 from services.runner import run_session
 
 
-class GraphAIHarness:
+class NexusAIHarness:
     def __init__(self) -> None:
         self._registry = Registry()
 
-    def use(self, plugin: object) -> GraphAIHarness:
+    def use(self, plugin: object) -> NexusAIHarness:
         self._registry.add(plugin)
         return self
 
@@ -32,6 +32,6 @@ class GraphAIHarness:
         except RuntimeError:
             return asyncio.run(self.run(user_input, session=session))
         raise RuntimeError(
-            "GraphAIHarness.run_sync() cannot be called from a running event "
+            "NexusAIHarness.run_sync() cannot be called from a running event "
             "loop; await run() instead."
         )
