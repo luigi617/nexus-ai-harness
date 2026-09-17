@@ -2,7 +2,13 @@ from __future__ import annotations
 
 import asyncio
 
-from core.events import IterationStarted, LoopStopped, ResponseReceived
+from core.events import (
+    IterationCompleted,
+    IterationStarted,
+    LoopStopped,
+    ModelCallStarted,
+    ResponseReceived,
+)
 from core.invoke import invoke
 from core.message import Message
 from core.run import RunState
@@ -49,6 +55,7 @@ class AgenticLoop(Loop):
             )
             if model is None:
                 raise LookupError("no model registered")
+            ctx.emit(ModelCallStarted(history))
             response = await invoke(model.complete, history, ctx)
             ctx.emit(ResponseReceived(response))
             ctx.add_message(
@@ -60,6 +67,7 @@ class AgenticLoop(Loop):
             )
 
             if not response.tool_calls:  # natural exit — model is done
+                ctx.emit(IterationCompleted(i))
                 ctx.state(RunState).stop_reason = "completed"
                 ctx.emit(LoopStopped("completed"))
                 return response.text
@@ -69,4 +77,5 @@ class AgenticLoop(Loop):
             )
             for message in results:
                 ctx.add_message(message)
+            ctx.emit(IterationCompleted(i))
             i += 1

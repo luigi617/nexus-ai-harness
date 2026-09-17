@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import asyncio
 
+from core.events import Event
+from harness.callbacks import CallbackHook, EventHandler
 from harness.context import RunContext
 from harness.registry import Registry
 from harness.result import RunResult
@@ -13,9 +15,29 @@ from services.runner import run_session
 class NexusAIHarness:
     def __init__(self) -> None:
         self._registry = Registry()
+        self._callbacks = CallbackHook()
+        self._registry.add(self._callbacks)
 
     def use(self, plugin: object) -> NexusAIHarness:
         self._registry.add(plugin)
+        return self
+
+    def on(self, event_type: type[Event], handler: EventHandler) -> NexusAIHarness:
+        """Register ``handler`` to run whenever an ``event_type`` event is emitted.
+
+        A lightweight alternative to writing a :class:`~protocols.hook.Hook`: the
+        handler observes the typed event directly instead of switching on event
+        type itself. It fires for ``event_type`` and any subclass, so listening
+        on :class:`~core.events.Event` observes every event.
+
+        Args:
+            event_type: The event class to listen for.
+            handler: A sync callable taking ``(event)`` or ``(event, ctx)``.
+
+        Returns:
+            ``self``, so registrations can be chained after ``use(...)``.
+        """
+        self._callbacks.register(event_type, handler)
         return self
 
     def validate(self) -> NexusAIHarness:
