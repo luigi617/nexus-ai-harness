@@ -12,7 +12,7 @@ registered on a harness with `.use(...)`.
 
 ## Declaring dependencies
 
-A plugin can declare the protocols it depends on with a `requires` class var so
+A plugin can declare the protocols or concrete plugins it depends on with a `requires` class var so
 the harness can validate a composition *before* it runs, instead of surfacing a
 missing dependency only when the loop calls `resolve()`:
 

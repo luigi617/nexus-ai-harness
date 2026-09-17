@@ -5,10 +5,11 @@ from collections.abc import Awaitable
 from typing import ClassVar, Protocol, runtime_checkable
 
 from protocols.context import Context
+from protocols.plugin import Plugin
 
 
 @runtime_checkable
-class Tool(Protocol):
+class Tool(Plugin, Protocol):
     kind: ClassVar[str] = "tool"
 
     name: ClassVar[str]

@@ -7,10 +7,11 @@ from typing import ClassVar, Protocol, runtime_checkable
 from core.message import Message
 from protocols.context import Context
 from protocols.model import Model
+from protocols.plugin import Plugin
 
 
 @runtime_checkable
-class Router(Protocol):
+class Router(Plugin, Protocol):
     """Chooses which model handles a request when several are registered"""
 
     kind: ClassVar[str] = "router"

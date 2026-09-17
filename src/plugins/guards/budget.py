@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from core.guard import GuardDecision
-from plugins.hooks import CostState
+from plugins.hooks import CostCounter, CostState
 from protocols.context import Context
 from protocols.guard import Guard
 
@@ -9,8 +9,9 @@ from protocols.guard import Guard
 class BudgetGuard(Guard):
     """
     Stop once accumulated cost (USD) reaches the budget.
-    Pair with a CostCounter hook, which populates CostState.
     """
+
+    requires = (CostCounter,)
 
     def __init__(self, max_cost: float) -> None:
         self._max_cost = max_cost

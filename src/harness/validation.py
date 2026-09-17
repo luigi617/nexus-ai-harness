@@ -51,17 +51,24 @@ def _analyze(
         if not reqs:
             continue
         plugin_name = type(plugin).__name__
-        # A dependency must be provided by *another* plugin
-        provided = {p.kind for p in plugins if p is not plugin}
+        # A dependency must be provided by *another* plugin.
+        others = [p for p in plugins if p is not plugin]
         rows: list[tuple[str, bool]] = []
-        for protocol in reqs:
-            protocol_name = protocol.__name__
-            satisfied = getattr(protocol, "kind", None) in provided
-            rows.append((protocol_name, satisfied))
+        for dep in reqs:
+            satisfied = _is_satisfied(dep, others)
+            rows.append((dep.__name__, satisfied))
             if not satisfied:
-                missing.append((plugin_name, protocol_name))
+                missing.append((plugin_name, dep.__name__))
         trees.append((plugin_name, rows))
     return trees, missing
+
+
+def _is_satisfied(dep: type, others: list) -> bool:
+    """Is dependency ``dep`` provided by one of the ``others`` plugins?"""
+    if getattr(dep, "_is_protocol", False):
+        dep_kind = getattr(dep, "kind", None)
+        return any(getattr(p, "kind", None) == dep_kind for p in others)
+    return any(isinstance(p, dep) for p in others)
 
 
 def describe_registry(registry: Registry) -> str:

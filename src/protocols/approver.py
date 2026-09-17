@@ -6,10 +6,11 @@ from typing import ClassVar, Protocol, runtime_checkable
 
 from core.permission import ApprovalRequest
 from protocols.context import Context
+from protocols.plugin import Plugin
 
 
 @runtime_checkable
-class Approver(Protocol):
+class Approver(Plugin, Protocol):
     kind: ClassVar[str] = "approver"
 
     @abstractmethod

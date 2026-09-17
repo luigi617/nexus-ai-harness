@@ -1,5 +1,4 @@
 import asyncio
-from typing import ClassVar
 
 from core.events import IterationStarted, LoopStopped, ResponseReceived
 from core.invoke import invoke
@@ -9,7 +8,6 @@ from protocols.context import Context
 from protocols.context_manager import ContextManager
 from protocols.loop import Loop
 from protocols.model import Model
-from protocols.plugin import Plugin
 from protocols.router import Router
 from protocols.tool import Tool
 from services.guard_chain import GuardChain
@@ -17,9 +15,7 @@ from services.tool_runner import ToolRunner
 
 
 class AgenticLoop(Loop):
-    # A Model completes each turn; without one (and no Router to supply it) the
-    # loop cannot run. Everything else it uses is optional.
-    requires: ClassVar[tuple[type[Plugin], ...]] = (Model,)
+    requires = (Model,)
 
     async def run(self, ctx: Context) -> str:
         router = ctx.get(Router)

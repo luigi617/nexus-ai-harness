@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from core.guard import GuardDecision
-from plugins.hooks import ElapsedState
+from plugins.hooks import ElapsedState, ElapsedTime
 from protocols.context import Context
 from protocols.guard import Guard
 
@@ -9,8 +9,9 @@ from protocols.guard import Guard
 class Timeout(Guard):
     """
     Stop once elapsed time exceeds the budget.
-    Pair with an ElapsedTime hook, which populates ElapsedState.
     """
+
+    requires = (ElapsedTime,)
 
     def __init__(self, seconds: float) -> None:
         self._seconds = seconds

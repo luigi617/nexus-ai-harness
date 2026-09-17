@@ -4,6 +4,8 @@ from abc import abstractmethod
 from collections.abc import Sequence
 from typing import ClassVar, Protocol, runtime_checkable
 
+from protocols.plugin import Plugin
+
 
 @runtime_checkable
 class MemoryItem(Protocol):
@@ -16,7 +18,7 @@ class MemoryItem(Protocol):
 
 
 @runtime_checkable
-class MemoryStore(Protocol):
+class MemoryStore(Plugin, Protocol):
     """Durable, cross-session fact storage. Registered as a plugin and resolved
     by the memory tools via ``ctx.get("memory")``. Bring any backend (files,
     SQLite, embeddings, ...) that satisfies this interface."""

@@ -201,6 +201,46 @@ def test_describe_registry_empty_when_no_requires():
     assert describe_registry(_registry(NeedsNothing())) == ""
 
 
+def test_concrete_class_requirement_needs_the_exact_plugin():
+    from plugins.guards import BudgetGuard
+    from plugins.hooks import CostCounter, IterationCounter
+
+    # BudgetGuard requires the concrete CostCounter, not just "some hook".
+    # A different hook of the same kind does NOT satisfy it.
+    with pytest.raises(MissingDependencyError) as exc:
+        validate_registry(_registry(BudgetGuard(5.0), IterationCounter()))
+    assert exc.value.missing == [("BudgetGuard", "CostCounter")]
+
+    # The exact plugin satisfies it.
+    validate_registry(_registry(BudgetGuard(5.0), CostCounter()))
+
+
+def test_concrete_class_requirement_matches_subclass():
+    from plugins.guards import BudgetGuard
+    from plugins.hooks import CostCounter
+
+    class TieredCostCounter(CostCounter):
+        pass
+
+    # A subclass of the required plugin still satisfies the dependency.
+    validate_registry(_registry(BudgetGuard(5.0), TieredCostCounter()))
+
+
+def test_protocol_requirement_stays_kind_matched():
+    # A protocol dependency (Model) is satisfied by ANY plugin of that kind —
+    # the coarse, registry-style match — unlike a concrete-class dependency.
+    validate_registry(_registry(NeedsModel(), ScriptedModel(Response(text="x"))))
+
+
+def test_default_harness_validates(tmp_path):
+    from plugins import default_harness
+
+    # The batteries-included harness wires every guard's required hook and the
+    # loop's required model, so validation passes end to end.
+    h = default_harness(ScriptedModel(Response(text="x")), memory_dir=str(tmp_path))
+    assert h.validate() is h
+
+
 def test_context_manager_dependency_scenario():
     # Mirrors the issue's example: a loop-like plugin that also needs a
     # ContextManager surfaces the missing one.

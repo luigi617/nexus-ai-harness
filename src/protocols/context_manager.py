@@ -6,10 +6,11 @@ from typing import ClassVar, Protocol, runtime_checkable
 
 from core.message import Message
 from protocols.context import Context
+from protocols.plugin import Plugin
 
 
 @runtime_checkable
-class ContextManager(Protocol):
+class ContextManager(Plugin, Protocol):
     """
     Owns everything about managing the context sent to the model
     """
