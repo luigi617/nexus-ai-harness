@@ -16,4 +16,6 @@ class Approver(Plugin, Protocol):
     @abstractmethod
     def approve(self, request: ApprovalRequest, ctx: Context) -> bool | Awaitable[bool]:
         """Approve or deny an asked-for tool call.
-        May be sync or ``async def`` — the harness adapts."""
+
+        May be sync or ``async def`` — the harness adapts.
+        """

@@ -59,9 +59,10 @@ def default_harness(
     max_cost: float = 5.0,
     memory_dir: str = "~/.nexus-ai-harness/memory",
 ) -> NexusAIHarness:
-    """A batteries-included harness: agentic loop + context summarization + the
-    given Model, plus long-term memory, subagent delegation, safety guards, and
-    observability counters.
+    """A batteries-included harness built around the given Model.
+
+    Wires an agentic loop and context summarization, plus long-term memory,
+    subagent delegation, safety guards, and observability counters.
     """
     return (
         NexusAIHarness()

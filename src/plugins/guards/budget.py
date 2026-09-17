@@ -7,9 +7,7 @@ from protocols.guard import Guard
 
 
 class BudgetGuard(Guard):
-    """
-    Stop once accumulated cost (USD) reaches the budget.
-    """
+    """Stop once accumulated cost (USD) reaches the budget."""
 
     requires = (CostCounter,)
 

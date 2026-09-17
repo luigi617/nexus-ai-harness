@@ -16,8 +16,7 @@ T = TypeVar("T")
 class Session:
     id: str = field(default_factory=lambda: new_id("sess"))
     history: list[Message] = field(default_factory=list)
-    # Interrupt is a shared signal: fork passes the parent's Event to children,
-    # so interrupting the root stops in-flight subagents too.
+    # Shared signal so interrupting the root also stops in-flight subagents.
     _interrupt: Event = field(default_factory=Event)
     # Per-session intervention inbox (not shared with subagents).
     _inbox: deque[Intervention] = field(default_factory=deque)
@@ -28,8 +27,10 @@ class Session:
         return self._interrupt.is_set()
 
     def interrupt(self) -> None:
-        """Request the running loop — and any subagents — to stop. Safe from
-        another task/thread; honored before the next iteration."""
+        """Request the running loop — and any subagents — to stop.
+
+        Safe from another task/thread; honored before the next iteration.
+        """
         self._interrupt.set()
 
     def clear_interrupt(self) -> None:
@@ -46,8 +47,10 @@ class Session:
         return out
 
     def state(self, cls: type[T]) -> T:
-        """Return this session's instance of ``cls``, creating a default on
-        first access."""
+        """Return this session's instance of ``cls``.
+
+        Creates a default on first access.
+        """
         inst = self._state.get(cls)
         if inst is None:
             inst = cls()

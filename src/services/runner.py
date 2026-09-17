@@ -8,10 +8,7 @@ from protocols.loop import Loop
 
 
 async def run_session(ctx: Context, user_input: str) -> str:
-    """
-    Drive one session on the given context to completion and return the
-    final text.
-    """
+    """Drive one session to completion and return its final text."""
     loop = ctx.get(Loop)
     if loop is None:
         raise LookupError("no loop plugin registered")

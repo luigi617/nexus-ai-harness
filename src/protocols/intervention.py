@@ -13,5 +13,7 @@ class Intervention(Protocol):
 
     @abstractmethod
     def apply(self, ctx: Context) -> Awaitable[None] | None:
-        """Mutate the run (e.g. inject a message). May be sync or ``async def``
-        — the harness adapts."""
+        """Mutate the run (e.g. inject a message).
+
+        May be sync or ``async def`` — the harness adapts.
+        """

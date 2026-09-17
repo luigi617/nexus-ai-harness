@@ -10,9 +10,7 @@ from protocols.permission import Permission
 
 
 class PermissionGate:
-    """
-    Combines all permission plugins and resolves an 'ask' via the approver.
-    """
+    """Combines all permission plugins and resolves an 'ask' via the approver."""
 
     async def decide(self, call: dict, ctx: Context) -> PermissionDecision:
         decision = self._combine(call, ctx)
@@ -32,9 +30,11 @@ class PermissionGate:
 
     @staticmethod
     def _origin(ctx: Context) -> str:
-        """Harness-computed label of who is asking. Empty for the main agent;
-        for a subagent, its depth and task. Kept here so approver authors never
-        touch spawn internals."""
+        """Harness-computed label of who is asking.
+
+        Empty for the main agent; for a subagent, its depth and task. Kept here
+        so approver authors never touch spawn internals.
+        """
         depth = ctx.state(SpawnState).depth
         if depth == 0:
             return ""

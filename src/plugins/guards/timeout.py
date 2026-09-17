@@ -7,9 +7,7 @@ from protocols.guard import Guard
 
 
 class Timeout(Guard):
-    """
-    Stop once elapsed time exceeds the budget.
-    """
+    """Stop once elapsed time exceeds the budget."""
 
     requires = (ElapsedTime,)
 

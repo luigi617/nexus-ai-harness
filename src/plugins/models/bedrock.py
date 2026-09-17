@@ -94,8 +94,7 @@ class BedrockModel(Model):
 
         for m in history:
             if m.role == "tool":
-                # Batch consecutive tool results into one user turn, each linked
-                # back to its call via toolUseId.
+                # Batch consecutive tool results into one user turn.
                 pending_results.append(
                     {
                         "toolResult": {

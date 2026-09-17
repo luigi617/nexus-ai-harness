@@ -12,11 +12,13 @@ from protocols.plugin import Plugin
 
 @runtime_checkable
 class Router(Plugin, Protocol):
-    """Chooses which model handles a request when several are registered"""
+    """Chooses which model handles a request when several are registered."""
 
     kind: ClassVar[str] = "router"
 
     @abstractmethod
     def route(self, history: list[Message], ctx: Context) -> Model | Awaitable[Model]:
-        """Pick a model, typically from ``ctx.all(Model)``. May be sync or
-        ``async def`` — the harness adapts."""
+        """Pick a model, typically from ``ctx.all(Model)``.
+
+        May be sync or ``async def`` — the harness adapts.
+        """

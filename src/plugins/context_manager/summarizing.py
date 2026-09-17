@@ -26,9 +26,7 @@ _SUMMARY_PROMPT = (
 
 
 class SummarizingContextManager(ContextManager):
-    """
-    Collapses the middle of a long history into a cached Model summary.
-    """
+    """Collapses the middle of a long history into a cached Model summary."""
 
     def __init__(self, max_messages: int = 40, keep_recent: int = 12) -> None:
         if keep_recent >= max_messages:
@@ -41,8 +39,7 @@ class SummarizingContextManager(ContextManager):
         state = ctx.state(SummaryState)
         cutoff = max(state.upto, head_end)
 
-        # Fold newly-overflowing messages into the summary only when the live
-        # tail has grown past the budget. Otherwise reuse the cached summary.
+        # Re-summarize only once the live tail outgrows the budget; else reuse.
         if len(history) - cutoff > self._max_messages:
             new_cutoff = len(history) - self._keep_recent
             folded = await self._summarize(state.text, history[cutoff:new_cutoff], ctx)
@@ -63,8 +60,10 @@ class SummarizingContextManager(ContextManager):
 
     @staticmethod
     def _prefix_end(history: list[Message]) -> int:
-        """Index past the stable instruction prefix: leading system messages
-        plus the first user message."""
+        """Index past the stable instruction prefix.
+
+        The prefix is the leading system messages plus the first user message.
+        """
         i = 0
         while i < len(history) and history[i].role == "system":
             i += 1

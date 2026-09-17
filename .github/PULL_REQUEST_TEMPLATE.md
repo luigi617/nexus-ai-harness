@@ -1,12 +1,10 @@
-<!-- Keep the summary tight; the diff shows the "what", tell us the "why". -->
-
-## Summary
-
-<!-- What does this change and why? -->
-
 ## Related issue
 
 <!-- e.g. Closes #123 -->
+
+## Summary
+<!-- What does this change and why? Keep the summary tight, don't include what changes -->
+
 
 ## Type of change
 
@@ -17,8 +15,5 @@
 
 ## Checklist
 
-- [ ] `ruff check` and `ruff format --check` pass
-- [ ] `mypy` passes
-- [ ] `pytest` passes, and I added tests covering the change
-- [ ] New protocols live in `protocols/`, concrete plugins in `plugins/`, data types in `core/`
-- [ ] Updated `README.md` / `CONTRIBUTING.md` if behavior or usage changed
+- [ ] Followed [`CONTRIBUTING.md`](../CONTRIBUTING.md)
+- [ ] Added tests covering the change

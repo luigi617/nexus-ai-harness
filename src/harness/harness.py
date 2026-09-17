@@ -19,20 +19,20 @@ class NexusAIHarness:
         return self
 
     def validate(self) -> NexusAIHarness:
-        """Check that every registered plugin's declared ``requires`` are
-        satisfied by another registered plugin.
+        """Validate that every plugin's declared ``requires`` are satisfied.
 
         Raises :class:`~harness.validation.MissingDependencyError` (with a
-        rendered dependency tree) when a dependency is missing.
-
-        returns ``self`` so it can be chained after ``use(...)``.
+        rendered dependency tree) when a dependency is missing. Returns ``self``
+        so it can be chained after ``use(...)``.
         """
         validate_registry(self._registry)
         return self
 
     def describe_dependencies(self) -> str:
-        """Render the dependency tree of every plugin that declares
-        ``requires``. Descriptive only — never raises."""
+        """Render the dependency tree of every plugin that declares ``requires``.
+
+        Descriptive only — never raises.
+        """
         return describe_registry(self._registry)
 
     async def run(

@@ -9,8 +9,9 @@ from protocols.intervention import Intervention
 
 @dataclass
 class InjectMessage(Intervention):
-    """Steer a running agent by adding a message before its next turn, so the
-    next model call sees it.
+    """Steer a running agent by adding a message before its next turn.
+
+    The next model call sees the injected message.
     """
 
     content: str

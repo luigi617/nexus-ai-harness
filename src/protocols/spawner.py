@@ -11,7 +11,9 @@ from protocols.plugin import Plugin
 @runtime_checkable
 class Spawner(Plugin, Protocol):
     """Runs a subagent's child context to completion and returns the distilled result.
-    May be sync or ``async def`` — the harness adapts."""
+
+    May be sync or ``async def`` — the harness adapts.
+    """
 
     kind: ClassVar[str] = "spawner"
 

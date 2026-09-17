@@ -10,12 +10,12 @@ _CROSS = "✗"
 
 
 class MissingDependencyError(Exception):
-    """Raised by :meth:`NexusAIHarness.validate` when a registered plugin
-    declares a dependency (via ``requires``) that no other registered plugin
-    satisfies.
+    """Raised when a plugin declares a ``requires`` dependency that is unmet.
 
-    ``missing`` is the list of ``(plugin_name, protocol_name)`` pairs that were
-    unsatisfied; ``report`` is the rendered dependency tree shown in the message.
+    Raised by :meth:`NexusAIHarness.validate` when a registered plugin declares
+    a dependency that no other registered plugin satisfies. ``missing`` is the
+    list of ``(plugin_name, protocol_name)`` pairs that were unsatisfied;
+    ``report`` is the rendered dependency tree shown in the message.
     """
 
     def __init__(self, missing: list[tuple[str, str]], report: str) -> None:
@@ -40,9 +40,12 @@ def _render_tree(plugin_name: str, rows: list[tuple[str, bool]]) -> str:
 def _analyze(
     registry: Registry,
 ) -> tuple[list[tuple[str, list[tuple[str, bool]]]], list[tuple[str, str]]]:
-    """Return ``(trees, missing)`` where ``trees`` is one
-    ``(plugin_name, rows)`` entry per plugin that declares dependencies and
-    ``missing`` lists every unsatisfied ``(plugin_name, protocol_name)``."""
+    """Analyze declared dependencies against the registry.
+
+    Returns ``(trees, missing)`` where ``trees`` is one ``(plugin_name, rows)``
+    entry per plugin that declares dependencies and ``missing`` lists every
+    unsatisfied ``(plugin_name, protocol_name)``.
+    """
     plugins = registry.plugins()
     trees: list[tuple[str, list[tuple[str, bool]]]] = []
     missing: list[tuple[str, str]] = []

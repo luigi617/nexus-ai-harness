@@ -2,6 +2,7 @@
 
 - [Architecture](architecture.md) — how the harness is put together.
 - [Writing a plugin](writing-a-plugin.md) — implement a protocol and register it.
+- [Code style](code-style.md) — coding conventions for the repo.
 
 ## Plugins
 

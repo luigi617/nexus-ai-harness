@@ -15,10 +15,12 @@ class StickyState:
 
 
 class StickyRouter(Router):
-    """Decide once, then stick: delegates to an inner router on the first turn
-    (when the history holds the first task) and reuses that model for the rest
-    of the run. Wrap any router, e.g. ``StickyRouter(LLMRouter(...))`` to pick a
-    model from the first task and keep it.
+    """Decide once, then reuse that model for the rest of the run.
+
+    Delegates to an inner router on the first turn (when the history holds the
+    first task) and reuses that model afterwards. Wrap any router, e.g.
+    ``StickyRouter(LLMRouter(...))`` to pick a model from the first task and
+    keep it.
     """
 
     def __init__(self, inner: Router) -> None:

@@ -7,9 +7,7 @@ from protocols.hook import Hook
 
 
 class GraphTracer(Hook):
-    """
-    A hook that records each message node into a caller-owned graph.
-    """
+    """A hook that records each message node into a caller-owned graph."""
 
     def __init__(self, graph: Graph) -> None:
         self._graph = graph

@@ -62,8 +62,7 @@ class RunContext(Context):
         child_registry = Registry()
         for plugin in plugins:
             child_registry.add(plugin)
-        # The subagent is headless: its approvals escalate to the parent's
-        # approver. Inherit it unless the child was given one explicitly.
+        # Headless subagent: inherit the parent's approver unless given one.
         if child_registry.get(Approver) is None:
             approver = self._registry.get(Approver)
             if approver is not None:

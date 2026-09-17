@@ -127,9 +127,7 @@ class Graph:
         return [node_id for wave in self.levels() for node_id in wave]
 
     def to_text(self, label=None, width: int = 44) -> str:
-        """
-        Render the graph as a vertical stack of rectangular boxes.
-        """
+        """Render the graph as a vertical stack of rectangular boxes."""
         render = label or (lambda data: str(data))
 
         def box(text: str) -> list[str]:

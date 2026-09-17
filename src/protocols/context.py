@@ -43,4 +43,4 @@ class Context(Protocol):
 
     @abstractmethod
     def fork(self, plugins: list[object] | None = None) -> Context:
-        """Create a forked context"""
+        """Create a forked context."""

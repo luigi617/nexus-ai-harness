@@ -19,12 +19,11 @@ def _id(model: Model) -> str:
 
 
 class LLMRouter(Router):
-    """Asks a decider model which registered model should handle the request,
-    each turn. Candidates are the models registered on the harness
-    (``ctx.all(Model)``); it reasons over each model's ``id`` and ``description``.
+    """Ask a decider model which registered model should handle each turn.
 
-    ``decider`` makes the routing decision; if omitted, the first registered
-    model is used.
+    Candidates are the models registered on the harness (``ctx.all(Model)``);
+    it reasons over each model's ``id`` and ``description``. ``decider`` makes
+    the routing decision; if omitted, the first registered model is used.
     """
 
     def __init__(self, decider: Model | None = None) -> None:

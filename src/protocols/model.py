@@ -12,9 +12,7 @@ from protocols.plugin import Plugin
 
 @runtime_checkable
 class Model(Plugin, Protocol):
-    """
-    A model backend.
-    """
+    """A model backend."""
 
     kind: ClassVar[str] = "model"
 
@@ -26,5 +24,6 @@ class Model(Plugin, Protocol):
         self, history: list[Message], ctx: Context
     ) -> Response | Awaitable[Response]:
         """Return a completion.
+
         May be implemented as sync or ``async def`` — the harness adapts.
         """

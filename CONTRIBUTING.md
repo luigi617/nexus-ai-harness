@@ -14,3 +14,5 @@ ruff format .         # format
 mypy                  # type check
 pytest                # tests
 ```
+
+Follow the [code style](docs/code-style.md) for comments and docstrings.

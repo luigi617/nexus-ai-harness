@@ -10,9 +10,10 @@ from protocols.tool import Tool
 
 
 class Subagent(Tool):
-    """A general delegation tool: runs a self-contained task in an isolated
-    child agent and returns only the distilled result.
-    The model decides when to delegate and what the task is.
+    """Run a self-contained task in an isolated child agent.
+
+    Returns only the distilled result; the model decides when to delegate and
+    what the task is.
 
     By default the child inherits all of the parent's plugins. Pass ``plugins``
     to restrict it to exactly that set (a subset of what the parent has).

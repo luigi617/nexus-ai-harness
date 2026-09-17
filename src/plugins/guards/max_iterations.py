@@ -7,9 +7,7 @@ from protocols.guard import Guard
 
 
 class MaxIterations(Guard):
-    """
-    Stop once the iteration count reaches the limit.
-    """
+    """Stop once the iteration count reaches the limit."""
 
     requires = (IterationCounter,)
 

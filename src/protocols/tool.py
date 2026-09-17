@@ -18,7 +18,7 @@ class Tool(Plugin, Protocol):
 
     @abstractmethod
     def run(self, arguments: dict, ctx: Context) -> str | Awaitable[str]:
-        """
-        Run the tool.
+        """Run the tool.
+
         May be sync or ``async def`` — the harness adapts.
         """
