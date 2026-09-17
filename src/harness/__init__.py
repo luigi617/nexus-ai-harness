@@ -5,5 +5,13 @@ from harness.harness import NexusAIHarness
 from harness.registry import Registry
 from harness.result import RunResult
 from harness.session import Session
+from harness.validation import MissingDependencyError
 
-__all__ = ["NexusAIHarness", "Registry", "RunContext", "RunResult", "Session"]
+__all__ = [
+    "MissingDependencyError",
+    "NexusAIHarness",
+    "Registry",
+    "RunContext",
+    "RunResult",
+    "Session",
+]

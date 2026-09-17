@@ -15,6 +15,8 @@ from services.tool_runner import ToolRunner
 
 
 class AgenticLoop(Loop):
+    requires = (Model,)
+
     async def run(self, ctx: Context) -> str:
         router = ctx.get(Router)
         tools = ToolRunner(ctx.all(Tool))

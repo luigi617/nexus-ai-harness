@@ -7,10 +7,11 @@ from typing import ClassVar, Protocol, runtime_checkable
 from core.message import Message
 from core.response import Response
 from protocols.context import Context
+from protocols.plugin import Plugin
 
 
 @runtime_checkable
-class Model(Protocol):
+class Model(Plugin, Protocol):
     """
     A model backend.
     """

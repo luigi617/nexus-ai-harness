@@ -11,6 +11,8 @@ from protocols.router import Router
 
 
 class ChatLoop(Loop):
+    requires = (Model,)
+
     async def run(self, ctx: Context) -> str:
         await ctx.apply_interventions()
         router = ctx.get(Router)
