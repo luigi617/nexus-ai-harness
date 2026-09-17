@@ -23,8 +23,9 @@ class NexusAIHarness:
         satisfied by another registered plugin.
 
         Raises :class:`~harness.validation.MissingDependencyError` (with a
-        rendered dependency tree) when a dependency is missing; returns ``self``
-        so it can be chained after ``use(...)``.
+        rendered dependency tree) when a dependency is missing.
+
+        returns ``self`` so it can be chained after ``use(...)``.
         """
         validate_registry(self._registry)
         return self

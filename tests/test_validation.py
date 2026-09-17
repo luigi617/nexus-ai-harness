@@ -103,12 +103,75 @@ def test_tree_uses_branch_glyphs():
     assert "└── Tool" in report  # last branch
 
 
-def test_harness_validate_chains_and_passes():
-    h = (
-        NexusAIHarness()
-        .use(AgenticLoop())
-        .use(ScriptedModel(Response(text="hi")))
+def test_single_requirement_renders_satisfied_last_branch():
+    # A plugin with exactly one requirement: its only row is also the last row,
+    # so it must use the last-branch glyph paired with the satisfied mark.
+    reg = _registry(AgenticLoop(), ScriptedModel(Response(text="x")))
+    assert describe_registry(reg) == "AgenticLoop\n└── Model ✓"
+
+
+class NeedsModel:
+    kind: ClassVar[str] = "router"
+    requires: ClassVar[tuple[type[Plugin], ...]] = (Model,)
+
+    def route(self, history, ctx):  # pragma: no cover
+        return None
+
+
+def test_validate_filters_to_only_unsatisfied_plugin_trees():
+    # Two plugins declare requires: NeedsModel is satisfied, NeedsModelAndTool
+    # is not (Tool absent). Only the unsatisfied plugin's tree is rendered, and
+    # missing tuples come in registry order.
+    reg = _registry(
+        NeedsModel(), NeedsModelAndTool(), ScriptedModel(Response(text="x"))
     )
+    with pytest.raises(MissingDependencyError) as exc:
+        validate_registry(reg)
+    report = exc.value.report
+    assert exc.value.missing == [("NeedsModelAndTool", "Tool")]
+    assert "NeedsModel\n" not in report  # satisfied plugin's tree omitted
+    assert "NeedsModelAndTool" in report
+
+
+def test_validate_missing_ordering_across_plugins():
+    # Neither Model nor Tool present: both plugins report, in registry order.
+    reg = _registry(NeedsModel(), NeedsModelAndTool())
+    with pytest.raises(MissingDependencyError) as exc:
+        validate_registry(reg)
+    assert exc.value.missing == [
+        ("NeedsModel", "Model"),
+        ("NeedsModelAndTool", "Model"),
+        ("NeedsModelAndTool", "Tool"),
+    ]
+
+
+def test_describe_registry_joins_multiple_trees():
+    reg = _registry(NeedsModel(), AgenticLoop(), ScriptedModel(Response(text="x")))
+    desc = describe_registry(reg)
+    # Two trees, blank-line separated, in registry order.
+    assert desc == "NeedsModel\n└── Model ✓\n\nAgenticLoop\n└── Model ✓"
+
+
+def test_plugin_requiring_its_own_kind_needs_another_provider():
+    # A plugin whose kind matches its own requirement is NOT self-satisfying.
+    class SelfWrapModel:
+        kind: ClassVar[str] = "model"
+        requires: ClassVar[tuple[type[Plugin], ...]] = (Model,)
+
+        def complete(self, history, ctx):  # pragma: no cover
+            return Response(text="")
+
+    # Only the wrapper is registered → its Model requirement is unmet.
+    with pytest.raises(MissingDependencyError) as exc:
+        validate_registry(_registry(SelfWrapModel()))
+    assert exc.value.missing == [("SelfWrapModel", "Model")]
+
+    # Add a second, distinct Model → the requirement is now satisfied.
+    validate_registry(_registry(SelfWrapModel(), ScriptedModel(Response(text="x"))))
+
+
+def test_harness_validate_chains_and_passes():
+    h = NexusAIHarness().use(AgenticLoop()).use(ScriptedModel(Response(text="hi")))
     assert h.validate() is h  # returns self for chaining
 
 
@@ -128,11 +191,7 @@ def test_harness_validate_does_not_change_run_behavior():
 
 
 def test_describe_dependencies_lists_all_trees():
-    h = (
-        NexusAIHarness()
-        .use(AgenticLoop())
-        .use(ScriptedModel(Response(text="hi")))
-    )
+    h = NexusAIHarness().use(AgenticLoop()).use(ScriptedModel(Response(text="hi")))
     desc = h.describe_dependencies()
     assert "AgenticLoop" in desc
     assert "Model ✓" in desc

@@ -43,18 +43,20 @@ def _analyze(
     """Return ``(trees, missing)`` where ``trees`` is one
     ``(plugin_name, rows)`` entry per plugin that declares dependencies and
     ``missing`` lists every unsatisfied ``(plugin_name, protocol_name)``."""
-    kinds = registry.kinds()
+    plugins = registry.plugins()
     trees: list[tuple[str, list[tuple[str, bool]]]] = []
     missing: list[tuple[str, str]] = []
-    for plugin in registry.plugins():
+    for plugin in plugins:
         reqs = _requires(plugin)
         if not reqs:
             continue
         plugin_name = type(plugin).__name__
+        # A dependency must be provided by *another* plugin
+        provided = {p.kind for p in plugins if p is not plugin}
         rows: list[tuple[str, bool]] = []
         for protocol in reqs:
             protocol_name = protocol.__name__
-            satisfied = getattr(protocol, "kind", None) in kinds
+            satisfied = getattr(protocol, "kind", None) in provided
             rows.append((protocol_name, satisfied))
             if not satisfied:
                 missing.append((plugin_name, protocol_name))
