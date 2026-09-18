@@ -3,7 +3,6 @@ from __future__ import annotations
 from typing import TypeVar
 
 from core.events import Event, MessageAdded
-from core.invoke import invoke
 from core.message import Message
 from core.spawn import SpawnState
 from harness.registry import Registry
@@ -12,6 +11,7 @@ from protocols.approver import Approver
 from protocols.context import Context
 from protocols.hook import Hook
 from protocols.plugin import Plugin
+from services.invoke import _invoke
 
 T = TypeVar("T")
 P = TypeVar("P", bound=Plugin)
@@ -39,7 +39,7 @@ class RunContext(Context):
 
     async def apply_interventions(self) -> None:
         for intervention in self._session.take_interventions():
-            await invoke(intervention.apply, self)
+            await _invoke(intervention.apply, self)
 
     def add_message(self, message: Message) -> None:
         self._session.history.append(message)

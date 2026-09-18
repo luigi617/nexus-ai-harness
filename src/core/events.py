@@ -16,6 +16,20 @@ class IterationStarted(Event):
 
 
 @dataclass
+class IterationCompleted(Event):
+    """A loop iteration finished, whether it exited or will run again."""
+
+    index: int
+
+
+@dataclass
+class ModelCallStarted(Event):
+    """A model completion is about to be requested; carries the sent history."""
+
+    history: list[Message]
+
+
+@dataclass
 class ResponseReceived(Event):
     response: Response
 

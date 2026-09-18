@@ -3,11 +3,11 @@ from __future__ import annotations
 from collections.abc import Iterable
 
 from core.events import ToolCallCompleted, ToolCallDenied, ToolCallStarted
-from core.invoke import invoke
 from core.message import Message
 from core.permission import PermissionVerdict
 from protocols.context import Context
 from protocols.tool import Tool
+from services.invoke import invoke
 from services.permission_gate import PermissionGate
 
 
@@ -35,7 +35,7 @@ class ToolRunner:
             return self._message(call, name, f"error: {reason}")
 
         ctx.emit(ToolCallStarted(call))
-        content = await invoke(tool.run, call.get("arguments", {}), ctx)
+        content = await invoke(ctx, tool.run, call.get("arguments", {}), ctx)
         result = self._message(call, name, content)
         ctx.emit(ToolCallCompleted(call, result))
         return result

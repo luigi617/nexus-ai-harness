@@ -39,6 +39,45 @@ raising, for introspection. `requires` defaults to `()` — declaring it is
 optional and validation is an explicit step, so plugins that omit it keep
 resolving lazily at run time exactly as before.
 
+## Observing events
+
+Protocols *replace* a capability; events *extend* one. As it runs, the harness
+emits typed events (in `core/events.py`) — `SessionStarted`, `IterationStarted`,
+`ModelCallStarted`, `ResponseReceived`, `ToolCallStarted`, `ToolCallCompleted`,
+`IterationCompleted`, `SessionEnded`, and more. Cross-cutting concerns like
+tracing, logging, or metrics observe these without owning the model, loop, or
+tool registry.
+
+To observe events, implement the `Hook` protocol and register it with
+`.use(...)`. Its `on(event, ctx)` sees every emitted event — switch on the
+event type for the ones you care about — and can persist across the run via
+`ctx.state(...)` (see `plugins/hooks/` for examples):
+
+```python
+class Reporter(Hook):
+    def on(self, event: Event, ctx: Context) -> None:
+        if isinstance(event, ModelCallStarted):
+            print("calling model with", len(event.history))
+        elif isinstance(event, ToolCallCompleted):
+            log(ctx.session_id, event.result.content)
+```
+
+## Running before or after a plugin
+
+Events are one way to react to the harness; the other is to bind an
+`Interceptor` to a plugin *type*. Its `run(ctx)` fires automatically before or
+after the harness invokes that type — no event, and neither plugin knows about
+the other:
+
+```python
+class TimeModel(Interceptor):
+    def run(self, ctx: Context) -> None:
+        ctx.state(Timing).mark()
+
+harness.use_before(Model, TimeModel())   # runs before each model call
+harness.use_after(Tool, AuditLog())      # runs after each tool call
+```
+
 <!-- TODO:
 - Minimal worked example (e.g. a Tool).
 - The `kind` ClassVar and why it keys the registry.
