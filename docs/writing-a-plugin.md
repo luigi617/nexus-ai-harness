@@ -78,6 +78,14 @@ harness.use_before(Model, TimeModel())   # runs before each model call
 harness.use_after(Tool, AuditLog())      # runs after each tool call
 ```
 
+Bind to a protocol (`Model`) to wrap every implementer, or to a concrete class
+to wrap only that class. `run` is observation only — it can't see the target's
+arguments or return value (that's what `ContextManager`, `Router`, and `Guard`
+own). `before` and `after` interceptors each fire in registration order, and
+`after` always runs, even if the invocation raised.
+
+Interception is faithful: it fires on *every* invocation of the target.
+
 <!-- TODO:
 - Minimal worked example (e.g. a Tool).
 - The `kind` ClassVar and why it keys the registry.

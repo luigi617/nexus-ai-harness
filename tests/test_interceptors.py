@@ -1,5 +1,10 @@
 from __future__ import annotations
 
+import asyncio
+
+import pytest
+
+from core.phase import Phase
 from core.response import Response
 from harness.harness import NexusAIHarness
 from plugins.loops import AgenticLoop
@@ -8,7 +13,8 @@ from protocols.context import Context
 from protocols.interceptor import Interceptor
 from protocols.model import Model
 from protocols.tool import Tool
-from tests.conftest import RecordingTool, ScriptedModel
+from services.invoke import InterceptorBinding, invoke
+from tests.conftest import RecordingTool, ScriptedModel, make_ctx
 
 
 class Mark(Interceptor):
@@ -101,3 +107,67 @@ def test_async_interceptor_is_awaited():
     harness.use_before(Model, AsyncMark())
     harness.run_sync("go")
     assert order == ["async"]
+
+
+class _Widget:
+    """A minimal target plugin for exercising invoke() directly."""
+
+    kind = "widget"
+
+    async def go(self) -> str:
+        return "ok"
+
+    async def boom(self) -> str:
+        raise ValueError("boom")
+
+
+def test_after_interceptors_run_even_when_invocation_raises():
+    order: list[str] = []
+    widget = _Widget()
+    ctx = make_ctx(InterceptorBinding(_Widget, Phase.AFTER, Mark("after", order)))
+    with pytest.raises(ValueError):
+        asyncio.run(invoke(ctx, widget.boom))
+    assert order == ["after"]
+
+
+def test_before_and_after_both_run_in_registration_order():
+    order: list[str] = []
+    widget = _Widget()
+    ctx = make_ctx(
+        InterceptorBinding(_Widget, Phase.BEFORE, Mark("before-A", order)),
+        InterceptorBinding(_Widget, Phase.AFTER, Mark("after-A", order)),
+        InterceptorBinding(_Widget, Phase.BEFORE, Mark("before-B", order)),
+        InterceptorBinding(_Widget, Phase.AFTER, Mark("after-B", order)),
+    )
+    asyncio.run(invoke(ctx, widget.go))
+    assert order == ["before-A", "before-B", "after-A", "after-B"]
+
+
+def test_binding_kind_is_distinct_from_interceptor():
+    ctx = make_ctx(InterceptorBinding(_Widget, Phase.BEFORE, Mark("x", [])))
+    assert ctx.get(Interceptor) is None  # a binding is not resolvable as Interceptor
+    assert len(ctx.all(InterceptorBinding)) == 1
+
+
+def test_a_plugin_invoking_another_plugin_is_also_intercepted():
+    order: list[str] = []
+
+    class Inner:
+        kind = "inner"
+
+        async def go(self) -> str:
+            return "inner"
+
+    class Outer:
+        kind = "outer"
+
+        def __init__(self, inner: Inner) -> None:
+            self._inner = inner
+
+        async def go(self, ctx: Context) -> str:  # a plugin using another plugin
+            return await invoke(ctx, self._inner.go)
+
+    outer = Outer(Inner())
+    ctx = make_ctx(InterceptorBinding(Inner, Phase.BEFORE, Mark("inner", order)))
+    asyncio.run(invoke(ctx, outer.go, ctx))
+    assert order == ["inner"]  # fires for the nested call, not just top-level

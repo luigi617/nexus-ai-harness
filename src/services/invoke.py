@@ -23,8 +23,8 @@ async def _invoke(fn: Callable[..., Any], *args: Any) -> Any:
 class InterceptorBinding:
     """An interceptor plus the target type and phase it fires around.
 
-    Registered in place of the bare interceptor so the phase (``"before"`` or
-    ``"after"``) and target type travel with it and survive a ``ctx.fork``.
+    Registered in place of the bare interceptor so the phase and target type
+    travel with it and survive a ``ctx.fork``.
 
     Attributes:
         target: The plugin type whose invocation the interceptor wraps; an
@@ -39,7 +39,7 @@ class InterceptorBinding:
     target: type[Plugin]
     phase: Phase
     interceptor: Interceptor
-    kind: ClassVar[str] = "interceptor"
+    kind: ClassVar[str] = "interceptor-binding"
     requires: ClassVar[tuple[type, ...]] = ()
 
 
@@ -54,8 +54,9 @@ async def invoke(ctx: Context, fn: Callable[..., Any], *args: Any) -> Any:
     for binding in bound:
         if binding.phase is Phase.BEFORE:
             await _invoke(binding.interceptor.run, ctx)
-    result = await _invoke(fn, *args)
-    for binding in bound:
-        if binding.phase is Phase.AFTER:
-            await _invoke(binding.interceptor.run, ctx)
-    return result
+    try:
+        return await _invoke(fn, *args)
+    finally:
+        for binding in bound:
+            if binding.phase is Phase.AFTER:
+                await _invoke(binding.interceptor.run, ctx)
