@@ -2,42 +2,56 @@ from __future__ import annotations
 
 import asyncio
 
-from core.events import Event
-from harness.callbacks import CallbackHook, EventHandler
+from core.phase import Phase
 from harness.context import RunContext
 from harness.registry import Registry
 from harness.result import RunResult
 from harness.session import Session
 from harness.validation import describe_registry, validate_registry
+from protocols.interceptor import Interceptor
+from protocols.plugin import Plugin
+from services.invoke import InterceptorBinding
 from services.runner import run_session
 
 
 class NexusAIHarness:
     def __init__(self) -> None:
         self._registry = Registry()
-        self._callbacks = CallbackHook()
-        self._registry.add(self._callbacks)
 
     def use(self, plugin: object) -> NexusAIHarness:
         self._registry.add(plugin)
         return self
 
-    def on(self, event_type: type[Event], handler: EventHandler) -> NexusAIHarness:
-        """Register ``handler`` to run whenever an ``event_type`` event is emitted.
+    def use_before(
+        self, target: type[Plugin], interceptor: Interceptor
+    ) -> NexusAIHarness:
+        """Register ``interceptor`` to run before each invocation of ``target``.
 
-        A lightweight alternative to writing a :class:`~protocols.hook.Hook`: the
-        handler observes the typed event directly instead of switching on event
-        type itself. It fires for ``event_type`` and any subclass, so listening
-        on :class:`~core.events.Event` observes every event.
+        A lifecycle-based alternative to observing an ``Event``: whenever the
+        harness invokes a ``target`` plugin (e.g. ``Model``, ``Tool``,
+        ``Loop``), the interceptor's ``run(ctx)`` fires first. Neither plugin
+        needs to know about the other. Chainable.
 
         Args:
-            event_type: The event class to listen for.
-            handler: A sync callable taking ``(event)`` or ``(event, ctx)``.
-
-        Returns:
-            ``self``, so registrations can be chained after ``use(...)``.
+            target: The plugin type to wrap (a protocol such as ``Model``).
+            interceptor: The :class:`~protocols.interceptor.Interceptor` to run.
         """
-        self._callbacks.register(event_type, handler)
+        self._registry.add(InterceptorBinding(target, Phase.BEFORE, interceptor))
+        return self
+
+    def use_after(
+        self, target: type[Plugin], interceptor: Interceptor
+    ) -> NexusAIHarness:
+        """Register ``interceptor`` to run after each invocation of ``target``.
+
+        The mirror of :meth:`use_before`; ``run(ctx)`` fires once the ``target``
+        invocation returns. Chainable.
+
+        Args:
+            target: The plugin type to wrap (a protocol such as ``Model``).
+            interceptor: The :class:`~protocols.interceptor.Interceptor` to run.
+        """
+        self._registry.add(InterceptorBinding(target, Phase.AFTER, interceptor))
         return self
 
     def validate(self) -> NexusAIHarness:

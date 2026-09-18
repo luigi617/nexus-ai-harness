@@ -48,18 +48,35 @@ emits typed events (in `core/events.py`) — `SessionStarted`, `IterationStarted
 tracing, logging, or metrics observe these without owning the model, loop, or
 tool registry.
 
-Register a handler for a single event type with `harness.on(...)`; the handler
-receives the typed event (and optionally the run context), and fires for the
-type and any subclass — so listening on `Event` observes everything:
+To observe events, implement the `Hook` protocol and register it with
+`.use(...)`. Its `on(event, ctx)` sees every emitted event — switch on the
+event type for the ones you care about — and can persist across the run via
+`ctx.state(...)` (see `plugins/hooks/` for examples):
 
 ```python
-harness.on(ModelCallStarted, lambda e: print("calling model with", len(e.history)))
-harness.on(ToolCallCompleted, lambda e, ctx: log(ctx.session_id, e.result.content))
+class Reporter(Hook):
+    def on(self, event: Event, ctx: Context) -> None:
+        if isinstance(event, ModelCallStarted):
+            print("calling model with", len(event.history))
+        elif isinstance(event, ToolCallCompleted):
+            log(ctx.session_id, event.result.content)
 ```
 
-For a stateful observer, implement the `Hook` protocol instead and register it
-with `.use(...)`; its `on(event, ctx)` sees every emitted event and can persist
-across the run via `ctx.state(...)` (see `plugins/hooks/` for examples).
+## Running before or after a plugin
+
+Events are one way to react to the harness; the other is to bind an
+`Interceptor` to a plugin *type*. Its `run(ctx)` fires automatically before or
+after the harness invokes that type — no event, and neither plugin knows about
+the other:
+
+```python
+class TimeModel(Interceptor):
+    def run(self, ctx: Context) -> None:
+        ctx.state(Timing).mark()
+
+harness.use_before(Model, TimeModel())   # runs before each model call
+harness.use_after(Tool, AuditLog())      # runs after each tool call
+```
 
 <!-- TODO:
 - Minimal worked example (e.g. a Tool).

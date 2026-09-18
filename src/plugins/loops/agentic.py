@@ -9,7 +9,6 @@ from core.events import (
     ModelCallStarted,
     ResponseReceived,
 )
-from core.invoke import invoke
 from core.message import Message
 from core.run import RunState
 from protocols.context import Context
@@ -19,6 +18,7 @@ from protocols.model import Model
 from protocols.router import Router
 from protocols.tool import Tool
 from services.guard_chain import GuardChain
+from services.invoke import invoke
 from services.tool_runner import ToolRunner
 
 
@@ -49,14 +49,16 @@ class AgenticLoop(Loop):
 
             history = ctx.history
             for cm in ctx.all(ContextManager):  # middleware chain
-                history = await invoke(cm.process, history, ctx)
+                history = await invoke(ctx, cm.process, history, ctx)
             model = (
-                await invoke(router.route, history, ctx) if router else ctx.get(Model)
+                await invoke(ctx, router.route, history, ctx)
+                if router
+                else ctx.get(Model)
             )
             if model is None:
                 raise LookupError("no model registered")
             ctx.emit(ModelCallStarted(history))
-            response = await invoke(model.complete, history, ctx)
+            response = await invoke(ctx, model.complete, history, ctx)
             ctx.emit(ResponseReceived(response))
             ctx.add_message(
                 Message(
