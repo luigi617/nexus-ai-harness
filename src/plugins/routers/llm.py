@@ -4,7 +4,6 @@ from core.message import Message
 from protocols.context import Context
 from protocols.model import Model
 from protocols.router import Router
-from services.invoke import invoke
 
 _ROUTER_PROMPT = (
     "You are a model router. Given the user's request, choose the single most "
@@ -43,7 +42,7 @@ class LLMRouter(Router):
             Message(role="user", content=task),
         ]
         decider = self._decider or candidates[0]
-        response = await invoke(ctx, decider.complete, request, ctx)
+        response = await ctx.invoke(decider.complete, request, ctx)
         return self._match(response.text, candidates)
 
     @staticmethod

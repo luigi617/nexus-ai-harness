@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 from abc import abstractmethod
-from collections.abc import Awaitable
-from typing import Protocol, TypeVar, runtime_checkable
+from collections.abc import Awaitable, Callable
+from typing import Any, Protocol, TypeVar, runtime_checkable
 
 from core.events import Event
 from core.message import Message
@@ -40,6 +40,17 @@ class Context(Protocol):
 
     @abstractmethod
     def all(self, cls: type[P]) -> list[P]: ...
+
+    @abstractmethod
+    def invoke(
+        self, fn: Callable[..., Any], *args: Any, **kwargs: Any
+    ) -> Awaitable[Any]:
+        """Call plugin method ``fn`` with any interceptors bound to it around it.
+
+        ``fn`` may be sync or ``async def`` and is passed ``*args`` and
+        ``**kwargs``. Interceptors bound to the plugin ``fn`` belongs to (via
+        ``harness.use_before`` / ``use_after``) run around the call.
+        """
 
     @abstractmethod
     def fork(self, plugins: list[object] | None = None) -> Context:

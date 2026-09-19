@@ -10,7 +10,6 @@ from harness.session import Session
 from harness.validation import describe_registry, validate_registry
 from protocols.interceptor import Interceptor
 from protocols.plugin import Plugin
-from services.invoke import InterceptorBinding
 from services.runner import run_session
 
 
@@ -36,7 +35,7 @@ class NexusAIHarness:
             target: The plugin type to wrap (a protocol such as ``Model``).
             interceptor: The :class:`~protocols.interceptor.Interceptor` to run.
         """
-        self._registry.add(InterceptorBinding(target, Phase.BEFORE, interceptor))
+        self._registry.add_interceptor(target, Phase.BEFORE, interceptor)
         return self
 
     def use_after(
@@ -51,7 +50,7 @@ class NexusAIHarness:
             target: The plugin type to wrap (a protocol such as ``Model``).
             interceptor: The :class:`~protocols.interceptor.Interceptor` to run.
         """
-        self._registry.add(InterceptorBinding(target, Phase.AFTER, interceptor))
+        self._registry.add_interceptor(target, Phase.AFTER, interceptor)
         return self
 
     def validate(self) -> NexusAIHarness:

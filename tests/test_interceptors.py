@@ -6,15 +6,26 @@ import pytest
 
 from core.phase import Phase
 from core.response import Response
+from harness.context import RunContext
 from harness.harness import NexusAIHarness
+from harness.registry import Registry
+from harness.session import Session
 from plugins.loops import AgenticLoop
 from plugins.permissions import AllowList, AutoApprove
 from protocols.context import Context
 from protocols.interceptor import Interceptor
+from protocols.loop import Loop
 from protocols.model import Model
 from protocols.tool import Tool
-from services.invoke import InterceptorBinding, invoke
-from tests.conftest import RecordingTool, ScriptedModel, make_ctx
+from tests.conftest import RecordingTool, ScriptedModel
+
+
+def _ctx_with(*bindings: tuple[type, Phase, Interceptor]) -> RunContext:
+    """A RunContext whose registry holds the given (target, phase, interceptor)s."""
+    registry = Registry()
+    for target, phase, interceptor in bindings:
+        registry.add_interceptor(target, phase, interceptor)
+    return RunContext(Session(), registry)
 
 
 class Mark(Interceptor):
@@ -75,6 +86,22 @@ def test_interceptor_only_fires_for_its_target():
     assert order == []
 
 
+def test_target_protocol_does_not_leak_across_protocols_sharing_a_method():
+    # Tool structurally satisfies the minimal Loop protocol (both have `run`),
+    # so a Loop-bound interceptor must not fire on tool calls.
+    order: list[str] = []
+    model = ScriptedModel(
+        Response(text="", tool_calls=[{"name": "echo", "id": "1", "arguments": {}}]),
+        Response(text="done"),
+    )
+    harness = _harness(
+        model, RecordingTool("echo", "ok"), AllowList(["echo"]), AutoApprove()
+    )
+    harness.use_before(Loop, Mark("loop", order))
+    harness.run_sync("go")
+    assert order == ["loop"]  # once for the loop, not also per tool call
+
+
 def test_binding_to_a_concrete_class_ignores_a_sibling_implementation():
     class OtherModel(ScriptedModel):
         pass
@@ -124,29 +151,34 @@ class _Widget:
 def test_after_interceptors_run_even_when_invocation_raises():
     order: list[str] = []
     widget = _Widget()
-    ctx = make_ctx(InterceptorBinding(_Widget, Phase.AFTER, Mark("after", order)))
+    ctx = _ctx_with((_Widget, Phase.AFTER, Mark("after", order)))
     with pytest.raises(ValueError):
-        asyncio.run(invoke(ctx, widget.boom))
+        asyncio.run(ctx.invoke(widget.boom))
     assert order == ["after"]
 
 
 def test_before_and_after_both_run_in_registration_order():
     order: list[str] = []
     widget = _Widget()
-    ctx = make_ctx(
-        InterceptorBinding(_Widget, Phase.BEFORE, Mark("before-A", order)),
-        InterceptorBinding(_Widget, Phase.AFTER, Mark("after-A", order)),
-        InterceptorBinding(_Widget, Phase.BEFORE, Mark("before-B", order)),
-        InterceptorBinding(_Widget, Phase.AFTER, Mark("after-B", order)),
+    ctx = _ctx_with(
+        (_Widget, Phase.BEFORE, Mark("before-A", order)),
+        (_Widget, Phase.AFTER, Mark("after-A", order)),
+        (_Widget, Phase.BEFORE, Mark("before-B", order)),
+        (_Widget, Phase.AFTER, Mark("after-B", order)),
     )
-    asyncio.run(invoke(ctx, widget.go))
+    asyncio.run(ctx.invoke(widget.go))
     assert order == ["before-A", "before-B", "after-A", "after-B"]
 
 
-def test_binding_kind_is_distinct_from_interceptor():
-    ctx = make_ctx(InterceptorBinding(_Widget, Phase.BEFORE, Mark("x", [])))
-    assert ctx.get(Interceptor) is None  # a binding is not resolvable as Interceptor
-    assert len(ctx.all(InterceptorBinding)) == 1
+def test_invoke_passes_through_args_and_kwargs():
+    class Adder:
+        kind = "adder"
+
+        async def add(self, a: int, b: int = 0) -> int:
+            return a + b
+
+    ctx = _ctx_with()
+    assert asyncio.run(ctx.invoke(Adder().add, 1, b=2)) == 3
 
 
 def test_a_plugin_invoking_another_plugin_is_also_intercepted():
@@ -165,9 +197,9 @@ def test_a_plugin_invoking_another_plugin_is_also_intercepted():
             self._inner = inner
 
         async def go(self, ctx: Context) -> str:  # a plugin using another plugin
-            return await invoke(ctx, self._inner.go)
+            return await ctx.invoke(self._inner.go)
 
     outer = Outer(Inner())
-    ctx = make_ctx(InterceptorBinding(Inner, Phase.BEFORE, Mark("inner", order)))
-    asyncio.run(invoke(ctx, outer.go, ctx))
+    ctx = _ctx_with((Inner, Phase.BEFORE, Mark("inner", order)))
+    asyncio.run(ctx.invoke(outer.go, ctx))
     assert order == ["inner"]  # fires for the nested call, not just top-level

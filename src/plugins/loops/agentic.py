@@ -18,7 +18,6 @@ from protocols.model import Model
 from protocols.router import Router
 from protocols.tool import Tool
 from services.guard_chain import GuardChain
-from services.invoke import invoke
 from services.tool_runner import ToolRunner
 
 
@@ -44,21 +43,22 @@ class AgenticLoop(Loop):
             if decision.stop:
                 reason = f"guard: {decision.reason}"
                 ctx.state(RunState).stop_reason = reason
+                ctx.emit(IterationCompleted(i))
                 ctx.emit(LoopStopped(reason))
                 return f"stopped: {decision.reason}"
 
             history = ctx.history
             for cm in ctx.all(ContextManager):  # middleware chain
-                history = await invoke(ctx, cm.process, history, ctx)
+                history = await ctx.invoke(cm.process, history, ctx)
             model = (
-                await invoke(ctx, router.route, history, ctx)
+                await ctx.invoke(router.route, history, ctx)
                 if router
                 else ctx.get(Model)
             )
             if model is None:
                 raise LookupError("no model registered")
-            ctx.emit(ModelCallStarted(history))
-            response = await invoke(ctx, model.complete, history, ctx)
+            ctx.emit(ModelCallStarted(list(history)))
+            response = await ctx.invoke(model.complete, history, ctx)
             ctx.emit(ResponseReceived(response))
             ctx.add_message(
                 Message(

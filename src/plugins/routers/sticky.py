@@ -6,7 +6,6 @@ from core.message import Message
 from protocols.context import Context
 from protocols.model import Model
 from protocols.router import Router
-from services.invoke import invoke
 
 
 @dataclass
@@ -29,5 +28,5 @@ class StickyRouter(Router):
     async def route(self, history: list[Message], ctx: Context) -> Model:
         state = ctx.state(StickyState)
         if state.model is None:
-            state.model = await invoke(ctx, self._inner.route, history, ctx)
+            state.model = await ctx.invoke(self._inner.route, history, ctx)
         return state.model

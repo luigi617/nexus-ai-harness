@@ -28,13 +28,14 @@ Dependencies flow one way: `core ← protocols ← {services, plugins, harness}`
 
 ## Sync or async, one method
 
-Plugin methods may be written `def` or `async def`; the harness adapts via
-`services/invoke.py`. Its `invoke(ctx, fn, *args)` invokes a plugin method with
-any bound interceptors around it — the plugin is inferred from ``fn``, 
-so binding to a concrete class wraps only that class; the private 
-`_invoke(fn, *args)` is the raw sync/async adapter it builds on.
+Plugin methods may be written `def` or `async def`; the harness adapts. Call
+one through `ctx.invoke(fn, *args)`, which runs any interceptors bound to the
+plugin `fn` belongs to (inferred from `fn`, so binding to a concrete class wraps
+only that class) around the call. It builds on `call(fn, *args)` in
+`core/invoke.py`, the raw sync/async adapter (await if a coroutine, else
+`asyncio.to_thread`).
 
-<!-- TODO: explain _invoke: await if coroutine, else asyncio.to_thread; and interceptor dispatch. -->
+<!-- TODO: explain interceptor dispatch. -->
 
 
 ## Per-session state

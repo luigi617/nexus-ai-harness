@@ -6,7 +6,6 @@ from core.spawn import SpawnState
 from protocols.approver import Approver
 from protocols.context import Context
 from protocols.permission import Permission
-from services.invoke import invoke
 
 
 class PermissionGate:
@@ -25,7 +24,7 @@ class PermissionGate:
             origin=self._origin(ctx),
         )
         if approver is not None:
-            approved = await invoke(ctx, approver.approve, request, ctx)
+            approved = await ctx.invoke(approver.approve, request, ctx)
             if approved:
                 return PermissionDecision.allow()
         return PermissionDecision.deny(decision.reason or "not approved")

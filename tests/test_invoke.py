@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import threading
 
-from services.invoke import _invoke
+from core.invoke import call
 
 
 def test_async_fn_is_awaited_on_the_loop():
@@ -16,7 +16,7 @@ def test_async_fn_is_awaited_on_the_loop():
         async def af(x):
             return x, threading.get_ident()
 
-        return await _invoke(af, 5)
+        return await call(af, 5)
 
     value, tid = asyncio.run(go())
     assert value == 5
@@ -30,7 +30,7 @@ def test_sync_fn_is_offloaded_to_a_thread():
         def sf(x):
             return x, threading.get_ident()
 
-        return main, await _invoke(sf, 7)
+        return main, await call(sf, 7)
 
     main, (value, tid) = asyncio.run(go())
     assert value == 7
@@ -51,7 +51,7 @@ def test_sync_fn_never_blocks_the_loop():
         async def quick():
             order.append("quick")
 
-        await asyncio.gather(_invoke(slow), quick())
+        await asyncio.gather(call(slow), quick())
         return order
 
     order = asyncio.run(go())
