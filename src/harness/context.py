@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 from collections.abc import Callable
 from typing import Any, TypeVar
 
@@ -8,6 +9,7 @@ from core.invoke import call
 from core.message import Message
 from core.phase import Phase
 from core.spawn import SpawnState
+from core.subscription import Subscription
 from harness.registry import Registry
 from harness.session import Session
 from protocols.approver import Approver
@@ -19,10 +21,26 @@ T = TypeVar("T")
 P = TypeVar("P", bound=Plugin)
 
 
+def _dispatch(handler: Callable[[Event, Any], Any], event: Event, ctx: Context) -> None:
+    """Invoke an event handler, failing loudly if it is mistakenly async."""
+    result = handler(event, ctx)
+    if inspect.isawaitable(result) or inspect.isasyncgen(result):
+        if inspect.iscoroutine(result):
+            result.close()  # avoid a "coroutine was never awaited" warning
+        raise TypeError(
+            f"event handler {getattr(handler, '__qualname__', handler)!r} returned "
+            f"{type(result).__name__}; handlers must be synchronous because emit() "
+            "is synchronous"
+        )
+
+
 class RunContext(Context):
-    def __init__(self, session: Session, registry: Registry) -> None:
+    def __init__(
+        self, session: Session, registry: Registry, owner: object | None = None
+    ) -> None:
         self._session = session
         self._registry = registry
+        self._owner = owner  # the plugin this context acts for
 
     @property
     def session_id(self) -> str:
@@ -49,7 +67,19 @@ class RunContext(Context):
 
     def emit(self, event: Event) -> None:
         for hook in self._registry.all(Hook):
-            hook.on(event, self)
+            _dispatch(hook.on, event, self)
+        for subscription in self._registry.subscribers(event):
+            _dispatch(subscription.handler, event, self)
+
+    def on(
+        self, event_type: type[Event], handler: Callable[[Event, Context], None]
+    ) -> Subscription:
+        owner = (
+            self._owner
+            if self._owner is not None
+            else getattr(handler, "__self__", None)
+        )
+        return self._registry.subscribe(event_type, handler, owner)
 
     def get(self, cls: type[P]) -> P | None:
         return self._registry.get(cls)
@@ -63,16 +93,16 @@ class RunContext(Context):
         error: BaseException | None = None
         try:
             if plugin is not None:
-                for interceptor in self._registry.interceptors(plugin, Phase.BEFORE):
-                    await call(interceptor.run, self)
+                for fire in self._registry.interceptors(plugin, Phase.BEFORE):
+                    await call(fire, self)
             result = await call(fn, *args, **kwargs)
         except BaseException as exc:  # captured, re-raised once teardown is done
             error = exc
         after_error: BaseException | None = None
         if plugin is not None:
-            for interceptor in self._registry.interceptors(plugin, Phase.AFTER):
+            for fire in self._registry.interceptors(plugin, Phase.AFTER):
                 try:
-                    await call(interceptor.run, self)
+                    await call(fire, self)
                 except BaseException as exc:  # keep running the remaining ones
                     after_error = after_error or exc
         if error is not None:
@@ -87,11 +117,14 @@ class RunContext(Context):
         child_registry = Registry()
         for plugin in members:
             child_registry.add(plugin)
-        # Interceptors are cross-cutting, so a child always inherits them.
-        for binding in self._registry.interceptor_bindings():
-            child_registry.add_interceptor(
-                binding.target, binding.phase, binding.interceptor
-            )
+        # Event subscriptions follow their owner into the child so ctx.on()
+        # observes forks like a Hook does; unowned ones are cross-cutting.
+        for subscription in self._registry.subscriptions():
+            owner = subscription.owner
+            if owner is None or any(owner is member for member in members):
+                child_registry.subscribe(
+                    subscription.event_type, subscription.handler, owner=owner
+                )
         # Headless subagent: inherit the parent's approver unless given one.
         if child_registry.get(Approver) is None:
             approver = self._registry.get(Approver)

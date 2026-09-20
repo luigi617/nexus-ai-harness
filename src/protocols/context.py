@@ -6,6 +6,7 @@ from typing import Any, TypeVar
 
 from core.events import Event
 from core.message import Message
+from core.subscription import Subscription
 from protocols.plugin import Plugin
 
 T = TypeVar("T")
@@ -40,6 +41,32 @@ class Context(ABC):
     def emit(self, event: Event) -> None: ...
 
     @abstractmethod
+    def on(
+        self, event_type: type[Event], handler: Callable[[Event, Context], None]
+    ) -> Subscription:
+        """Subscribe ``handler`` to every future ``event_type`` event.
+
+        A plugin typically calls this from its lifecycle ``start`` to react to
+        events without being a standalone ``Hook``. The subscription is owned by
+        the plugin whose ``start`` is running (or, outside ``start``, the
+        instance a bound-method ``handler`` belongs to), so it is removed
+        automatically when that plugin is removed via ``NexusAIHarness.unuse``.
+        A subscription made outside ``start`` with a non-bound handler has no
+        owner and is treated as cross-cutting: it survives ``unuse`` and must be
+        cancelled via the returned handle's ``remove``.
+
+        Args:
+            event_type: The event class to listen for; the handler fires on any
+                instance of it, subclasses included.
+            handler: Called with ``(event, ctx)`` each time a matching event is
+                emitted. Must be synchronous; an async handler raises.
+
+        Returns:
+            A :class:`~core.subscription.Subscription` handle whose ``remove``
+            cancels the subscription ahead of the owner being removed.
+        """
+
+    @abstractmethod
     def get(self, cls: type[P]) -> P | None: ...
 
     @abstractmethod
@@ -49,11 +76,10 @@ class Context(ABC):
     def invoke(
         self, fn: Callable[..., Any], *args: Any, **kwargs: Any
     ) -> Awaitable[Any]:
-        """Call plugin method ``fn`` with any interceptors bound to it around it.
+        """Call plugin method ``fn`` with any interceptors wrapping it around it.
 
         ``fn`` may be sync or ``async def`` and is passed ``*args`` and
-        ``**kwargs``. Interceptors bound to the plugin ``fn`` belongs to (via
-        ``harness.use_before`` / ``use_after``) run around the call.
+        ``**kwargs``.
         """
 
     @abstractmethod

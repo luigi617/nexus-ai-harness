@@ -62,27 +62,50 @@ class Reporter(Hook):
             log(ctx.session_id, event.result.content)
 ```
 
+A plugin that already owns a capability can also subscribe to a single event
+type without being a standalone `Hook`, by calling `ctx.on(EventType, handler)`
+— typically from its lifecycle `start`. The subscription is *owned* by the
+plugin whose bound method `handler` is, so it is torn down automatically when
+that plugin is removed (see below); `ctx.on` returns a handle whose `remove()`
+cancels it sooner by hand:
+
+```python
+class Tracer(Tool, Lifecycle):
+    async def start(self, ctx: Context) -> None:
+        ctx.on(ModelCallStarted, self.before_model)
+
+    def before_model(self, event: Event, ctx: Context) -> None:
+        ...
+```
+
 ## Running before or after a plugin
 
-Events are one way to react to the harness; the other is to bind an
-`Interceptor` to a plugin *type*. Its `run(ctx)` fires automatically before or
-after the harness invokes that type — no event, and neither plugin knows about
-the other:
+Events are one way to react to the harness; the other is an `Interceptor`. It
+declares the plugin *type* it wraps as its `target` and overrides `before`,
+`after`, or both; they fire automatically around every invocation of that type
+— no event, and neither plugin knows about the other. Register it like any
+plugin with `.use`:
 
 ```python
 class TimeModel(Interceptor):
-    def run(self, ctx: Context) -> None:
+    target = Model                         # every model call
+    def before(self, ctx: Context) -> None:
         ctx.state(Timing).mark()
 
-harness.use_before(Model, TimeModel())   # runs before each model call
-harness.use_after(Tool, AuditLog())      # runs after each tool call
+class AuditLog(Interceptor):
+    target = Tool                          # every tool call
+    def after(self, ctx: Context) -> None:
+        ...
+
+harness.use(TimeModel()).use(AuditLog())
 ```
 
-Bind to a protocol (`Model`) to wrap every implementer, or to a concrete class
-to wrap only that class. `run` is observation only — it can't see the target's
-arguments or return value (that's what `ContextManager`, `Router`, and `Guard`
-own). `before` and `after` interceptors each fire in registration order, and
-`after` always runs, even if the invocation raised.
+Set `target` to a protocol (`Model`) to wrap every implementer, or to a concrete
+class to wrap only that class. `before`/`after` are observation only — they
+can't see the target's arguments or return value (that's what `ContextManager`,
+`Router`, and `Guard` own). Both may be `def` or `async def`. `before` and
+`after` interceptors each fire in registration order, and `after` always runs,
+even if the invocation raised.
 
 Interception is faithful: it fires on *every* invocation of the target.
 
@@ -117,6 +140,14 @@ async with harness:        # start() on enter, stop() on exit
 
 Every plugin's `stop()` runs even if an earlier one raises, so one failing
 teardown can't leak another's resources; the first error is re-raised afterward.
+
+## Removing a plugin and its registrations
+
+`harness.unuse(plugin)` reverses `use`: it removes the plugin and every
+registration it owns — its `ctx.on` subscriptions and any interceptor bindings
+it provides — so a plugin's side effects never outlive it. When the harness is
+started and the plugin is a `Lifecycle`, its `stop()` runs first to release
+resources. Removing a plugin that was never registered is a no-op.
 
 <!-- TODO:
 - Minimal worked example (e.g. a Tool).

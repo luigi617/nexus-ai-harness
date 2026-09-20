@@ -2,12 +2,18 @@ from __future__ import annotations
 
 import pytest
 
-from harness.registry import Registry
+from harness.registry import PluginStatus, Registry
 from plugins.guards import MaxIterations
 from plugins.loops import AgenticLoop
+from protocols.lifecycle import Lifecycle
 from protocols.loop import Loop
+from protocols.plugin import Plugin
 from protocols.tool import Tool
 from tests.conftest import RecordingTool
+
+
+class LifecycleTool(Plugin, Lifecycle):
+    """A registrable lifecycle plugin for exercising started-state tracking."""
 
 
 def test_get_resolves_by_type():
@@ -58,3 +64,65 @@ def test_plugins_returns_all():
     r.add(a)
     r.add(b)
     assert set(r.plugins()) == {a, b}
+
+
+def test_plugins_register_as_registered():
+    plugin = LifecycleTool()
+    r = Registry()
+    r.add(plugin)
+    assert r.status_of(plugin) is PluginStatus.REGISTERED
+    assert r.is_started(plugin) is False
+    assert r.unstarted(Lifecycle) == [plugin]
+    assert r.started(Lifecycle) == []
+
+
+def test_status_moves_a_plugin_between_the_partitions():
+    plugin = LifecycleTool()
+    r = Registry()
+    r.add(plugin)
+    r.set_status(plugin, PluginStatus.STARTED)
+    assert r.is_started(plugin) is True
+    assert r.unstarted(Lifecycle) == []
+    assert r.started(Lifecycle) == [plugin]
+    r.set_status(plugin, PluginStatus.REGISTERED)
+    assert r.is_started(plugin) is False
+    assert r.unstarted(Lifecycle) == [plugin]  # stopping makes it startable again
+
+
+def test_failed_plugin_is_neither_startable_nor_started():
+    plugin = LifecycleTool()
+    r = Registry()
+    r.add(plugin)
+    r.set_status(plugin, PluginStatus.FAILED)
+    assert r.is_started(plugin) is False
+    assert r.unstarted(Lifecycle) == []  # not retried
+    assert r.started(Lifecycle) == []
+
+
+def test_partitions_keep_registration_order():
+    a, b, c = LifecycleTool(), LifecycleTool(), LifecycleTool()
+    r = Registry()
+    for plugin in (a, b, c):
+        r.add(plugin)
+    r.set_status(a, PluginStatus.STARTED)
+    r.set_status(c, PluginStatus.STARTED)
+    assert r.started(Lifecycle) == [a, c]  # order of registration, not of marking
+    assert r.unstarted(Lifecycle) == [b]
+
+
+def test_remove_discards_status_with_the_entry():
+    plugin = LifecycleTool()
+    r = Registry()
+    r.add(plugin)
+    r.set_status(plugin, PluginStatus.STARTED)
+    r.remove(plugin)
+    assert r.status_of(plugin) is None  # state gone with the entry
+
+    r.add(plugin)  # re-registering starts fresh
+    assert r.status_of(plugin) is PluginStatus.REGISTERED
+
+
+def test_setting_status_of_an_absent_plugin_is_a_noop():
+    r = Registry()
+    r.set_status(LifecycleTool(), PluginStatus.STARTED)  # must not raise
+    assert r.status_of(LifecycleTool()) is None

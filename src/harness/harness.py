@@ -5,15 +5,12 @@ import contextlib
 from types import TracebackType
 
 from core.invoke import call
-from core.phase import Phase
 from harness.context import RunContext
-from harness.registry import Registry
+from harness.registry import PluginStatus, Registry
 from harness.result import RunResult
 from harness.session import Session
 from harness.validation import describe_registry, validate_registry
-from protocols.interceptor import Interceptor
 from protocols.lifecycle import Lifecycle
-from protocols.plugin import Plugin
 from services.runner import run_session
 
 
@@ -25,45 +22,18 @@ class NexusAIHarness:
         self._lifecycle_lock = asyncio.Lock()
 
     def use(self, plugin: object) -> NexusAIHarness:
-        if self._started:
-            # TODO: a late plugin is forbidden now
-            raise RuntimeError(
-                "cannot use() a plugin after the harness has started; "
-                "register plugins before start()/run(), or stop() first"
-            )
+        """Register ``plugin``."""
         self._registry.add(plugin)
         return self
 
-    def use_before(
-        self, target: type[Plugin], interceptor: Interceptor
-    ) -> NexusAIHarness:
-        """Register ``interceptor`` to run before each invocation of ``target``.
-
-        A lifecycle-based alternative to observing an ``Event``: whenever the
-        harness invokes a ``target`` plugin (e.g. ``Model``, ``Tool``,
-        ``Loop``), the interceptor's ``run(ctx)`` fires first. Neither plugin
-        needs to know about the other. Chainable.
-
-        Args:
-            target: The plugin type to wrap (a protocol such as ``Model``).
-            interceptor: The :class:`~protocols.interceptor.Interceptor` to run.
-        """
-        self._registry.add_interceptor(target, Phase.BEFORE, interceptor)
-        return self
-
-    def use_after(
-        self, target: type[Plugin], interceptor: Interceptor
-    ) -> NexusAIHarness:
-        """Register ``interceptor`` to run after each invocation of ``target``.
-
-        The mirror of :meth:`use_before`; ``run(ctx)`` fires once the ``target``
-        invocation returns. Chainable.
-
-        Args:
-            target: The plugin type to wrap (a protocol such as ``Model``).
-            interceptor: The :class:`~protocols.interceptor.Interceptor` to run.
-        """
-        self._registry.add_interceptor(target, Phase.AFTER, interceptor)
+    async def unuse(self, plugin: object) -> NexusAIHarness:
+        """Remove ``plugin`` and automatically drop every registration it owns."""
+        # TODO: drain in-flight runs before teardown so unuse()/stop() are safe
+        # to call concurrently with run().
+        async with self._lifecycle_lock:
+            if isinstance(plugin, Lifecycle) and self._registry.is_started(plugin):
+                await call(plugin.stop)
+            self._registry.remove(plugin)
         return self
 
     def validate(self) -> NexusAIHarness:
@@ -84,47 +54,77 @@ class NexusAIHarness:
         return describe_registry(self._registry)
 
     async def start(self) -> NexusAIHarness:
-        """Initialize every registered lifecycle plugin, in registration order.
+        """Initialize every not-yet-started lifecycle plugin, in registration order.
 
         Returns:
             The harness itself, so the call can be awaited and chained.
         """
-        if self._started:
-            return self
         async with self._lifecycle_lock:
-            if self._started:
-                return self
-            ctx = RunContext(Session(), self._registry)
-            started: list[Lifecycle] = []
+            session = Session()
+            newly: list[Lifecycle] = []
+            current: Lifecycle | None = None
             try:
-                for plugin in self._registry.plugins():
-                    if isinstance(plugin, Lifecycle):
-                        await call(plugin.start, ctx)
-                        started.append(plugin)
-            except BaseException:
-                for started_plugin in reversed(started):  # roll back what started
-                    # Best-effort rollback
-                    with contextlib.suppress(Exception):
-                        await call(started_plugin.stop)
+                for plugin in self._registry.unstarted(Lifecycle):
+                    current = plugin
+                    # A context owned by the plugin, so subscriptions its start()
+                    # makes belong to it whatever the handler's shape.
+                    await call(
+                        plugin.start,
+                        RunContext(session, self._registry, owner=plugin),
+                    )
+                    self._registry.set_status(plugin, PluginStatus.STARTED)
+                    newly.append(plugin)
+                    current = None
+            except BaseException as exc:
+                if current is not None:
+                    # Drop what the interrupted start() had already subscribed,
+                    self._registry.remove_subscriptions(current)
+                    # A genuine start error disables the plugin so later runs
+                    # skip it; a cancellation is not a defect, so leave it
+                    # retryable.
+                    if isinstance(exc, Exception):
+                        self._registry.set_status(current, PluginStatus.FAILED)
+                for started_plugin in reversed(newly):  # roll back this pass only
+                    try:
+                        # Best-effort rollback
+                        with contextlib.suppress(Exception):
+                            await call(started_plugin.stop)
+                    finally:
+                        # Un-track even if stop() is interrupted, so a retried
+                        # start() re-initializes this plugin instead of skipping
+                        # a half-torn-down one; drop the effects its start() set up.
+                        self._registry.set_status(
+                            started_plugin, PluginStatus.REGISTERED
+                        )
+                        self._registry.remove_subscriptions(started_plugin)
                 raise
             # Set only once every plugin is up, so waiters see a ready harness.
             self._started = True
         return self
 
     async def stop(self) -> None:
-        """Release every lifecycle plugin, in reverse registration order."""
+        """Release every started lifecycle plugin, in reverse registration order.
+
+        Like :meth:`unuse`, not synchronized with an in-flight ``run`` (see the
+        draining TODO there); call it once runs are quiesced.
+        """
         if not self._started:
             return
         async with self._lifecycle_lock:
             if not self._started:
                 return
             first_error: Exception | None = None
-            for plugin in reversed(self._registry.plugins()):
-                if isinstance(plugin, Lifecycle):
-                    try:
-                        await call(plugin.stop)
-                    except Exception as exc:  # keep tearing the rest down
-                        first_error = first_error or exc
+            for plugin in reversed(self._registry.started(Lifecycle)):
+                try:
+                    await call(plugin.stop)
+                except Exception as exc:  # keep tearing the rest down
+                    first_error = first_error or exc
+                # A BaseException propagates before these, leaving the plugin
+                # marked started so a retried stop() resumes where it left off.
+                self._registry.set_status(plugin, PluginStatus.REGISTERED)
+                # Drop the subscriptions its start() set up, so a later start()
+                # re-subscribes cleanly instead of stacking duplicate handlers.
+                self._registry.remove_subscriptions(plugin)
             # Flip only after the sweep: a BaseException mid-teardown leaves the
             # harness started, so cleanup can be retried instead of leaking.
             self._started = False
