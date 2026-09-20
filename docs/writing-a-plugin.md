@@ -86,6 +86,37 @@ own). `before` and `after` interceptors each fire in registration order, and
 
 Interception is faithful: it fires on *every* invocation of the target.
 
+## Owning resources with a lifecycle
+
+A plugin that owns resources — an HTTP client, a connection, a background task
+— needs to acquire them once and release them deterministically. Implement the
+`Lifecycle` protocol: `start(ctx)` runs before the first `run`, and `stop()`
+runs on shutdown. It is orthogonal to `kind`, so any plugin can also be a
+lifecycle plugin, and either method may be omitted.
+
+```python
+class DbTool(Tool):
+    async def start(self, ctx: Context) -> None:
+        self._pool = await connect()
+
+    async def stop(self) -> None:
+        await self._pool.close()
+```
+
+The harness starts lifecycle plugins in registration order and stops them in
+reverse, so register a dependency before the plugin that needs it. `run` calls
+`start()` automatically (it is idempotent) but never auto-stops, so call
+`stop()` to release resources, or use the harness as an async context manager to
+pair the two:
+
+```python
+async with harness:        # start() on enter, stop() on exit
+    await harness.run("hello")
+```
+
+Every plugin's `stop()` runs even if an earlier one raises, so one failing
+teardown can't leak another's resources; the first error is re-raised afterward.
+
 <!-- TODO:
 - Minimal worked example (e.g. a Tool).
 - The `kind` ClassVar and why it keys the registry.

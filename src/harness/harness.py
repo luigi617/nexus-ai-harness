@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
+from types import TracebackType
 
+from core.invoke import call
 from core.phase import Phase
 from harness.context import RunContext
 from harness.registry import Registry
@@ -16,6 +19,7 @@ from services.runner import run_session
 class NexusAIHarness:
     def __init__(self) -> None:
         self._registry = Registry()
+        self._started = False
 
     def use(self, plugin: object) -> NexusAIHarness:
         self._registry.add(plugin)
@@ -70,9 +74,85 @@ class NexusAIHarness:
         """
         return describe_registry(self._registry)
 
+    async def start(self) -> NexusAIHarness:
+        """Initialize every registered lifecycle plugin, in registration order.
+
+        Calls ``start(ctx)`` on each plugin that defines it (see
+        :class:`~protocols.lifecycle.Lifecycle`), passing a context over the
+        registry so setup can resolve other plugins. Register dependencies
+        before dependents so each is initialized after what it needs. If any
+        ``start`` raises, the plugins already started are rolled back (their
+        ``stop`` runs) before the error propagates. Idempotent: a second call
+        before :meth:`stop` does nothing. :meth:`run` calls this automatically
+        but never auto-stops, so callers release resources via :meth:`stop` or
+        by using the harness as an ``async with`` block.
+
+        Returns:
+            The harness itself, so the call can be awaited and chained.
+        """
+        if self._started:
+            return self
+        # Set before the first await so a concurrent run()/start() can't double-init.
+        self._started = True
+        ctx = RunContext(Session(), self._registry)
+        started: list[object] = []
+        try:
+            for plugin in self._registry.plugins():
+                start = getattr(plugin, "start", None)
+                if callable(start):
+                    await call(start, ctx)
+                    started.append(plugin)
+        except BaseException:
+            self._started = False
+            for plugin in reversed(started):  # roll back what already started
+                stop = getattr(plugin, "stop", None)
+                if callable(stop):
+                    # Best-effort rollback; surface the original start failure.
+                    with contextlib.suppress(Exception):
+                        await call(stop)
+            raise
+        return self
+
+    async def stop(self) -> None:
+        """Release every lifecycle plugin, in reverse registration order.
+
+        Calls ``stop()`` on each plugin that defines it so a plugin is torn
+        down before its dependencies. Every ``stop`` runs even if an earlier
+        one raises; the first exception is re-raised once all have been
+        attempted, so one plugin's failure can't leak another's resources.
+        A ``BaseException`` such as ``CancelledError`` propagates immediately to
+        preserve cooperative cancellation. Idempotent: a no-op if the harness
+        was never started.
+        """
+        if not self._started:
+            return
+        self._started = False
+        first_error: Exception | None = None
+        for plugin in reversed(self._registry.plugins()):
+            stop = getattr(plugin, "stop", None)
+            if callable(stop):
+                try:
+                    await call(stop)
+                except Exception as exc:  # keep tearing the rest down
+                    first_error = first_error or exc
+        if first_error is not None:
+            raise first_error
+
+    async def __aenter__(self) -> NexusAIHarness:
+        return await self.start()
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> None:
+        await self.stop()
+
     async def run(
         self, user_input: str, *, session: Session | None = None
     ) -> RunResult:
+        await self.start()  # guarantee lifecycle plugins are initialized
         cur_session = session or Session()
         cur_session.clear_interrupt()  # a new turn isn't pre-interrupted
         ctx = RunContext(cur_session, self._registry)
