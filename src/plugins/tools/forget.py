@@ -8,10 +8,9 @@ from protocols.tool import Tool
 
 
 class Forget(Tool):
-    """Delete a memory by id.
+    """Delete a memory by id."""
 
-    Requires a MemoryStore plugin (kind="memory") to be registered.
-    """
+    requires = (MemoryStore,)
 
     name = "forget"
     description = (

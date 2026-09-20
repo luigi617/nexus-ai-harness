@@ -10,14 +10,14 @@ from plugins.loops import AgenticLoop
 from protocols.context import Context
 from protocols.lifecycle import Lifecycle
 from protocols.model import Model
+from protocols.plugin import Plugin
 from tests.conftest import ScriptedModel
 
 
-class Resource:
-    """A registrable plugin that records its lifecycle calls into ``log``."""
+class Resource(Plugin, Lifecycle):
+    """A registrable lifecycle plugin that records its calls into ``log``."""
 
     def __init__(self, name: str, log: list[str]) -> None:
-        self.kind = f"resource:{name}"
         self._name = name
         self._log = log
 
@@ -35,9 +35,8 @@ def build(*extra: object) -> NexusAIHarness:
     return h
 
 
-def test_lifecycle_protocol_recognizes_start_and_stop():
-    log: list[str] = []
-    assert isinstance(Resource("a", log), Lifecycle)
+def test_membership_is_by_inheritance():
+    assert isinstance(Resource("a", []), Lifecycle)
 
 
 def test_run_starts_lifecycle_plugins():
@@ -112,9 +111,7 @@ def test_stop_re_enables_a_later_start():
 def test_supports_sync_start_and_stop():
     log: list[str] = []
 
-    class SyncResource:
-        kind = "sync-resource"
-
+    class SyncResource(Plugin, Lifecycle):
         def start(self, ctx: Context) -> None:
             log.append("start")
 
@@ -132,15 +129,11 @@ def test_supports_sync_start_and_stop():
 def test_partial_lifecycle_start_only_and_stop_only():
     log: list[str] = []
 
-    class StartOnly:
-        kind = "start-only"
-
+    class StartOnly(Plugin, Lifecycle):
         async def start(self, ctx: Context) -> None:
             log.append("start")
 
-    class StopOnly:
-        kind = "stop-only"
-
+    class StopOnly(Plugin, Lifecycle):
         async def stop(self) -> None:
             log.append("stop")
 
@@ -155,9 +148,7 @@ def test_partial_lifecycle_start_only_and_stop_only():
 def test_start_context_can_resolve_other_plugins():
     seen: list[Model | None] = []
 
-    class Inspector:
-        kind = "inspector"
-
+    class Inspector(Plugin, Lifecycle):
         async def start(self, ctx: Context) -> None:
             seen.append(ctx.get(Model))
 
@@ -168,9 +159,8 @@ def test_start_context_can_resolve_other_plugins():
 def test_every_stop_runs_and_first_executed_error_is_reraised():
     log: list[str] = []
 
-    class Boom:
+    class Boom(Plugin, Lifecycle):
         def __init__(self, name: str) -> None:
-            self.kind = f"boom:{name}"
             self._name = name
 
         async def stop(self) -> None:
@@ -193,9 +183,7 @@ def test_every_stop_runs_and_first_executed_error_is_reraised():
 def test_partial_start_failure_rolls_back_started_plugins():
     log: list[str] = []
 
-    class FailStart:
-        kind = "fail-start"
-
+    class FailStart(Plugin, Lifecycle):
         async def start(self, ctx: Context) -> None:
             log.append("start:boom")
             raise RuntimeError("start failed")
@@ -212,9 +200,7 @@ def test_partial_start_failure_rolls_back_started_plugins():
 def test_concurrent_starts_do_not_double_initialize():
     log: list[str] = []
 
-    class SlowStart:
-        kind = "slow-start"
-
+    class SlowStart(Plugin, Lifecycle):
         async def start(self, ctx: Context) -> None:
             await asyncio.sleep(0)  # yield so a racing start() can interleave
             log.append("start")
@@ -231,9 +217,7 @@ def test_concurrent_starts_do_not_double_initialize():
 def test_stop_propagates_cancellation_immediately():
     log: list[str] = []
 
-    class Cancels:
-        kind = "cancels"
-
+    class Cancels(Plugin, Lifecycle):
         async def stop(self) -> None:
             raise asyncio.CancelledError
 

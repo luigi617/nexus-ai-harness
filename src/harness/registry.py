@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, TypeVar
+from typing import TypeVar
 
 from core.phase import Phase
 from harness.interception import InterceptorBinding
@@ -12,13 +12,13 @@ P = TypeVar("P", bound=Plugin)
 
 class Registry:
     def __init__(self) -> None:
-        self._plugins: list[Any] = []
+        self._plugins: list[Plugin] = []
         self._interceptors: list[InterceptorBinding] = []
 
     def add(self, plugin: object) -> None:
-        if not hasattr(plugin, "kind"):
+        if not isinstance(plugin, Plugin):
             raise TypeError(
-                f"{type(plugin).__name__} is not a plugin (no 'kind' attribute)"
+                f"{type(plugin).__name__} is not a plugin (does not subclass Plugin)"
             )
         self._plugins.append(plugin)
 
@@ -28,14 +28,10 @@ class Registry:
         self._interceptors.append(InterceptorBinding(target, phase, interceptor))
 
     def interceptors(self, plugin: object, phase: Phase) -> list[Interceptor]:
-        # kind gates the protocol family
-        plugin_kind = getattr(plugin, "kind", None)
         return [
             b.interceptor
             for b in self._interceptors
-            if b.phase is phase
-            and plugin_kind == b.target.kind
-            and isinstance(plugin, b.target)
+            if b.phase is phase and isinstance(plugin, b.target)
         ]
 
     def interceptor_bindings(self) -> list[InterceptorBinding]:
@@ -43,15 +39,12 @@ class Registry:
 
     def get(self, cls: type[P]) -> P | None:
         for plugin in reversed(self._plugins):
-            if getattr(plugin, "kind", None) == cls.kind:
+            if isinstance(plugin, cls):
                 return plugin
         return None
 
     def all(self, cls: type[P]) -> list[P]:
-        return [p for p in self._plugins if getattr(p, "kind", None) == cls.kind]
+        return [p for p in self._plugins if isinstance(p, cls)]
 
-    def plugins(self) -> list[Any]:
+    def plugins(self) -> list[Plugin]:
         return list(self._plugins)
-
-    def kinds(self) -> set[str]:
-        return {p.kind for p in self._plugins}

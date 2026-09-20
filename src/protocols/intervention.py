@@ -1,14 +1,12 @@
 from __future__ import annotations
 
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from collections.abc import Awaitable
-from typing import Protocol, runtime_checkable
 
 from protocols.context import Context
 
 
-@runtime_checkable
-class Intervention(Protocol):
+class Intervention(ABC):
     """An external command applied to a running agent at a safe checkpoint."""
 
     @abstractmethod

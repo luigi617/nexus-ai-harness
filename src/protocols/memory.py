@@ -2,28 +2,29 @@ from __future__ import annotations
 
 from abc import abstractmethod
 from collections.abc import Sequence
-from typing import ClassVar, Protocol, runtime_checkable
+from dataclasses import dataclass
 
 from protocols.plugin import Plugin
 
 
-@runtime_checkable
-class MemoryItem(Protocol):
-    """The shape consumers (the memory tools) rely on.
+@dataclass
+class MemoryItem:
+    """The fields every stored memory carries.
 
-    Concrete stores return their own item type — which may carry extra,
-    store-specific fields — as long as it satisfies this interface.
+    A store returns its own item type (subclassing this) so it can add
+    store-specific fields — e.g. where the memory lives — on top of these.
+
+    Attributes:
+        text: The memory's text.
+        id: Its stable, store-unique identifier.
     """
 
     text: str
     id: str
 
 
-@runtime_checkable
-class MemoryStore(Plugin, Protocol):
+class MemoryStore(Plugin):
     """Durable, cross-session fact storage."""
-
-    kind: ClassVar[str] = "memory"
 
     @abstractmethod
     def save(self, text: str, id: str | None = None) -> MemoryItem:

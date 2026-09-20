@@ -31,8 +31,6 @@ def _ctx_with(*bindings: tuple[type, Phase, Interceptor]) -> RunContext:
 class Mark(Interceptor):
     """Append a label to a shared list each time it runs."""
 
-    kind = "interceptor"
-
     def __init__(self, label: str, sink: list[str]) -> None:
         self._label = label
         self._sink = sink
@@ -86,9 +84,9 @@ def test_interceptor_only_fires_for_its_target():
     assert order == []
 
 
-def test_target_protocol_does_not_leak_across_protocols_sharing_a_method():
-    # Tool structurally satisfies the minimal Loop protocol (both have `run`),
-    # so a Loop-bound interceptor must not fire on tool calls.
+def test_target_type_does_not_leak_across_types_sharing_a_method():
+    # Tool and Loop both expose `run`, but a Tool does not subclass Loop, so a
+    # Loop-bound interceptor must not fire on tool calls.
     order: list[str] = []
     model = ScriptedModel(
         Response(text="", tool_calls=[{"name": "echo", "id": "1", "arguments": {}}]),
@@ -125,8 +123,6 @@ def test_async_interceptor_is_awaited():
     order: list[str] = []
 
     class AsyncMark(Interceptor):
-        kind = "interceptor"
-
         async def run(self, ctx: Context) -> None:
             order.append("async")
 
@@ -138,8 +134,6 @@ def test_async_interceptor_is_awaited():
 
 class _Widget:
     """A minimal target plugin for exercising invoke() directly."""
-
-    kind = "widget"
 
     async def go(self) -> str:
         return "ok"
@@ -172,8 +166,6 @@ def test_before_and_after_both_run_in_registration_order():
 
 def test_invoke_passes_through_args_and_kwargs():
     class Adder:
-        kind = "adder"
-
         async def add(self, a: int, b: int = 0) -> int:
             return a + b
 
@@ -185,14 +177,10 @@ def test_a_plugin_invoking_another_plugin_is_also_intercepted():
     order: list[str] = []
 
     class Inner:
-        kind = "inner"
-
         async def go(self) -> str:
             return "inner"
 
     class Outer:
-        kind = "outer"
-
         def __init__(self, inner: Inner) -> None:
             self._inner = inner
 

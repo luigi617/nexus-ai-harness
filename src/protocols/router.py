@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from abc import abstractmethod
 from collections.abc import Awaitable
-from typing import ClassVar, Protocol, runtime_checkable
 
 from core.message import Message
 from protocols.context import Context
@@ -10,11 +9,8 @@ from protocols.model import Model
 from protocols.plugin import Plugin
 
 
-@runtime_checkable
-class Router(Plugin, Protocol):
+class Router(Plugin):
     """Chooses which model handles a request when several are registered."""
-
-    kind: ClassVar[str] = "router"
 
     @abstractmethod
     def route(self, history: list[Message], ctx: Context) -> Model | Awaitable[Model]:

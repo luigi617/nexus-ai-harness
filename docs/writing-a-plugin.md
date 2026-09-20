@@ -89,13 +89,14 @@ Interception is faithful: it fires on *every* invocation of the target.
 ## Owning resources with a lifecycle
 
 A plugin that owns resources — an HTTP client, a connection, a background task
-— needs to acquire them once and release them deterministically. Implement the
-`Lifecycle` protocol: `start(ctx)` runs before the first `run`, and `stop()`
-runs on shutdown. It is orthogonal to `kind`, so any plugin can also be a
-lifecycle plugin, and either method may be omitted.
+— needs to acquire them once and release them deterministically. Subclass
+`Lifecycle` alongside your plugin base: `start(ctx)` runs before the first
+`run`, and `stop()` runs on shutdown. Membership is by inheritance — the harness
+manages exactly the registered plugins that subclass `Lifecycle` — and either
+method may be left as its inherited no-op.
 
 ```python
-class DbTool(Tool):
+class DbTool(Tool, Lifecycle):
     async def start(self, ctx: Context) -> None:
         self._pool = await connect()
 
@@ -119,7 +120,7 @@ teardown can't leak another's resources; the first error is re-raised afterward.
 
 <!-- TODO:
 - Minimal worked example (e.g. a Tool).
-- The `kind` ClassVar and why it keys the registry.
+- Type-keyed resolution: why a plugin must subclass the base it implements.
 - Reading/writing per-session state via `ctx.state(cls)`.
 - Emitting events with `ctx.emit(...)`.
 - Testing a plugin (see tests/conftest.py: make_ctx, ScriptedModel, RecordingTool).

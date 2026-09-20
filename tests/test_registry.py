@@ -21,7 +21,7 @@ def test_get_returns_none_when_absent():
     assert Registry().get(Loop) is None
 
 
-def test_all_returns_every_plugin_of_kind():
+def test_all_returns_every_plugin_of_type():
     t1, t2 = RecordingTool("a"), RecordingTool("b")
     r = Registry()
     r.add(t1)
@@ -29,8 +29,9 @@ def test_all_returns_every_plugin_of_kind():
     assert set(r.all(Tool)) == {t1, t2}
 
 
-def test_kind_discriminates_structurally_overlapping_protocols():
-    # Tool and Loop both have `run` + `kind`; resolution must not confuse them.
+def test_type_discriminates_method_overlapping_bases():
+    # Tool and Loop both expose `run`, but a Tool is not a Loop; resolution by
+    # type must not confuse them.
     tool = RecordingTool()
     r = Registry()
     r.add(tool)

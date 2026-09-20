@@ -5,14 +5,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from core.ids import new_id
-from protocols.memory import MemoryStore
+from protocols.memory import MemoryItem, MemoryStore
 
 
 @dataclass
-class FileMemoryItem:
-    """FileMemoryStore's concrete MemoryItem, with the file it lives in."""
+class FileMemoryItem(MemoryItem):
+    """A MemoryItem that also tracks the file it lives in."""
 
-    text: str
     id: str = field(default_factory=lambda: new_id("mem"))
     created_at: float = field(default_factory=time.time)
     path: Path | None = None

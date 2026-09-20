@@ -13,24 +13,25 @@ from harness.validation import (
 )
 from plugins.loops import AgenticLoop, ChatLoop
 from protocols.context_manager import ContextManager
+from protocols.hook import Hook
+from protocols.loop import Loop
 from protocols.model import Model
 from protocols.plugin import Plugin
+from protocols.router import Router
 from protocols.tool import Tool
 from tests.conftest import RecordingTool, ScriptedModel
 
 
-class NeedsModelAndTool:
+class NeedsModelAndTool(Loop):
     """A plugin declaring dependencies, used to exercise validation directly."""
 
-    kind: ClassVar[str] = "loop"
     requires: ClassVar[tuple[type[Plugin], ...]] = (Model, Tool)
 
     def run(self, ctx):  # pragma: no cover - never executed here
         return ""
 
 
-class NeedsNothing:
-    kind: ClassVar[str] = "hook"
+class NeedsNothing(Hook):
     # inherits no `requires`; validation must treat it as satisfied
 
     def on(self, event, ctx):  # pragma: no cover
@@ -110,8 +111,7 @@ def test_single_requirement_renders_satisfied_last_branch():
     assert describe_registry(reg) == "AgenticLoop\n└── Model ✓"
 
 
-class NeedsModel:
-    kind: ClassVar[str] = "router"
+class NeedsModel(Router):
     requires: ClassVar[tuple[type[Plugin], ...]] = (Model,)
 
     def route(self, history, ctx):  # pragma: no cover
@@ -152,10 +152,9 @@ def test_describe_registry_joins_multiple_trees():
     assert desc == "NeedsModel\n└── Model ✓\n\nAgenticLoop\n└── Model ✓"
 
 
-def test_plugin_requiring_its_own_kind_needs_another_provider():
-    # A plugin whose kind matches its own requirement is NOT self-satisfying.
-    class SelfWrapModel:
-        kind: ClassVar[str] = "model"
+def test_plugin_requiring_its_own_type_needs_another_provider():
+    # A plugin that is itself a Model but requires one is NOT self-satisfying.
+    class SelfWrapModel(Model):
         requires: ClassVar[tuple[type[Plugin], ...]] = (Model,)
 
         def complete(self, history, ctx):  # pragma: no cover
@@ -206,7 +205,7 @@ def test_concrete_class_requirement_needs_the_exact_plugin():
     from plugins.hooks import CostCounter, IterationCounter
 
     # BudgetGuard requires the concrete CostCounter, not just "some hook".
-    # A different hook of the same kind does NOT satisfy it.
+    # A different hook does NOT satisfy it.
     with pytest.raises(MissingDependencyError) as exc:
         validate_registry(_registry(BudgetGuard(5.0), IterationCounter()))
     assert exc.value.missing == [("BudgetGuard", "CostCounter")]
@@ -226,10 +225,23 @@ def test_concrete_class_requirement_matches_subclass():
     validate_registry(_registry(BudgetGuard(5.0), TieredCostCounter()))
 
 
-def test_protocol_requirement_stays_kind_matched():
-    # A protocol dependency (Model) is satisfied by ANY plugin of that kind —
-    # the coarse, registry-style match — unlike a concrete-class dependency.
+def test_base_requirement_matches_any_subclass():
+    # A dependency on a base (Model) is satisfied by ANY plugin that subclasses
+    # it — the coarse, registry-style match — unlike a concrete-class dependency.
     validate_registry(_registry(NeedsModel(), ScriptedModel(Response(text="x"))))
+
+
+def test_memory_tools_require_a_memory_store(tmp_path):
+    from plugins.memory import FileMemoryStore
+    from plugins.tools import Recall
+
+    # Recall declares requires=(MemoryStore,): validation flags a missing store.
+    with pytest.raises(MissingDependencyError) as exc:
+        validate_registry(_registry(Recall()))
+    assert exc.value.missing == [("Recall", "MemoryStore")]
+
+    # A registered store satisfies it.
+    validate_registry(_registry(Recall(), FileMemoryStore(str(tmp_path))))
 
 
 def test_default_harness_validates(tmp_path):
@@ -244,8 +256,7 @@ def test_default_harness_validates(tmp_path):
 def test_context_manager_dependency_scenario():
     # Mirrors the issue's example: a loop-like plugin that also needs a
     # ContextManager surfaces the missing one.
-    class NeedsCM:
-        kind: ClassVar[str] = "loop"
+    class NeedsCM(Loop):
         requires: ClassVar[tuple[type[Plugin], ...]] = (Model, ContextManager)
 
         def run(self, ctx):  # pragma: no cover
