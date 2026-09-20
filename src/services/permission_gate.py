@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from core.events import ApprovalRequested
-from core.invoke import invoke
 from core.permission import ApprovalRequest, PermissionDecision, PermissionVerdict
 from core.spawn import SpawnState
 from protocols.approver import Approver
@@ -24,8 +23,10 @@ class PermissionGate:
             reason=decision.reason,
             origin=self._origin(ctx),
         )
-        if approver is not None and await invoke(approver.approve, request, ctx):
-            return PermissionDecision.allow()
+        if approver is not None:
+            approved = await ctx.invoke(approver.approve, request, ctx)
+            if approved:
+                return PermissionDecision.allow()
         return PermissionDecision.deny(decision.reason or "not approved")
 
     @staticmethod

@@ -5,6 +5,7 @@ from protocols.context import Context
 from protocols.context_manager import ContextManager
 from protocols.guard import Guard
 from protocols.hook import Hook
+from protocols.interceptor import Interceptor
 from protocols.loop import Loop
 from protocols.model import Model
 from protocols.permission import Permission
@@ -16,6 +17,7 @@ __all__ = [
     "ContextManager",
     "Guard",
     "Hook",
+    "Interceptor",
     "Loop",
     "Model",
     "Permission",

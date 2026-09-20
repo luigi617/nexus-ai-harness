@@ -2,11 +2,14 @@ from __future__ import annotations
 
 import asyncio
 
+from core.phase import Phase
 from harness.context import RunContext
 from harness.registry import Registry
 from harness.result import RunResult
 from harness.session import Session
 from harness.validation import describe_registry, validate_registry
+from protocols.interceptor import Interceptor
+from protocols.plugin import Plugin
 from services.runner import run_session
 
 
@@ -16,6 +19,38 @@ class NexusAIHarness:
 
     def use(self, plugin: object) -> NexusAIHarness:
         self._registry.add(plugin)
+        return self
+
+    def use_before(
+        self, target: type[Plugin], interceptor: Interceptor
+    ) -> NexusAIHarness:
+        """Register ``interceptor`` to run before each invocation of ``target``.
+
+        A lifecycle-based alternative to observing an ``Event``: whenever the
+        harness invokes a ``target`` plugin (e.g. ``Model``, ``Tool``,
+        ``Loop``), the interceptor's ``run(ctx)`` fires first. Neither plugin
+        needs to know about the other. Chainable.
+
+        Args:
+            target: The plugin type to wrap (a protocol such as ``Model``).
+            interceptor: The :class:`~protocols.interceptor.Interceptor` to run.
+        """
+        self._registry.add_interceptor(target, Phase.BEFORE, interceptor)
+        return self
+
+    def use_after(
+        self, target: type[Plugin], interceptor: Interceptor
+    ) -> NexusAIHarness:
+        """Register ``interceptor`` to run after each invocation of ``target``.
+
+        The mirror of :meth:`use_before`; ``run(ctx)`` fires once the ``target``
+        invocation returns. Chainable.
+
+        Args:
+            target: The plugin type to wrap (a protocol such as ``Model``).
+            interceptor: The :class:`~protocols.interceptor.Interceptor` to run.
+        """
+        self._registry.add_interceptor(target, Phase.AFTER, interceptor)
         return self
 
     def validate(self) -> NexusAIHarness:

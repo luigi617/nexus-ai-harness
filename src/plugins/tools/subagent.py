@@ -3,7 +3,6 @@ from __future__ import annotations
 from collections.abc import Iterable
 from typing import ClassVar
 
-from core.invoke import invoke
 from protocols.context import Context
 from protocols.spawner import Spawner
 from protocols.tool import Tool
@@ -51,4 +50,4 @@ class Subagent(Tool):
             return "error: no task provided"
 
         child = ctx.fork(self._plugins)
-        return await invoke(spawner.run, child, task)
+        return await ctx.invoke(spawner.run, child, task)

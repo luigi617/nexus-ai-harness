@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from core.invoke import invoke
 from core.message import Message
 from protocols.context import Context
 from protocols.context_manager import ContextManager
@@ -89,7 +88,7 @@ class SummarizingContextManager(ContextManager):
             Message(role="user", content=body),
         ]
         try:
-            response = await invoke(model.complete, request, ctx)
+            response = await ctx.invoke(model.complete, request, ctx)
         except Exception:
             return None
         text = (response.text or "").strip()

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from core.invoke import invoke
+from core.events import ModelCallStarted, ResponseReceived
 from core.message import Message
 from core.run import RunState
 from protocols.context import Context
@@ -18,11 +18,15 @@ class ChatLoop(Loop):
         router = ctx.get(Router)
         history = ctx.history
         for cm in ctx.all(ContextManager):
-            history = await invoke(cm.process, history, ctx)
-        model = await invoke(router.route, history, ctx) if router else ctx.get(Model)
+            history = await ctx.invoke(cm.process, history, ctx)
+        model = (
+            await ctx.invoke(router.route, history, ctx) if router else ctx.get(Model)
+        )
         if model is None:
             raise LookupError("no model registered")
-        response = await invoke(model.complete, history, ctx)
+        ctx.emit(ModelCallStarted(list(history)))
+        response = await ctx.invoke(model.complete, history, ctx)
+        ctx.emit(ResponseReceived(response))
         ctx.add_message(Message(role="assistant", content=response.text))
         ctx.state(RunState).stop_reason = "completed"
         return response.text

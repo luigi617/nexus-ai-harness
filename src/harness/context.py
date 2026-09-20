@@ -1,10 +1,12 @@
 from __future__ import annotations
 
-from typing import TypeVar
+from collections.abc import Callable
+from typing import Any, TypeVar
 
 from core.events import Event, MessageAdded
-from core.invoke import invoke
+from core.invoke import call
 from core.message import Message
+from core.phase import Phase
 from core.spawn import SpawnState
 from harness.registry import Registry
 from harness.session import Session
@@ -39,7 +41,7 @@ class RunContext(Context):
 
     async def apply_interventions(self) -> None:
         for intervention in self._session.take_interventions():
-            await invoke(intervention.apply, self)
+            await call(intervention.apply, self)
 
     def add_message(self, message: Message) -> None:
         self._session.history.append(message)
@@ -55,6 +57,30 @@ class RunContext(Context):
     def all(self, cls: type[P]) -> list[P]:
         return self._registry.all(cls)
 
+    async def invoke(self, fn: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
+        plugin = getattr(fn, "__self__", None)
+        result: Any = None
+        error: BaseException | None = None
+        try:
+            if plugin is not None:
+                for interceptor in self._registry.interceptors(plugin, Phase.BEFORE):
+                    await call(interceptor.run, self)
+            result = await call(fn, *args, **kwargs)
+        except BaseException as exc:  # captured, re-raised once teardown is done
+            error = exc
+        after_error: BaseException | None = None
+        if plugin is not None:
+            for interceptor in self._registry.interceptors(plugin, Phase.AFTER):
+                try:
+                    await call(interceptor.run, self)
+                except BaseException as exc:  # keep running the remaining ones
+                    after_error = after_error or exc
+        if error is not None:
+            raise error
+        if after_error is not None:
+            raise after_error
+        return result
+
     def fork(self, plugins: list[object] | None = None) -> RunContext:
         # None → inherit all parent plugins; a list → the child sees only these.
         if plugins is None:
@@ -62,6 +88,11 @@ class RunContext(Context):
         child_registry = Registry()
         for plugin in plugins:
             child_registry.add(plugin)
+        # Interceptors are cross-cutting, so a child always inherits them.
+        for binding in self._registry.interceptor_bindings():
+            child_registry.add_interceptor(
+                binding.target, binding.phase, binding.interceptor
+            )
         # Headless subagent: inherit the parent's approver unless given one.
         if child_registry.get(Approver) is None:
             approver = self._registry.get(Approver)
