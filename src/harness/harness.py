@@ -6,7 +6,7 @@ from types import TracebackType
 
 from core.invoke import call
 from harness.context import RunContext
-from harness.registry import Registry
+from harness.registry import PluginStatus, Registry
 from harness.result import RunResult
 from harness.session import Session
 from harness.validation import describe_registry, validate_registry
@@ -22,19 +22,14 @@ class NexusAIHarness:
         self._lifecycle_lock = asyncio.Lock()
 
     def use(self, plugin: object) -> NexusAIHarness:
-        if self._started:
-            # TODO: a late plugin is forbidden now
-            raise RuntimeError(
-                "cannot use() a plugin after the harness has started; "
-                "register plugins before start()/run(), or stop() first"
-            )
+        """Register ``plugin``."""
         self._registry.add(plugin)
         return self
 
     async def unuse(self, plugin: object) -> NexusAIHarness:
         """Remove ``plugin`` and automatically drop every registration it owns."""
         async with self._lifecycle_lock:
-            if self._started and isinstance(plugin, Lifecycle):
+            if isinstance(plugin, Lifecycle) and self._registry.is_started(plugin):
                 await call(plugin.stop)
             self._registry.remove(plugin)
         return self
@@ -57,47 +52,70 @@ class NexusAIHarness:
         return describe_registry(self._registry)
 
     async def start(self) -> NexusAIHarness:
-        """Initialize every registered lifecycle plugin, in registration order.
+        """Initialize every not-yet-started lifecycle plugin, in registration order.
 
         Returns:
             The harness itself, so the call can be awaited and chained.
         """
-        if self._started:
-            return self
         async with self._lifecycle_lock:
-            if self._started:
-                return self
             ctx = RunContext(Session(), self._registry)
-            started: list[Lifecycle] = []
+            newly: list[Lifecycle] = []
+            current: Lifecycle | None = None
             try:
-                for plugin in self._registry.plugins():
-                    if isinstance(plugin, Lifecycle):
-                        await call(plugin.start, ctx)
-                        started.append(plugin)
-            except BaseException:
-                for started_plugin in reversed(started):  # roll back what started
-                    # Best-effort rollback
-                    with contextlib.suppress(Exception):
-                        await call(started_plugin.stop)
+                for plugin in self._registry.unstarted(Lifecycle):
+                    current = plugin
+                    await call(plugin.start, ctx)
+                    self._registry.set_status(plugin, PluginStatus.STARTED)
+                    newly.append(plugin)
+                    current = None
+            except BaseException as exc:
+                if current is not None:
+                    # Drop what the interrupted start() had already subscribed,
+                    # so a failed plugin leaves no live handler and a retryable
+                    # one re-subscribes cleanly.
+                    self._registry.remove_subscriptions(current)
+                    # A genuine start error disables the plugin so later runs
+                    # skip it; a cancellation is not a defect, so leave it
+                    # retryable.
+                    if isinstance(exc, Exception):
+                        self._registry.set_status(current, PluginStatus.FAILED)
+                for started_plugin in reversed(newly):  # roll back this pass only
+                    try:
+                        # Best-effort rollback
+                        with contextlib.suppress(Exception):
+                            await call(started_plugin.stop)
+                    finally:
+                        # Un-track even if stop() is interrupted, so a retried
+                        # start() re-initializes this plugin instead of skipping
+                        # a half-torn-down one; drop the effects its start() set up.
+                        self._registry.set_status(
+                            started_plugin, PluginStatus.REGISTERED
+                        )
+                        self._registry.remove_subscriptions(started_plugin)
                 raise
             # Set only once every plugin is up, so waiters see a ready harness.
             self._started = True
         return self
 
     async def stop(self) -> None:
-        """Release every lifecycle plugin, in reverse registration order."""
+        """Release every started lifecycle plugin, in reverse registration order."""
         if not self._started:
             return
         async with self._lifecycle_lock:
             if not self._started:
                 return
             first_error: Exception | None = None
-            for plugin in reversed(self._registry.plugins()):
-                if isinstance(plugin, Lifecycle):
-                    try:
-                        await call(plugin.stop)
-                    except Exception as exc:  # keep tearing the rest down
-                        first_error = first_error or exc
+            for plugin in reversed(self._registry.started(Lifecycle)):
+                try:
+                    await call(plugin.stop)
+                except Exception as exc:  # keep tearing the rest down
+                    first_error = first_error or exc
+                # A BaseException propagates before these, leaving the plugin
+                # marked started so a retried stop() resumes where it left off.
+                self._registry.set_status(plugin, PluginStatus.REGISTERED)
+                # Drop the subscriptions its start() set up, so a later start()
+                # re-subscribes cleanly instead of stacking duplicate handlers.
+                self._registry.remove_subscriptions(plugin)
             # Flip only after the sweep: a BaseException mid-teardown leaves the
             # harness started, so cleanup can be retried instead of leaking.
             self._started = False

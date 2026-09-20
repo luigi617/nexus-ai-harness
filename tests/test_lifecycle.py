@@ -284,11 +284,243 @@ def test_rollback_lets_cancellation_through():
         asyncio.run(h.start())
 
 
-def test_use_after_start_is_rejected():
+def test_late_plugin_is_started_on_the_next_run():
+    log: list[str] = []
     h = build()
-    asyncio.run(h.start())
-    with pytest.raises(RuntimeError, match="after the harness has started"):
-        h.use(Resource("late", []))
+
+    async def go() -> None:
+        await h.start()
+        h.use(Resource("late", log))  # added after the harness is running
+        assert "start:late" not in log  # not started eagerly
+        await h.run("q")
+
+    asyncio.run(go())
+    assert "start:late" in log
+
+
+def test_late_plugin_started_once_across_further_runs():
+    log: list[str] = []
+    h = build()
+
+    async def go() -> None:
+        await h.start()
+        h.use(Resource("late", log))
+        await h.run("q")
+        await h.run("q")
+
+    asyncio.run(go())
+    assert log.count("start:late") == 1
+
+
+def test_late_plugin_is_stopped_on_shutdown():
+    log: list[str] = []
+    h = build()
+
+    async def go() -> None:
+        await h.start()
+        h.use(Resource("late", log))
+        await h.run("q")
+        await h.stop()
+
+    asyncio.run(go())
+    assert log == ["start:late", "stop:late"]
+
+
+def test_plugin_added_but_never_run_is_not_stopped():
+    log: list[str] = []
+    h = build()
+
+    async def go() -> None:
+        await h.start()
+        h.use(Resource("late", log))  # registered but never started
+        await h.stop()
+
+    asyncio.run(go())
+    assert log == []  # stop() must not stop a plugin whose start() never ran
+
+
+def test_late_start_failure_keeps_already_running_plugins_up():
+    log: list[str] = []
+    a = Resource("a", log)
+    h = build(a)
+
+    class FailStart(Plugin, Lifecycle):
+        async def start(self, ctx: Context) -> None:
+            raise RuntimeError("late boom")
+
+    async def go() -> None:
+        await h.start()  # a is up
+        h.use(FailStart())
+        with pytest.raises(RuntimeError, match="late boom"):
+            await h.run("q")  # the late plugin's start() fails this pass
+        assert h._registry.is_started(a) is True  # a must stay up
+        assert h._started is True
+        await h.stop()
+
+    asyncio.run(go())
+    assert log == ["start:a", "stop:a"]  # a started once, torn down once
+
+
+def test_hot_swap_reuses_the_same_instance():
+    log: list[str] = []
+    plugin = Resource("swap", log)
+    h = build()
+
+    async def go() -> None:
+        await h.start()
+        h.use(plugin)
+        await h.run("q")  # started
+        await h.unuse(plugin)  # stopped and removed
+        h.use(plugin)  # re-add the same instance
+        await h.run("q")  # started again, not skipped as already-started
+        await h.stop()
+
+    asyncio.run(go())
+    assert log == ["start:swap", "stop:swap", "start:swap", "stop:swap"]
+
+
+def test_late_non_lifecycle_plugin_takes_effect_on_the_next_run():
+    from protocols.interceptor import Interceptor
+
+    order: list[str] = []
+
+    class Mark(Interceptor):
+        target = Model
+
+        def before(self, ctx: Context) -> None:
+            order.append("before")
+
+    h = build()
+
+    async def go() -> None:
+        await h.start()
+        h.use(Mark())  # non-lifecycle, added after start
+        await h.run("q")
+
+    asyncio.run(go())
+    assert order == ["before"]  # active immediately, no start()/stop() needed
+
+
+def test_interleaved_late_plugins_start_once_and_stop_in_reverse():
+    log: list[str] = []
+    a, b = Resource("a", log), Resource("b", log)
+    h = build()
+
+    async def go() -> None:
+        await h.start()
+        h.use(a)
+        await h.run("q")  # a started
+        h.use(b)
+        await h.run("q")  # b started; a must NOT restart
+        await h.stop()  # reverse registration order
+
+    asyncio.run(go())
+    assert log == ["start:a", "start:b", "stop:b", "stop:a"]
+
+
+def test_restart_does_not_duplicate_in_start_subscriptions():
+    from core.events import Event, ModelCallStarted
+
+    seen: list[Event] = []
+
+    class Subscriber(Plugin, Lifecycle):
+        async def start(self, ctx: Context) -> None:
+            ctx.on(ModelCallStarted, self.record)
+
+        def record(self, event: Event, ctx: Context) -> None:
+            seen.append(event)
+
+    h = build(Subscriber())
+
+    async def go() -> None:
+        await h.start()
+        await h.stop()
+        await h.start()  # re-subscribes; the first start()'s handler must be gone
+        await h.run("q")
+
+    asyncio.run(go())
+    assert len(seen) == 1  # one run -> one event -> handler fires once, not twice
+
+
+def test_rollback_interrupted_by_cancellation_reinitializes_on_retry():
+    starts: list[str] = []
+
+    class P1(Plugin, Lifecycle):
+        async def start(self, ctx: Context) -> None:
+            starts.append("p1")
+
+    class CancelStop(Plugin, Lifecycle):
+        async def start(self, ctx: Context) -> None:
+            starts.append("cancel")
+
+        async def stop(self) -> None:
+            raise asyncio.CancelledError  # interrupts the rollback sweep
+
+    class FailStart(Plugin, Lifecycle):
+        async def start(self, ctx: Context) -> None:
+            starts.append("fail")
+            raise RuntimeError("boom")
+
+    # order: P1, CancelStop, FailStart -> rollback runs CancelStop.stop first
+    h = build(P1(), CancelStop(), FailStart())
+
+    async def go() -> None:
+        with contextlib.suppress(asyncio.CancelledError):
+            await h.start()  # FailStart raises, CancelStop.stop cancels the rollback
+        await h.start()  # retry
+
+    asyncio.run(go())
+    assert starts.count("p1") == 1  # never torn down, so not restarted
+    assert starts.count("cancel") == 2  # un-tracked on interrupt, re-initialized
+    assert starts.count("fail") == 1  # marked failed, not retried; harness recovers
+    assert h._started is True
+
+
+def test_failed_plugins_subscriptions_do_not_leak():
+    from core.events import Event, ModelCallStarted
+
+    seen: list[Event] = []
+
+    class FailAfterSubscribe(Plugin, Lifecycle):
+        async def start(self, ctx: Context) -> None:
+            ctx.on(ModelCallStarted, self.record)  # subscribes, then fails
+            raise RuntimeError("boom")
+
+        def record(self, event: Event, ctx: Context) -> None:
+            seen.append(event)
+
+    h = build()
+
+    async def go() -> None:
+        await h.start()
+        h.use(FailAfterSubscribe())
+        with pytest.raises(RuntimeError, match="boom"):
+            await h.run("q")
+        await h.run("q")  # a leaked handler would fire on this run's event
+
+    asyncio.run(go())
+    assert seen == []  # the failed plugin's subscription was cleaned up
+
+
+def test_failed_late_plugin_is_skipped_on_later_runs():
+    calls: list[int] = []
+
+    class FailStart(Plugin, Lifecycle):
+        async def start(self, ctx: Context) -> None:
+            calls.append(1)
+            raise RuntimeError("boom")
+
+    h = build()
+
+    async def go() -> None:
+        await h.start()
+        h.use(FailStart())
+        with pytest.raises(RuntimeError, match="boom"):
+            await h.run("q")  # first run: start() fails -> plugin marked failed
+        await h.run("q")  # second run must succeed, the failed plugin skipped
+
+    asyncio.run(go())
+    assert calls == [1]  # start() attempted once, never retried
 
 
 def test_baseexception_mid_stop_leaves_harness_started_for_retry():

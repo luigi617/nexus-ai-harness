@@ -72,6 +72,16 @@ def test_registering_an_interceptor_without_target_is_rejected():
         NexusAIHarness().use(Bare())
 
 
+def test_registering_an_interceptor_with_a_non_type_target_is_rejected():
+    class Bad(Interceptor):
+        target = "Model"  # a string, not a type
+
+        def before(self, ctx: Context) -> None: ...
+
+    with pytest.raises(TypeError, match="declares no 'target'"):
+        NexusAIHarness().use(Bad())
+
+
 def test_before_runs_ahead_of_target_after_runs_behind():
     order: list[str] = []
     harness = _harness(
@@ -235,6 +245,19 @@ def test_invoke_passes_through_args_and_kwargs():
 
     ctx = _ctx_with()
     assert asyncio.run(ctx.invoke(Adder().add, 1, b=2)) == 3
+
+
+def test_interceptor_is_inherited_by_a_fork_only_when_in_the_subset():
+    order: list[str] = []
+    interceptor = BeforeMark(_Widget, "wrap", order)
+    parent = _ctx_with(interceptor)
+
+    asyncio.run(parent.fork(None).invoke(_Widget().go))  # inherit-all
+    assert order == ["wrap"]
+
+    order.clear()
+    asyncio.run(parent.fork([]).invoke(_Widget().go))  # subset excludes it
+    assert order == []  # a restricted subagent does not inherit parent interceptors
 
 
 def test_a_plugin_invoking_another_plugin_is_also_intercepted():
