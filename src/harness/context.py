@@ -83,10 +83,9 @@ class RunContext(Context):
 
     def fork(self, plugins: list[object] | None = None) -> RunContext:
         # None → inherit all parent plugins; a list → the child sees only these.
-        if plugins is None:
-            plugins = self._registry.plugins()
+        members = plugins if plugins is not None else list(self._registry.plugins())
         child_registry = Registry()
-        for plugin in plugins:
+        for plugin in members:
             child_registry.add(plugin)
         # Interceptors are cross-cutting, so a child always inherits them.
         for binding in self._registry.interceptor_bindings():

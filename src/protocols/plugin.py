@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-from typing import ClassVar, Protocol, runtime_checkable
+from abc import ABC
+from typing import ClassVar
 
 
-@runtime_checkable
-class Plugin(Protocol):
-    """Common base of every plugin protocol."""
+class Plugin(ABC):  # noqa: B024
+    """Common abstract base of every plugin."""
 
-    kind: ClassVar[str]
     requires: ClassVar[tuple[type[Plugin], ...]] = ()

@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable
-from typing import Any, Protocol, TypeVar, runtime_checkable
+from typing import Any, TypeVar
 
 from core.events import Event
 from core.message import Message
@@ -12,15 +12,19 @@ T = TypeVar("T")
 P = TypeVar("P", bound=Plugin)
 
 
-@runtime_checkable
-class Context(Protocol):
+class Context(ABC):
+    """The run-scoped view a plugin is handed to reach the session and registry."""
+
     @property
+    @abstractmethod
     def session_id(self) -> str: ...
 
     @property
+    @abstractmethod
     def history(self) -> list[Message]: ...
 
     @property
+    @abstractmethod
     def interrupted(self) -> bool: ...
 
     @abstractmethod

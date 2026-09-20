@@ -2,16 +2,13 @@ from __future__ import annotations
 
 from abc import abstractmethod
 from collections.abc import Awaitable
-from typing import ClassVar, Protocol, runtime_checkable
+from typing import ClassVar
 
 from protocols.context import Context
 from protocols.plugin import Plugin
 
 
-@runtime_checkable
-class Tool(Plugin, Protocol):
-    kind: ClassVar[str] = "tool"
-
+class Tool(Plugin):
     name: ClassVar[str]
     description: ClassVar[str]
     parameters: ClassVar[dict]

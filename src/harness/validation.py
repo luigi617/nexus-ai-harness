@@ -68,9 +68,6 @@ def _analyze(
 
 def _is_satisfied(dep: type, others: list) -> bool:
     """Is dependency ``dep`` provided by one of the ``others`` plugins?"""
-    if getattr(dep, "_is_protocol", False):
-        dep_kind = getattr(dep, "kind", None)
-        return any(getattr(p, "kind", None) == dep_kind for p in others)
     return any(isinstance(p, dep) for p in others)
 
 

@@ -5,11 +5,12 @@ How the harness is put together.
 ## Everything is a plugin
 
 An agent is composed by registering plugins on a harness with `.use(...)`. Each
-plugin implements a **protocol** and is resolved by its protocol type, not by name.
+plugin subclasses an **abstract base** in `protocols/` and is resolved by that
+type, not by name.
 
 <!-- TODO:
-- kind-based registry: how `.use()` stores plugins and `ctx.get(P)` / `ctx.all(P)`
-  resolve them by `P.kind`.
+- type-based registry: how `.use()` stores plugins and `ctx.get(P)` / `ctx.all(P)`
+  resolve them via `isinstance(plugin, P)`.
 - type-keyed resolution and the bounded TypeVar `P = TypeVar("P", bound=Plugin)`.
 -->
 
@@ -19,7 +20,8 @@ Dependencies flow one way: `core ← protocols ← {services, plugins, harness}`
 
 <!-- TODO:
 - `core/`      — plain data types (Message, Response, RunState, ...).
-- `protocols/` — runtime_checkable Protocols; the only thing consumers import.
+- `protocols/` — abstract base classes (the interfaces consumers import), plus
+  `MemoryItem`, the base `@dataclass` a store's item type extends.
 - `plugins/`   — concrete implementations of the protocols.
 - `services/`  — shared logic reused across plugins/harness (runner, guard chain).
 - `harness/`   — Session, RunContext (the Context), Registry, the harness itself.

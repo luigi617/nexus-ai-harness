@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from abc import abstractmethod
 from collections.abc import Awaitable
-from typing import ClassVar, Protocol, runtime_checkable
 
 from core.message import Message
 from core.response import Response
@@ -10,11 +9,8 @@ from protocols.context import Context
 from protocols.plugin import Plugin
 
 
-@runtime_checkable
-class Model(Plugin, Protocol):
+class Model(Plugin):
     """A model backend."""
-
-    kind: ClassVar[str] = "model"
 
     provider: str = ""
     name: str = ""

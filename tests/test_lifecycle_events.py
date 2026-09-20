@@ -13,8 +13,6 @@ from tests.conftest import RecordingTool, ScriptedModel
 class RecordingHook(Hook):
     """Append every emitted event to a shared list."""
 
-    kind = "hook"
-
     def __init__(self, sink: list[Event]) -> None:
         self._sink = sink
 

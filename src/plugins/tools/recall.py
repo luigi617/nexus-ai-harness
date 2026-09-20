@@ -8,10 +8,9 @@ from protocols.tool import Tool
 
 
 class Recall(Tool):
-    """Search long-term memory for facts relevant to a query.
+    """Search long-term memory for facts relevant to a query."""
 
-    Requires a MemoryStore plugin (kind="memory") to be registered.
-    """
+    requires = (MemoryStore,)
 
     name = "recall"
     description = (

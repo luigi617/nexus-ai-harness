@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
+from types import TracebackType
 
+from core.invoke import call
 from core.phase import Phase
 from harness.context import RunContext
 from harness.registry import Registry
@@ -9,6 +12,7 @@ from harness.result import RunResult
 from harness.session import Session
 from harness.validation import describe_registry, validate_registry
 from protocols.interceptor import Interceptor
+from protocols.lifecycle import Lifecycle
 from protocols.plugin import Plugin
 from services.runner import run_session
 
@@ -16,8 +20,17 @@ from services.runner import run_session
 class NexusAIHarness:
     def __init__(self) -> None:
         self._registry = Registry()
+        self._started = False
+        # Serializes start()/stop() so concurrent run()s await one in-flight init.
+        self._lifecycle_lock = asyncio.Lock()
 
     def use(self, plugin: object) -> NexusAIHarness:
+        if self._started:
+            # TODO: a late plugin is forbidden now
+            raise RuntimeError(
+                "cannot use() a plugin after the harness has started; "
+                "register plugins before start()/run(), or stop() first"
+            )
         self._registry.add(plugin)
         return self
 
@@ -70,9 +83,73 @@ class NexusAIHarness:
         """
         return describe_registry(self._registry)
 
+    async def start(self) -> NexusAIHarness:
+        """Initialize every registered lifecycle plugin, in registration order.
+
+        Returns:
+            The harness itself, so the call can be awaited and chained.
+        """
+        if self._started:
+            return self
+        async with self._lifecycle_lock:
+            if self._started:
+                return self
+            ctx = RunContext(Session(), self._registry)
+            started: list[Lifecycle] = []
+            try:
+                for plugin in self._registry.plugins():
+                    if isinstance(plugin, Lifecycle):
+                        await call(plugin.start, ctx)
+                        started.append(plugin)
+            except BaseException:
+                for started_plugin in reversed(started):  # roll back what started
+                    # Best-effort rollback
+                    with contextlib.suppress(Exception):
+                        await call(started_plugin.stop)
+                raise
+            # Set only once every plugin is up, so waiters see a ready harness.
+            self._started = True
+        return self
+
+    async def stop(self) -> None:
+        """Release every lifecycle plugin, in reverse registration order."""
+        if not self._started:
+            return
+        async with self._lifecycle_lock:
+            if not self._started:
+                return
+            first_error: Exception | None = None
+            for plugin in reversed(self._registry.plugins()):
+                if isinstance(plugin, Lifecycle):
+                    try:
+                        await call(plugin.stop)
+                    except Exception as exc:  # keep tearing the rest down
+                        first_error = first_error or exc
+            # Flip only after the sweep: a BaseException mid-teardown leaves the
+            # harness started, so cleanup can be retried instead of leaking.
+            self._started = False
+            if first_error is not None:
+                raise first_error
+
+    async def __aenter__(self) -> NexusAIHarness:
+        return await self.start()
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> None:
+        if exc is not None:
+            with contextlib.suppress(Exception):
+                await self.stop()
+            return
+        await self.stop()
+
     async def run(
         self, user_input: str, *, session: Session | None = None
     ) -> RunResult:
+        await self.start()  # await full lifecycle init, incl. any in-flight start
         cur_session = session or Session()
         cur_session.clear_interrupt()  # a new turn isn't pre-interrupted
         ctx = RunContext(cur_session, self._registry)

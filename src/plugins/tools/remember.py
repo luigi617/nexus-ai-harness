@@ -8,10 +8,9 @@ from protocols.tool import Tool
 
 
 class Remember(Tool):
-    """Save a fact to long-term memory, or update an existing one.
+    """Save a fact to long-term memory, or update an existing one."""
 
-    Requires a MemoryStore plugin (kind="memory") to be registered.
-    """
+    requires = (MemoryStore,)
 
     name = "remember"
     description = (
