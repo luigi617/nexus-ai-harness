@@ -72,11 +72,10 @@ class Context(ABC):
     def invoke(
         self, fn: Callable[..., Any], *args: Any, **kwargs: Any
     ) -> Awaitable[Any]:
-        """Call plugin method ``fn`` with any interceptors bound to it around it.
+        """Call plugin method ``fn`` with any interceptors wrapping it around it.
 
         ``fn`` may be sync or ``async def`` and is passed ``*args`` and
-        ``**kwargs``. Interceptors bound to the plugin ``fn`` belongs to (via
-        ``harness.use_before`` / ``use_after``) run around the call.
+        ``**kwargs``.
         """
 
     @abstractmethod

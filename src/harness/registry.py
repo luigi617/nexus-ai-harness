@@ -6,7 +6,6 @@ from typing import Any, TypeVar
 from core.events import Event
 from core.phase import Phase
 from core.subscription import Subscription
-from harness.interception import InterceptorBinding
 from protocols.interceptor import Interceptor
 from protocols.plugin import Plugin
 
@@ -16,7 +15,6 @@ P = TypeVar("P", bound=Plugin)
 class Registry:
     def __init__(self) -> None:
         self._plugins: list[Plugin] = []
-        self._interceptors: list[InterceptorBinding] = []
         self._subscriptions: list[Subscription] = []
 
     def add(self, plugin: object) -> None:
@@ -24,22 +22,28 @@ class Registry:
             raise TypeError(
                 f"{type(plugin).__name__} is not a plugin (does not subclass Plugin)"
             )
+        if isinstance(plugin, Interceptor) and not hasattr(plugin, "target"):
+            raise TypeError(
+                f"{type(plugin).__name__} is an interceptor but declares no "
+                "'target' plugin type"
+            )
         self._plugins.append(plugin)
 
-    def add_interceptor(
-        self, target: type[Plugin], phase: Phase, interceptor: Interceptor
-    ) -> None:
-        self._interceptors.append(InterceptorBinding(target, phase, interceptor))
+    def interceptors(self, plugin: object, phase: Phase) -> list[Callable[[Any], Any]]:
+        """The ``before``/``after`` callbacks that wrap invoking ``plugin``.
 
-    def interceptors(self, plugin: object, phase: Phase) -> list[Interceptor]:
+        Returns the phase method of every registered interceptor whose ``target``
+        type ``plugin`` is an instance of and that overrides that method, in
+        registration order.
+        """
+        method = "before" if phase is Phase.BEFORE else "after"
         return [
-            b.interceptor
-            for b in self._interceptors
-            if b.phase is phase and isinstance(plugin, b.target)
+            getattr(p, method)
+            for p in self._plugins
+            if isinstance(p, Interceptor)
+            and isinstance(plugin, p.target)
+            and getattr(type(p), method) is not getattr(Interceptor, method)
         ]
-
-    def interceptor_bindings(self) -> list[InterceptorBinding]:
-        return list(self._interceptors)
 
     def subscribe(
         self, event_type: type[Event], handler: Callable[[Event, Any], None]
@@ -68,15 +72,13 @@ class Registry:
     def remove(self, plugin: object) -> None:
         """Remove ``plugin`` and every registration it owns.
 
-        Drops the plugin itself, its event subscriptions, and any interceptor
-        bindings it provides. A plugin or registration that is not present is
-        ignored, so removal is idempotent.
+        Drops the plugin itself and its event subscriptions. Because an
+        interceptor is itself a plugin, removing one also stops it wrapping its
+        target. A plugin or registration that is not present is ignored, so
+        removal is idempotent.
         """
         self._plugins = [p for p in self._plugins if p is not plugin]
         self._subscriptions = [s for s in self._subscriptions if s.owner is not plugin]
-        self._interceptors = [
-            b for b in self._interceptors if b.interceptor is not plugin
-        ]
 
     def get(self, cls: type[P]) -> P | None:
         for plugin in reversed(self._plugins):

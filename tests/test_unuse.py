@@ -32,10 +32,12 @@ class TracingPlugin(Plugin, Lifecycle):
 
 
 class CountingInterceptor(Interceptor):
+    target = Model
+
     def __init__(self) -> None:
         self.runs = 0
 
-    def run(self, ctx: Context) -> None:
+    def before(self, ctx: Context) -> None:
         self.runs += 1
 
 
@@ -95,7 +97,7 @@ def test_unuse_removes_the_plugin_from_the_registry():
 def test_unuse_removes_owned_interceptor_bindings():
     interceptor = CountingInterceptor()
     h = _harness()
-    h.use(interceptor).use_before(Model, interceptor)
+    h.use(interceptor)
 
     async def go() -> None:
         await h.run("q")

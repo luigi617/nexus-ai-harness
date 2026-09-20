@@ -71,16 +71,16 @@ class RunContext(Context):
         error: BaseException | None = None
         try:
             if plugin is not None:
-                for interceptor in self._registry.interceptors(plugin, Phase.BEFORE):
-                    await call(interceptor.run, self)
+                for fire in self._registry.interceptors(plugin, Phase.BEFORE):
+                    await call(fire, self)
             result = await call(fn, *args, **kwargs)
         except BaseException as exc:  # captured, re-raised once teardown is done
             error = exc
         after_error: BaseException | None = None
         if plugin is not None:
-            for interceptor in self._registry.interceptors(plugin, Phase.AFTER):
+            for fire in self._registry.interceptors(plugin, Phase.AFTER):
                 try:
-                    await call(interceptor.run, self)
+                    await call(fire, self)
                 except BaseException as exc:  # keep running the remaining ones
                     after_error = after_error or exc
         if error is not None:
@@ -95,11 +95,6 @@ class RunContext(Context):
         child_registry = Registry()
         for plugin in members:
             child_registry.add(plugin)
-        # Interceptors are cross-cutting, so a child always inherits them.
-        for binding in self._registry.interceptor_bindings():
-            child_registry.add_interceptor(
-                binding.target, binding.phase, binding.interceptor
-            )
         # Event subscriptions follow their owner into the child so ctx.on()
         # observes forks like a Hook does; unowned ones are cross-cutting.
         for subscription in self._registry.subscriptions():

@@ -5,15 +5,12 @@ import contextlib
 from types import TracebackType
 
 from core.invoke import call
-from core.phase import Phase
 from harness.context import RunContext
 from harness.registry import Registry
 from harness.result import RunResult
 from harness.session import Session
 from harness.validation import describe_registry, validate_registry
-from protocols.interceptor import Interceptor
 from protocols.lifecycle import Lifecycle
-from protocols.plugin import Plugin
 from services.runner import run_session
 
 
@@ -35,50 +32,11 @@ class NexusAIHarness:
         return self
 
     async def unuse(self, plugin: object) -> NexusAIHarness:
-        """Remove ``plugin`` and automatically drop every registration it owns.
-
-        The reverse of :meth:`use`: the plugin, its event subscriptions, and any
-        interceptor bindings it provides are removed from the registry so its
-        side effects do not outlive it. When the harness is started and the
-        plugin is a lifecycle plugin, its ``stop`` runs first to release
-        resources. Removing an absent plugin is a no-op. Chainable.
-        """
+        """Remove ``plugin`` and automatically drop every registration it owns."""
         async with self._lifecycle_lock:
             if self._started and isinstance(plugin, Lifecycle):
                 await call(plugin.stop)
             self._registry.remove(plugin)
-        return self
-
-    def use_before(
-        self, target: type[Plugin], interceptor: Interceptor
-    ) -> NexusAIHarness:
-        """Register ``interceptor`` to run before each invocation of ``target``.
-
-        A lifecycle-based alternative to observing an ``Event``: whenever the
-        harness invokes a ``target`` plugin (e.g. ``Model``, ``Tool``,
-        ``Loop``), the interceptor's ``run(ctx)`` fires first. Neither plugin
-        needs to know about the other. Chainable.
-
-        Args:
-            target: The plugin type to wrap (a protocol such as ``Model``).
-            interceptor: The :class:`~protocols.interceptor.Interceptor` to run.
-        """
-        self._registry.add_interceptor(target, Phase.BEFORE, interceptor)
-        return self
-
-    def use_after(
-        self, target: type[Plugin], interceptor: Interceptor
-    ) -> NexusAIHarness:
-        """Register ``interceptor`` to run after each invocation of ``target``.
-
-        The mirror of :meth:`use_before`; ``run(ctx)`` fires once the ``target``
-        invocation returns. Chainable.
-
-        Args:
-            target: The plugin type to wrap (a protocol such as ``Model``).
-            interceptor: The :class:`~protocols.interceptor.Interceptor` to run.
-        """
-        self._registry.add_interceptor(target, Phase.AFTER, interceptor)
         return self
 
     def validate(self) -> NexusAIHarness:
