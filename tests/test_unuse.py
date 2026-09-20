@@ -55,6 +55,27 @@ def test_owned_subscription_fires_while_registered():
     assert len(tracer.seen) == 1
 
 
+def test_unuse_removes_a_closure_subscription_made_in_start():
+    # A non-bound handler (closure) registered during start() must still be
+    # owned by the plugin, so unuse() removes it — not just bound methods.
+    seen: list[Event] = []
+
+    class ClosureTracer(Plugin, Lifecycle):
+        async def start(self, ctx: Context) -> None:
+            ctx.on(ModelCallStarted, lambda event, _ctx: seen.append(event))
+
+    tracer = ClosureTracer()
+    h = _harness(tracer)
+
+    async def go() -> None:
+        await h.run("q")
+        await h.unuse(tracer)
+        await h.run("q")  # the closure handler must not fire after removal
+
+    asyncio.run(go())
+    assert len(seen) == 1
+
+
 def test_unuse_removes_owned_subscriptions():
     tracer = TracingPlugin()
     h = _harness(tracer)

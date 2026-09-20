@@ -48,14 +48,18 @@ class Context(ABC):
 
         A plugin typically calls this from its lifecycle ``start`` to react to
         events without being a standalone ``Hook``. The subscription is owned by
-        the plugin whose bound method ``handler`` is, so it is removed
+        the plugin whose ``start`` is running (or, outside ``start``, the
+        instance a bound-method ``handler`` belongs to), so it is removed
         automatically when that plugin is removed via ``NexusAIHarness.unuse``.
+        A subscription made outside ``start`` with a non-bound handler has no
+        owner and is treated as cross-cutting: it survives ``unuse`` and must be
+        cancelled via the returned handle's ``remove``.
 
         Args:
             event_type: The event class to listen for; the handler fires on any
                 instance of it, subclasses included.
             handler: Called with ``(event, ctx)`` each time a matching event is
-                emitted. May be sync only, since emission is synchronous.
+                emitted. Must be synchronous; an async handler raises.
 
         Returns:
             A :class:`~core.subscription.Subscription` handle whose ``remove``

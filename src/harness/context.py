@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 from collections.abc import Callable
 from typing import Any, TypeVar
 
@@ -20,10 +21,26 @@ T = TypeVar("T")
 P = TypeVar("P", bound=Plugin)
 
 
+def _dispatch(handler: Callable[[Event, Any], Any], event: Event, ctx: Context) -> None:
+    """Invoke an event handler, failing loudly if it is mistakenly async."""
+    result = handler(event, ctx)
+    if inspect.isawaitable(result) or inspect.isasyncgen(result):
+        if inspect.iscoroutine(result):
+            result.close()  # avoid a "coroutine was never awaited" warning
+        raise TypeError(
+            f"event handler {getattr(handler, '__qualname__', handler)!r} returned "
+            f"{type(result).__name__}; handlers must be synchronous because emit() "
+            "is synchronous"
+        )
+
+
 class RunContext(Context):
-    def __init__(self, session: Session, registry: Registry) -> None:
+    def __init__(
+        self, session: Session, registry: Registry, owner: object | None = None
+    ) -> None:
         self._session = session
         self._registry = registry
+        self._owner = owner  # the plugin this context acts for
 
     @property
     def session_id(self) -> str:
@@ -50,14 +67,19 @@ class RunContext(Context):
 
     def emit(self, event: Event) -> None:
         for hook in self._registry.all(Hook):
-            hook.on(event, self)
+            _dispatch(hook.on, event, self)
         for subscription in self._registry.subscribers(event):
-            subscription.handler(event, self)
+            _dispatch(subscription.handler, event, self)
 
     def on(
         self, event_type: type[Event], handler: Callable[[Event, Context], None]
     ) -> Subscription:
-        return self._registry.subscribe(event_type, handler)
+        owner = (
+            self._owner
+            if self._owner is not None
+            else getattr(handler, "__self__", None)
+        )
+        return self._registry.subscribe(event_type, handler, owner)
 
     def get(self, cls: type[P]) -> P | None:
         return self._registry.get(cls)
@@ -100,7 +122,9 @@ class RunContext(Context):
         for subscription in self._registry.subscriptions():
             owner = subscription.owner
             if owner is None or any(owner is member for member in members):
-                child_registry.subscribe(subscription.event_type, subscription.handler)
+                child_registry.subscribe(
+                    subscription.event_type, subscription.handler, owner=owner
+                )
         # Headless subagent: inherit the parent's approver unless given one.
         if child_registry.get(Approver) is None:
             approver = self._registry.get(Approver)

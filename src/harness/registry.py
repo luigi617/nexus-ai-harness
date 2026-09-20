@@ -112,14 +112,12 @@ class Registry:
         ]
 
     def subscribe(
-        self, event_type: type[Event], handler: Callable[[Event, Any], None]
+        self,
+        event_type: type[Event],
+        handler: Callable[[Event, Any], None],
+        owner: object | None,
     ) -> Subscription:
-        """Register ``handler`` to fire on every future ``event_type`` event.
-
-        Ownership is inferred from the handler: a bound method is attributed to
-        its instance, so :meth:`remove` drops the subscription with that plugin.
-        """
-        owner = getattr(handler, "__self__", None)
+        """Register ``handler`` to fire on every future ``event_type`` event."""
         subscription = Subscription(event_type, handler, owner, self._unsubscribe)
         self._subscriptions.append(subscription)
         return subscription

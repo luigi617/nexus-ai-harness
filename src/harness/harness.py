@@ -28,6 +28,8 @@ class NexusAIHarness:
 
     async def unuse(self, plugin: object) -> NexusAIHarness:
         """Remove ``plugin`` and automatically drop every registration it owns."""
+        # TODO: drain in-flight runs before teardown so unuse()/stop() are safe
+        # to call concurrently with run().
         async with self._lifecycle_lock:
             if isinstance(plugin, Lifecycle) and self._registry.is_started(plugin):
                 await call(plugin.stop)
@@ -58,21 +60,24 @@ class NexusAIHarness:
             The harness itself, so the call can be awaited and chained.
         """
         async with self._lifecycle_lock:
-            ctx = RunContext(Session(), self._registry)
+            session = Session()
             newly: list[Lifecycle] = []
             current: Lifecycle | None = None
             try:
                 for plugin in self._registry.unstarted(Lifecycle):
                     current = plugin
-                    await call(plugin.start, ctx)
+                    # A context owned by the plugin, so subscriptions its start()
+                    # makes belong to it whatever the handler's shape.
+                    await call(
+                        plugin.start,
+                        RunContext(session, self._registry, owner=plugin),
+                    )
                     self._registry.set_status(plugin, PluginStatus.STARTED)
                     newly.append(plugin)
                     current = None
             except BaseException as exc:
                 if current is not None:
                     # Drop what the interrupted start() had already subscribed,
-                    # so a failed plugin leaves no live handler and a retryable
-                    # one re-subscribes cleanly.
                     self._registry.remove_subscriptions(current)
                     # A genuine start error disables the plugin so later runs
                     # skip it; a cancellation is not a defect, so leave it
@@ -98,7 +103,11 @@ class NexusAIHarness:
         return self
 
     async def stop(self) -> None:
-        """Release every started lifecycle plugin, in reverse registration order."""
+        """Release every started lifecycle plugin, in reverse registration order.
+
+        Like :meth:`unuse`, not synchronized with an in-flight ``run`` (see the
+        draining TODO there); call it once runs are quiesced.
+        """
         if not self._started:
             return
         async with self._lifecycle_lock:
