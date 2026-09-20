@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 
 import pytest
 
@@ -214,6 +215,117 @@ def test_concurrent_starts_do_not_double_initialize():
     assert log == ["start"]
 
 
+def test_concurrent_run_waits_for_start_to_complete():
+    # A concurrent run() must not execute its session until lifecycle init has
+    # fully finished — not merely started.
+    seen_ready: list[bool] = []
+
+    class SlowResource(Plugin, Lifecycle):
+        def __init__(self) -> None:
+            self.ready = False
+
+        async def start(self, ctx: Context) -> None:
+            await asyncio.sleep(0.01)
+            self.ready = True
+
+    resource = SlowResource()
+
+    class Probe(ScriptedModel):
+        async def complete(self, history, ctx):
+            seen_ready.append(resource.ready)
+            return Response(text="ok")
+
+    h = NexusAIHarness().use(AgenticLoop()).use(Probe()).use(resource)
+
+    async def go() -> None:
+        await asyncio.gather(h.run("a"), h.run("b"))
+
+    asyncio.run(go())
+    assert seen_ready == [True, True]  # both runs saw a fully-started resource
+
+
+def test_rollback_suppresses_ordinary_teardown_error_and_surfaces_start_error():
+    log: list[str] = []
+
+    class NoisyStop(Plugin, Lifecycle):
+        async def start(self, ctx: Context) -> None:
+            log.append("start:ns")
+
+        async def stop(self) -> None:
+            log.append("stop:ns")
+            raise ValueError("teardown boom")  # ordinary error, suppressed
+
+    class FailStart(Plugin, Lifecycle):
+        async def start(self, ctx: Context) -> None:
+            raise RuntimeError("start failed")
+
+    h = build(NoisyStop(), FailStart())
+
+    # The original start error surfaces; the rollback teardown still ran.
+    with pytest.raises(RuntimeError, match="start failed"):
+        asyncio.run(h.start())
+    assert log == ["start:ns", "stop:ns"]
+
+
+def test_rollback_lets_cancellation_through():
+    class CancelStop(Plugin, Lifecycle):
+        async def start(self, ctx: Context) -> None: ...
+
+        async def stop(self) -> None:
+            raise asyncio.CancelledError  # cancellation must not be swallowed
+
+    class FailStart(Plugin, Lifecycle):
+        async def start(self, ctx: Context) -> None:
+            raise RuntimeError("start failed")
+
+    h = build(CancelStop(), FailStart())
+
+    with pytest.raises(asyncio.CancelledError):
+        asyncio.run(h.start())
+
+
+def test_use_after_start_is_rejected():
+    h = build()
+    asyncio.run(h.start())
+    with pytest.raises(RuntimeError, match="after the harness has started"):
+        h.use(Resource("late", []))
+
+
+def test_baseexception_mid_stop_leaves_harness_started_for_retry():
+    log: list[str] = []
+
+    class Interrupted(BaseException):
+        pass
+
+    class Flaky(Plugin, Lifecycle):
+        def __init__(self) -> None:
+            self._fail = True
+
+        async def stop(self) -> None:
+            if self._fail:
+                self._fail = False
+                raise Interrupted  # BaseException interrupts the first sweep
+            log.append("stop:flaky")
+
+    class Res(Plugin, Lifecycle):
+        async def stop(self) -> None:
+            log.append("stop:res")
+
+    # teardown order (reverse of registration): Flaky first, then Res
+    h = build(Res(), Flaky())
+
+    async def go() -> None:
+        await h.start()
+        with contextlib.suppress(Interrupted):
+            await h.stop()  # Flaky interrupts; harness must stay started
+        assert h._started is True
+        await h.stop()  # retry resumes and completes teardown
+
+    asyncio.run(go())
+    assert h._started is False
+    assert log == ["stop:flaky", "stop:res"]
+
+
 def test_stop_propagates_cancellation_immediately():
     log: list[str] = []
 
@@ -244,3 +356,19 @@ def test_aexit_stops_even_when_body_raises():
     with pytest.raises(RuntimeError, match="body failed"):
         asyncio.run(go())
     assert log == ["start:a", "stop:a"]
+
+
+def test_aexit_body_error_wins_over_stop_error():
+    class FailStop(Plugin, Lifecycle):
+        async def stop(self) -> None:
+            raise ValueError("stop boom")
+
+    h = build(FailStop())
+
+    async def go() -> None:
+        async with h:
+            raise RuntimeError("body failed")
+
+    # The body's exception propagates, not the teardown's.
+    with pytest.raises(RuntimeError, match="body failed"):
+        asyncio.run(go())
