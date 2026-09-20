@@ -34,6 +34,21 @@ class NexusAIHarness:
         self._registry.add(plugin)
         return self
 
+    async def unuse(self, plugin: object) -> NexusAIHarness:
+        """Remove ``plugin`` and automatically drop every registration it owns.
+
+        The reverse of :meth:`use`: the plugin, its event subscriptions, and any
+        interceptor bindings it provides are removed from the registry so its
+        side effects do not outlive it. When the harness is started and the
+        plugin is a lifecycle plugin, its ``stop`` runs first to release
+        resources. Removing an absent plugin is a no-op. Chainable.
+        """
+        async with self._lifecycle_lock:
+            if self._started and isinstance(plugin, Lifecycle):
+                await call(plugin.stop)
+            self._registry.remove(plugin)
+        return self
+
     def use_before(
         self, target: type[Plugin], interceptor: Interceptor
     ) -> NexusAIHarness:

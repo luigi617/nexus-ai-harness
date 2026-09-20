@@ -8,6 +8,7 @@ from core.invoke import call
 from core.message import Message
 from core.phase import Phase
 from core.spawn import SpawnState
+from core.subscription import Subscription
 from harness.registry import Registry
 from harness.session import Session
 from protocols.approver import Approver
@@ -50,6 +51,13 @@ class RunContext(Context):
     def emit(self, event: Event) -> None:
         for hook in self._registry.all(Hook):
             hook.on(event, self)
+        for subscription in self._registry.subscribers(event):
+            subscription.handler(event, self)
+
+    def on(
+        self, event_type: type[Event], handler: Callable[[Event, Context], None]
+    ) -> Subscription:
+        return self._registry.subscribe(event_type, handler)
 
     def get(self, cls: type[P]) -> P | None:
         return self._registry.get(cls)
@@ -92,6 +100,12 @@ class RunContext(Context):
             child_registry.add_interceptor(
                 binding.target, binding.phase, binding.interceptor
             )
+        # Event subscriptions follow their owner into the child so ctx.on()
+        # observes forks like a Hook does; unowned ones are cross-cutting.
+        for subscription in self._registry.subscriptions():
+            owner = subscription.owner
+            if owner is None or any(owner is member for member in members):
+                child_registry.subscribe(subscription.event_type, subscription.handler)
         # Headless subagent: inherit the parent's approver unless given one.
         if child_registry.get(Approver) is None:
             approver = self._registry.get(Approver)

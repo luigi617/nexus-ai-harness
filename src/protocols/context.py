@@ -6,6 +6,7 @@ from typing import Any, TypeVar
 
 from core.events import Event
 from core.message import Message
+from core.subscription import Subscription
 from protocols.plugin import Plugin
 
 T = TypeVar("T")
@@ -38,6 +39,28 @@ class Context(ABC):
 
     @abstractmethod
     def emit(self, event: Event) -> None: ...
+
+    @abstractmethod
+    def on(
+        self, event_type: type[Event], handler: Callable[[Event, Context], None]
+    ) -> Subscription:
+        """Subscribe ``handler`` to every future ``event_type`` event.
+
+        A plugin typically calls this from its lifecycle ``start`` to react to
+        events without being a standalone ``Hook``. The subscription is owned by
+        the plugin whose bound method ``handler`` is, so it is removed
+        automatically when that plugin is removed via ``NexusAIHarness.unuse``.
+
+        Args:
+            event_type: The event class to listen for; the handler fires on any
+                instance of it, subclasses included.
+            handler: Called with ``(event, ctx)`` each time a matching event is
+                emitted. May be sync only, since emission is synchronous.
+
+        Returns:
+            A :class:`~core.subscription.Subscription` handle whose ``remove``
+            cancels the subscription ahead of the owner being removed.
+        """
 
     @abstractmethod
     def get(self, cls: type[P]) -> P | None: ...

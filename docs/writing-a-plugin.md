@@ -62,6 +62,22 @@ class Reporter(Hook):
             log(ctx.session_id, event.result.content)
 ```
 
+A plugin that already owns a capability can also subscribe to a single event
+type without being a standalone `Hook`, by calling `ctx.on(EventType, handler)`
+— typically from its lifecycle `start`. The subscription is *owned* by the
+plugin whose bound method `handler` is, so it is torn down automatically when
+that plugin is removed (see below); `ctx.on` returns a handle whose `remove()`
+cancels it sooner by hand:
+
+```python
+class Tracer(Tool, Lifecycle):
+    async def start(self, ctx: Context) -> None:
+        ctx.on(ModelCallStarted, self.before_model)
+
+    def before_model(self, event: Event, ctx: Context) -> None:
+        ...
+```
+
 ## Running before or after a plugin
 
 Events are one way to react to the harness; the other is to bind an
@@ -117,6 +133,14 @@ async with harness:        # start() on enter, stop() on exit
 
 Every plugin's `stop()` runs even if an earlier one raises, so one failing
 teardown can't leak another's resources; the first error is re-raised afterward.
+
+## Removing a plugin and its registrations
+
+`harness.unuse(plugin)` reverses `use`: it removes the plugin and every
+registration it owns — its `ctx.on` subscriptions and any interceptor bindings
+it provides — so a plugin's side effects never outlive it. When the harness is
+started and the plugin is a `Lifecycle`, its `stop()` runs first to release
+resources. Removing a plugin that was never registered is a no-op.
 
 <!-- TODO:
 - Minimal worked example (e.g. a Tool).

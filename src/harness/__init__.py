@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from core.subscription import Subscription
 from harness.context import RunContext
 from harness.harness import NexusAIHarness
 from harness.registry import Registry
@@ -14,4 +15,5 @@ __all__ = [
     "RunContext",
     "RunResult",
     "Session",
+    "Subscription",
 ]
