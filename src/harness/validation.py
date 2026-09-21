@@ -24,8 +24,8 @@ class MissingDependencyError(Exception):
         super().__init__(report)
 
 
-def _requires(plugin: object) -> Sequence[type[Plugin]]:
-    return getattr(plugin, "requires", ()) or ()
+def _requires(plugin: Plugin) -> Sequence[type[Plugin]]:
+    return plugin.requires
 
 
 def _render_tree(plugin_name: str, rows: list[tuple[str, bool]]) -> str:

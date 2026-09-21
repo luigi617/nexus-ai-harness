@@ -19,6 +19,7 @@ from protocols.loop import Loop
 from protocols.memory import MemoryStore
 from protocols.model import Model
 from protocols.plugin import Plugin
+from protocols.router import Router
 from protocols.tool import Tool
 from tests.conftest import RecordingTool, ScriptedModel
 
@@ -256,6 +257,52 @@ def test_needs_model_loop_is_reported_as_a_model_dependent():
         _registry(NeedsModel(), ScriptedModel(Response(text="x")))
     )
     assert [p.name for p in snapshot.dependents_of(Model)] == ["NeedsModel"]
+
+
+class PinnedRouter(Router):
+    """A Router that always returns the last registered model."""
+
+    def route(self, history, ctx):  # pragma: no cover - never executed here
+        return ctx.get(Model)
+
+
+def test_model_has_no_static_selection_when_a_router_is_present():
+    first = ScriptedModel(Response(text="first"))
+    second = SecondModel(Response(text="second"))
+    snapshot = inspect_registry(_registry(PinnedRouter(), first, second))
+
+    model_cap = snapshot.capability(Model)
+    assert model_cap is not None
+    # One model runs per turn, but the router chooses it dynamically.
+    assert model_cap.selects_one is True
+    assert [p.instance for p in model_cap.providers] == [first, second]
+    assert model_cap.selected is None
+    assert snapshot.provider_of(Model) is None
+    # Other single-select capabilities are unaffected by the router.
+    assert snapshot.provider_of(Router).name == "PinnedRouter"
+
+
+def test_model_is_statically_selected_without_a_router():
+    first = ScriptedModel(Response(text="first"))
+    second = SecondModel(Response(text="second"))
+    snapshot = inspect_registry(_registry(first, second))
+    assert snapshot.provider_of(Model).instance is second
+
+
+class DecoyTarget(Tool):
+    """A non-interceptor that coincidentally has a `target` class attribute."""
+
+    target = Model
+
+    def run(self, arguments, ctx):  # pragma: no cover
+        return ""
+
+
+def test_target_is_none_for_non_interceptors():
+    snapshot = inspect_registry(_registry(DecoyTarget()))
+    info = snapshot.plugin("DecoyTarget")
+    assert info is not None
+    assert info.target is None  # only interceptors report a wrapping target
 
 
 class TimingInterceptor(Interceptor):
