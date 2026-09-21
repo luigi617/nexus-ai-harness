@@ -12,6 +12,7 @@ from harness.result import RunResult
 from harness.session import Session
 from harness.validation import describe_registry, validate_registry
 from protocols.lifecycle import Lifecycle
+from protocols.plugin import Plugin
 from services.runner import run_session
 
 
@@ -22,12 +23,12 @@ class NexusAIHarness:
         # Serializes start()/stop() so concurrent run()s await one in-flight init.
         self._lifecycle_lock = asyncio.Lock()
 
-    def use(self, plugin: object) -> NexusAIHarness:
+    def use(self, plugin: Plugin) -> NexusAIHarness:
         """Register ``plugin``."""
         self._registry.add(plugin)
         return self
 
-    async def unuse(self, plugin: object) -> NexusAIHarness:
+    async def unuse(self, plugin: Plugin) -> NexusAIHarness:
         """Remove ``plugin`` and automatically drop every registration it owns."""
         # TODO: drain in-flight runs before teardown so unuse()/stop() are safe
         # to call concurrently with run().
@@ -35,6 +36,19 @@ class NexusAIHarness:
             if isinstance(plugin, Lifecycle) and self._registry.is_started(plugin):
                 await call(plugin.stop)
             self._registry.remove(plugin)
+        return self
+
+    def clone(self) -> NexusAIHarness:
+        """Return an unstarted copy sharing this harness's plugin instances."""
+        twin = type(self)()
+        twin._registry = self._registry.clone()
+        return twin
+
+    def replace(self, capability: type, plugin: Plugin) -> NexusAIHarness:
+        """Swap the registered provider(s) of ``capability`` for ``plugin``."""
+        if self._started:
+            raise RuntimeError("cannot replace plugins on a started harness")
+        self._registry.replace(capability, plugin)
         return self
 
     def validate(self) -> NexusAIHarness:

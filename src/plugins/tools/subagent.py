@@ -4,6 +4,7 @@ from collections.abc import Iterable
 from typing import ClassVar
 
 from protocols.context import Context
+from protocols.plugin import Plugin
 from protocols.spawner import Spawner
 from protocols.tool import Tool
 
@@ -43,8 +44,8 @@ class Subagent(Tool):
 
     def __init__(
         self,
-        plugins: Iterable[object] | None = None,
-        overrides: dict[type, object] | None = None,
+        plugins: Iterable[Plugin] | None = None,
+        overrides: dict[type, Plugin] | None = None,
     ) -> None:
         # None → inherit all parent plugins; a list → the child sees only these.
         self._plugins = None if plugins is None else list(plugins)
