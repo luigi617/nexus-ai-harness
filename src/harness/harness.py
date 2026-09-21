@@ -6,7 +6,7 @@ from types import TracebackType
 
 from core.invoke import call
 from harness.context import RunContext
-from harness.introspection import HarnessInspection, inspect_registry
+from harness.graph import HarnessGraph, build_graph
 from harness.registry import PluginStatus, Registry
 from harness.result import RunResult
 from harness.session import Session
@@ -47,17 +47,9 @@ class NexusAIHarness:
         validate_registry(self._registry)
         return self
 
-    def inspect(self) -> HarnessInspection:
-        """Return a structured snapshot of the harness's plugin composition.
-
-        Describes every registered plugin — its lifecycle status, the
-        capabilities it provides, and its declared dependencies — and groups
-        providers by capability, naming the one the harness resolves for each
-        single-select capability. Purely descriptive; never raises and never
-        starts plugins. Intended for tooling (CLIs, debuggers, notebooks,
-        visualizers); ``str(...)`` on the result renders a readable tree.
-        """
-        return inspect_registry(self._registry, name=type(self).__name__)
+    def graph(self) -> HarnessGraph:
+        """Return the harness's composition as a first-class dependency graph."""
+        return build_graph(self._registry, name=type(self).__name__)
 
     def describe_dependencies(self) -> str:
         """Render the dependency tree of every plugin that declares ``requires``.
