@@ -44,14 +44,14 @@ class NeedsModel(Loop):
 
 def test_inspect_returns_structured_snapshot_named_after_the_harness():
     h = NexusAIHarness().use(AgenticLoop()).use(ScriptedModel(Response(text="x")))
-    snapshot = h.inspect()
+    snapshot = h.graph().inspection()
     assert isinstance(snapshot, HarnessInspection)
     assert snapshot.name == "NexusAIHarness"
 
 
 def test_inspect_never_starts_plugins():
     h = NexusAIHarness().use(AgenticLoop()).use(ScriptedModel(Response(text="x")))
-    snapshot = h.inspect()
+    snapshot = h.graph().inspection()
     assert all(p.status is PluginStatus.REGISTERED for p in snapshot.plugins)
 
 
@@ -157,7 +157,7 @@ def test_status_reflects_started_plugins():
         h = NexusAIHarness().use(AgenticLoop()).use(ScriptedModel(Response(text="x")))
         await h.start()
         try:
-            return h.inspect()
+            return h.graph().inspection()
         finally:
             await h.stop()
 
@@ -222,7 +222,7 @@ def test_default_harness_inspection_covers_its_composition(tmp_path):
     from plugins import default_harness
 
     h = default_harness(ScriptedModel(Response(text="x")), memory_dir=str(tmp_path))
-    snapshot = h.inspect()
+    snapshot = h.graph().inspection()
 
     # The loop, model, and memory are single-select; tools are multi.
     assert snapshot.provider_of(Loop).name == "AgenticLoop"
