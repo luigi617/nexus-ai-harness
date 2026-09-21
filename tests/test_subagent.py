@@ -26,6 +26,66 @@ def test_fork_restricts_to_given_plugins():
     assert {t.name for t in child.all(Tool)} == {"remember"}
 
 
+def test_fork_override_shadows_inherited_plugin_of_the_same_protocol():
+    from protocols.memory import MemoryItem, MemoryStore
+
+    class Store(MemoryStore):
+        def __init__(self, tag):
+            self.tag = tag
+
+        def save(self, text, id=None):
+            return MemoryItem(text=text, id=id or "x")
+
+        def get(self, id):
+            return None
+
+        def search(self, query, limit=5):
+            return []
+
+        def all(self):
+            return []
+
+        def delete(self, id):
+            return False
+
+    base = Store("base")
+    parent = make_ctx(AgenticLoop(), base)
+    child = parent.fork(overrides={MemoryStore: Store("agent")})
+    assert child.get(MemoryStore).tag == "agent"  # override wins
+    assert child.get(AgenticLoop) is not None  # rest of the parent still inherited
+    assert parent.get(MemoryStore).tag == "base"  # parent untouched
+
+
+def test_fork_override_replaces_all_inherited_plugins_of_the_protocol():
+    # A harness can hold many plugins of one protocol; an override must drop
+    # every inherited one, not merely out-rank them for get().
+    parent = make_ctx(Remember(), Recall())  # two Tools
+    only_tool = Remember()
+    child = parent.fork(overrides={Tool: only_tool})
+    assert child.all(Tool) == [only_tool]  # both inherited tools gone
+
+
+def test_fork_override_keyed_by_concrete_class_spares_siblings():
+    # A concrete-class key targets only that implementation; a sibling
+    # implementation of the same protocol is left inherited.
+    remember, recall = Remember(), Recall()
+    swap = Remember()
+    child = make_ctx(remember, recall).fork(overrides={Remember: swap})
+    names = sorted(t.name for t in child.all(Tool))
+    assert names == ["recall", "remember"]  # Recall untouched
+    assert child.all(Remember) == [swap]  # only the Remember instance replaced
+
+
+def test_fork_overrides_apply_to_a_restricted_set():
+    restricted = Remember()
+    override = Recall()
+    child = make_ctx(Remember(), Recall()).fork(
+        [restricted], overrides={Tool: override}
+    )
+    # The override replaces within the restricted set, not the full parent.
+    assert child.all(Tool) == [override]
+
+
 def test_fork_inherits_parent_approver():
     approver = AutoApprove()
     parent = make_ctx(approver)
@@ -77,6 +137,26 @@ def test_subagent_tool_delegates_and_returns_distilled_result():
     parent = make_ctx(AgenticLoop(), P(), InProcessSpawner(), sub)
     out = asyncio.run(sub.run({"task": "do research"}, parent))
     assert out == "child-answer"
+
+
+def test_subagent_tool_overrides_a_capability_for_the_child():
+    from core.response import Response
+    from plugins.tools import Subagent
+    from protocols.model import Model
+
+    class Parent(Model):
+        async def complete(self, history, ctx):
+            return Response(text="parent-model")
+
+    class Child(Model):
+        async def complete(self, history, ctx):
+            return Response(text="child-model")
+
+    # Swap the model for the subagent only.
+    sub = Subagent(overrides={Model: Child()})
+    parent = make_ctx(AgenticLoop(), Parent(), InProcessSpawner(), sub)
+    out = asyncio.run(sub.run({"task": "go"}, parent))
+    assert out == "child-model"  # child ran on the override, not the parent's model
 
 
 def test_subagent_tool_errors_without_spawner():

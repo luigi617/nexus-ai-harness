@@ -83,5 +83,29 @@ class Context(ABC):
         """
 
     @abstractmethod
-    def fork(self, plugins: list[object] | None = None) -> Context:
-        """Create a forked context."""
+    def fork(
+        self,
+        plugins: list[object] | None = None,
+        overrides: dict[type, object] | None = None,
+    ) -> Context:
+        """Create an isolated child context.
+
+        The child runs on its own fresh session, so its history and state never
+        touch this one's; it inherits this context's plugins unless ``plugins``
+        restricts the set.
+
+        Args:
+            plugins: The exact plugins the child sees; ``None`` inherits all of
+                this context's. Pass a subset to hand a subagent only part of
+                the parent's capabilities.
+            overrides: A ``target -> replacement`` mapping. Each target is a
+                plugin type matched by ``isinstance``: a protocol base swaps out
+                every inherited implementer, while a concrete plugin class swaps
+                only instances of that class. Matching plugins are dropped and
+                the replacement registered in their place, so a subagent can
+                share infrastructure while swapping one capability (e.g. its
+                memory) even for protocols the parent holds several of.
+
+        Returns:
+            The child context, on a new session.
+        """

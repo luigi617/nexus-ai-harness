@@ -15,7 +15,11 @@ class Subagent(Tool):
     what the task is.
 
     By default the child inherits all of the parent's plugins. Pass ``plugins``
-    to restrict it to exactly that set (a subset of what the parent has).
+    to restrict it to exactly that set (a subset of what the parent has), or
+    ``overrides`` — a ``target -> replacement`` mapping keyed by a protocol base
+    or a concrete plugin class — to keep the full set but swap specific
+    capabilities, e.g. give the subagent its own memory while sharing the
+    parent's model and permissions.
     """
 
     name = "subagent"
@@ -37,9 +41,15 @@ class Subagent(Tool):
         "required": ["task"],
     }
 
-    def __init__(self, plugins: Iterable[object] | None = None) -> None:
+    def __init__(
+        self,
+        plugins: Iterable[object] | None = None,
+        overrides: dict[type, object] | None = None,
+    ) -> None:
         # None → inherit all parent plugins; a list → the child sees only these.
         self._plugins = None if plugins is None else list(plugins)
+        # protocol -> replacement: the child swaps these capabilities in.
+        self._overrides = None if overrides is None else dict(overrides)
 
     async def run(self, arguments: dict, ctx: Context) -> str:
         spawner = ctx.get(Spawner)
@@ -49,5 +59,5 @@ class Subagent(Tool):
         if not task:
             return "error: no task provided"
 
-        child = ctx.fork(self._plugins)
+        child = ctx.fork(self._plugins, self._overrides)
         return await ctx.invoke(spawner.run, child, task)
