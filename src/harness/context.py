@@ -111,9 +111,17 @@ class RunContext(Context):
             raise after_error
         return result
 
-    def fork(self, plugins: list[object] | None = None) -> RunContext:
+    def fork(
+        self,
+        plugins: list[object] | None = None,
+        overrides: dict[type, object] | None = None,
+    ) -> RunContext:
         # None → inherit all parent plugins; a list → the child sees only these.
         members = plugins if plugins is not None else list(self._registry.plugins())
+        if overrides:
+            targets = tuple(overrides)
+            members = [p for p in members if not isinstance(p, targets)]
+            members = [*members, *overrides.values()]
         child_registry = Registry()
         for plugin in members:
             child_registry.add(plugin)

@@ -14,6 +14,30 @@ type, not by name.
 - type-keyed resolution and the bounded TypeVar `P = TypeVar("P", bound=Plugin)`.
 -->
 
+## Forking for subagents
+
+A subagent runs on a **forked** context: `ctx.fork()` builds a child on a fresh
+session that inherits the parent's plugins. Two arguments shape what it sees,
+which is how a fleet of agents shares infrastructure while differing where it
+matters (the issue that motivated this: shared model/permissions/telemetry,
+per-agent memory):
+
+```python
+child = ctx.fork()                                    # inherit everything
+child = ctx.fork(plugins=[search_tool])               # restrict to exactly these
+child = ctx.fork(overrides={MemoryStore: AgentMemory()})  # swap every memory store
+child = ctx.fork(overrides={FileMemoryStore: AgentMemory()})  # swap just that one
+```
+
+`overrides` is a `target -> replacement` mapping. Each target is matched by
+`isinstance`, so a protocol base (`MemoryStore`) swaps out every implementer
+while a concrete class (`FileMemoryStore`) swaps only that one; fork drops the
+matches and registers the replacement in their place — a swap, not an append.
+Matching by type (rather than trusting `get()` to pick the last-registered one)
+is what makes it correct for protocols a harness holds several of, like tools or
+hooks. The child's session is isolated; only the interrupt signal is shared, so
+interrupting the root stops its subagents.
+
 ## Layering
 
 Dependencies flow one way: `core ← protocols ← {services, plugins, harness}`.
