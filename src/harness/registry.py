@@ -44,7 +44,12 @@ class Registry:
         self._entries: list[Registration] = []
         self._subscriptions: list[Subscription] = []
 
-    def add(self, plugin: object) -> None:
+    def add(self, plugin: Plugin) -> None:
+        self._validate_plugin(plugin)
+        self._entries.append(Registration(plugin))
+
+    def _validate_plugin(self, plugin: object) -> None:
+        """Raise ``TypeError`` unless ``plugin`` is a registrable plugin."""
         if not isinstance(plugin, Plugin):
             raise TypeError(
                 f"{type(plugin).__name__} is not a plugin (does not subclass Plugin)"
@@ -56,7 +61,28 @@ class Registry:
                 f"{type(plugin).__name__} is an interceptor but declares no "
                 "'target' plugin type"
             )
-        self._entries.append(Registration(plugin))
+
+    def clone(self) -> Registry:
+        """Return a new registry holding the same plugin instances, unstarted."""
+        copy = Registry()
+        copy._entries = [Registration(e.plugin) for e in self._entries]
+        return copy
+
+    def replace(self, cls: type, plugin: Plugin) -> None:
+        """Swap the registered plugin(s) of type ``cls`` for ``plugin``."""
+        self._validate_plugin(plugin)
+        if not isinstance(plugin, cls):
+            raise TypeError(
+                f"{type(plugin).__name__} is not an instance of {cls.__name__}"
+            )
+        matches = [i for i, e in enumerate(self._entries) if isinstance(e.plugin, cls)]
+        if not matches:
+            raise LookupError(f"no registered plugin of type {cls.__name__}")
+        for index in reversed(matches):
+            self.remove_subscriptions(self._entries[index].plugin)
+        self._entries[matches[0]] = Registration(plugin)
+        for index in reversed(matches[1:]):
+            del self._entries[index]
 
     def _find(self, plugin: object) -> Registration | None:
         for entry in self._entries:

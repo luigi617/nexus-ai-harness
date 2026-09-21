@@ -85,8 +85,8 @@ class Context(ABC):
     @abstractmethod
     def fork(
         self,
-        plugins: list[object] | None = None,
-        overrides: dict[type, object] | None = None,
+        plugins: list[Plugin] | None = None,
+        overrides: dict[type, Plugin] | None = None,
     ) -> Context:
         """Create an isolated child context.
 

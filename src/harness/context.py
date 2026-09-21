@@ -113,8 +113,8 @@ class RunContext(Context):
 
     def fork(
         self,
-        plugins: list[object] | None = None,
-        overrides: dict[type, object] | None = None,
+        plugins: list[Plugin] | None = None,
+        overrides: dict[type, Plugin] | None = None,
     ) -> RunContext:
         # None → inherit all parent plugins; a list → the child sees only these.
         members = plugins if plugins is not None else list(self._registry.plugins())
