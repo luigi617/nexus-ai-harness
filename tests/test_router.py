@@ -63,6 +63,23 @@ def test_llm_router_is_a_router():
     assert isinstance(LLMRouter(), Router)
 
 
+def test_llm_router_respects_provider_on_name_collision():
+    # Two models share a name under different providers; the reply names one
+    # fully-qualified id, so the provider must decide — not registration order.
+    bedrock = FakeModel("claude")
+    bedrock.provider = "bedrock"
+    vertex = FakeModel("claude")
+    vertex.provider = "vertex"
+    assert LLMRouter._match("vertex$claude", [bedrock, vertex]) is vertex
+
+
+def test_llm_router_prefers_most_specific_nested_name():
+    # A nested name ("gpt-4") must not shadow the more specific "gpt-4o".
+    gpt4 = FakeModel("gpt-4")
+    gpt4o = FakeModel("gpt-4o")
+    assert LLMRouter._match("gpt-4o", [gpt4, gpt4o]) is gpt4o
+
+
 # --- StickyRouter --------------------------------------------------------
 
 

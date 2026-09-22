@@ -27,6 +27,8 @@ class ConsoleApprover(Approver):
             return True
 
         async with self._lock:  # one prompt at a time
+            if name in self._always:
+                return True
             prefix = f"[{request.origin}] " if request.origin else ""
             args = request.call.get("arguments", {})
             answer = (

@@ -314,25 +314,72 @@ class HarnessGraph:
     def _cycle_members(self) -> tuple[str, ...]:
         """The names of plugins on a dependency cycle, empty when acyclic.
 
-        Peels leaves from both ends — nodes with no live predecessor or no live
-        successor cannot be on a cycle — so only strongly-connected members
-        remain, excluding plugins merely up- or downstream of a cycle.
+        A plugin is on a cycle only if it belongs to a strongly-connected
+        component of more than one node (or has a self-loop): every node in such
+        a component can reach every other and return. Bridge nodes that merely
+        lie on a path connecting two separate cycles — with a live predecessor
+        and successor but no way back to themselves — are correctly excluded, as
+        are plugins merely up- or downstream of a cycle.
         """
-        remaining = set(self._graph.node_ids())
-        changed = True
-        while changed:
-            changed = False
-            for node_id in list(remaining):
-                has_pred = any(
-                    p in remaining for p in self._graph.predecessors(node_id)
-                )
-                has_succ = any(s in remaining for s in self._graph.successors(node_id))
-                if not (has_pred and has_succ):
-                    remaining.discard(node_id)
-                    changed = True
+        cyclic = {nid for component in self._strongly_connected() for nid in component}
         return tuple(
-            self._infos[nid].name for nid in self._graph.node_ids() if nid in remaining
+            self._infos[nid].name for nid in self._graph.node_ids() if nid in cyclic
         )
+
+    def _strongly_connected(self) -> list[set[str]]:
+        """Strongly-connected components that form a cycle (size >= 2 or self-loop).
+
+        Uses an iterative Tarjan's algorithm so a deep dependency graph cannot
+        overflow the recursion stack.
+        """
+        index_of: dict[str, int] = {}
+        low: dict[str, int] = {}
+        on_stack: set[str] = set()
+        stack: list[str] = []
+        counter = 0
+        components: list[set[str]] = []
+
+        for root in self._graph.node_ids():
+            if root in index_of:
+                continue
+            # work stack of (node, iterator over its successors)
+            work: list[tuple[str, list[str]]] = []
+            index_of[root] = low[root] = counter
+            counter += 1
+            stack.append(root)
+            on_stack.add(root)
+            work.append((root, list(self._graph.successors(root))))
+            while work:
+                node_id, succ = work[-1]
+                if succ:
+                    nxt = succ.pop()
+                    if nxt not in index_of:
+                        index_of[nxt] = low[nxt] = counter
+                        counter += 1
+                        stack.append(nxt)
+                        on_stack.add(nxt)
+                        work.append((nxt, list(self._graph.successors(nxt))))
+                    elif nxt in on_stack:
+                        low[node_id] = min(low[node_id], index_of[nxt])
+                else:
+                    work.pop()
+                    if low[node_id] == index_of[node_id]:
+                        component: set[str] = set()
+                        while True:
+                            member = stack.pop()
+                            on_stack.discard(member)
+                            component.add(member)
+                            if member == node_id:
+                                break
+                        is_cycle = len(component) > 1 or (
+                            node_id in self._graph.successors(node_id)
+                        )
+                        if is_cycle:
+                            components.append(component)
+                    if work:
+                        parent = work[-1][0]
+                        low[parent] = min(low[parent], low[node_id])
+        return components
 
     def _plugin_names(self) -> list[str]:
         return [info.name for info in self._inspection.plugins]

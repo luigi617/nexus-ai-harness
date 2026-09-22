@@ -6,7 +6,6 @@ from enum import Enum, auto
 from typing import Any, TypeVar
 
 from core.events import Event
-from core.phase import Phase
 from core.subscription import Subscription
 from protocols.interceptor import Interceptor
 from protocols.plugin import Plugin
@@ -121,20 +120,18 @@ class Registry:
             if isinstance(e.plugin, cls) and e.status is PluginStatus.STARTED
         ]
 
-    def interceptors(self, plugin: object, phase: Phase) -> list[Callable[[Any], Any]]:
-        """The ``before``/``after`` callbacks that wrap invoking ``plugin``.
+    def interceptors_for(self, plugin: object) -> list[Interceptor]:
+        """The interceptor instances that wrap invoking ``plugin``.
 
-        Returns the phase method of every registered interceptor whose ``target``
-        type ``plugin`` is an instance of and that overrides that method, in
-        registration order.
+        Returns every registered interceptor whose ``target`` type ``plugin`` is
+        an instance of, in registration order. Callers decide which phase methods
+        to fire so that a single interceptor's ``before`` and ``after`` stay
+        paired around one invocation.
         """
-        method = "before" if phase is Phase.BEFORE else "after"
         return [
-            getattr(e.plugin, method)
+            e.plugin
             for e in self._entries
-            if isinstance(e.plugin, Interceptor)
-            and isinstance(plugin, e.plugin.target)
-            and getattr(type(e.plugin), method) is not getattr(Interceptor, method)
+            if isinstance(e.plugin, Interceptor) and isinstance(plugin, e.plugin.target)
         ]
 
     def subscribe(

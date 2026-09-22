@@ -11,8 +11,9 @@ class GraphTracer(Hook):
 
     def __init__(self, graph: Graph) -> None:
         self._graph = graph
-        self._last: str | None = None
-        self._owner: dict[str, str] = {}  # tool call id -> assistant node id
+        self._last: dict[str, str] = {}  # session id -> last node id
+        # session id -> {tool call id -> owning node id}
+        self._owner: dict[str, dict[str, str]] = {}
 
     def on(self, event: Event, ctx: Context) -> None:
         if not isinstance(event, MessageAdded):
@@ -20,18 +21,21 @@ class GraphTracer(Hook):
         node = event.message
         self._graph.add_node(node.id, data=node)
 
-        if self._last is not None:
-            self._graph.add_edge(self._last, node.id, role="next")
-        self._last = node.id
+        sid = ctx.session_id
+        last = self._last.get(sid)
+        if last is not None:
+            self._graph.add_edge(last, node.id, role="next")
+        self._last[sid] = node.id
 
+        owner = self._owner.setdefault(sid, {})
         for call in node.tool_calls:
             cid = call.get("id")
             if cid:
-                self._owner[cid] = node.id
+                owner[cid] = node.id
 
-        if node.tool_use_id and node.tool_use_id in self._owner:
+        if node.tool_use_id and node.tool_use_id in owner:
             self._graph.add_edge(
-                self._owner[node.tool_use_id],
+                owner[node.tool_use_id],
                 node.id,
                 role="tool_result",
                 call_id=node.tool_use_id,

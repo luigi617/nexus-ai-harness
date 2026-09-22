@@ -34,7 +34,10 @@ class ToolRunner:
             return self._message(call, name, f"error: {reason}")
 
         ctx.emit(ToolCallStarted(call))
-        content = await ctx.invoke(tool.run, call.get("arguments", {}), ctx)
+        try:
+            content = await ctx.invoke(tool.run, call.get("arguments", {}), ctx)
+        except Exception as exc:
+            content = f"error: {exc}"
         result = self._message(call, name, content)
         ctx.emit(ToolCallCompleted(call, result))
         return result

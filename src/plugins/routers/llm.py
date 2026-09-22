@@ -48,8 +48,21 @@ class LLMRouter(Router):
     @staticmethod
     def _match(text: str, candidates: list[Model]) -> Model:
         lowered = (text or "").strip().lower()
+        # 1. Exact fully-qualified id match — what the prompt asks the decider for.
         for model in candidates:
-            ident, name = _id(model).lower(), model.name.lower()
-            if (ident and ident in lowered) or (name and name in lowered):
+            if _id(model).lower() == lowered:
                 return model
+        # 2. Fully-qualified id contained in the reply; longest (most specific) wins.
+        id_hits = [m for m in candidates if _id(m).lower() in lowered]
+        if id_hits:
+            return max(id_hits, key=lambda m: len(_id(m)))
+        # 3. Exact bare-name match.
+        for model in candidates:
+            if model.name and model.name.lower() == lowered:
+                return model
+        # 4. Bare-name substring; choose the longest name so a nested name
+        #    (e.g. "gpt-4") never shadows a more specific one ("gpt-4o").
+        name_hits = [m for m in candidates if m.name and m.name.lower() in lowered]
+        if name_hits:
+            return max(name_hits, key=lambda m: len(m.name))
         return candidates[0]  # fall back to the first if nothing matched

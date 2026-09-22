@@ -192,6 +192,33 @@ def test_impact_excludes_the_plugin_itself_on_a_cycle():
     assert impacted == {"Pong"}
 
 
+class _Bridge(_NamedTool):
+    """On no cycle: it sits on a path connecting two separate cycles."""
+
+
+class _CycleD(_NamedTool):
+    pass
+
+
+class _CycleE(_NamedTool):
+    pass
+
+
+_CycleD.requires = (_CycleE,)
+_CycleE.requires = (_Bridge, _CycleD)  # cycle {D, E}, and E depends on the bridge
+_Bridge.requires = (Ping,)  # downstream of {Ping, Pong}, upstream of {D, E}
+
+
+def test_cycle_members_exclude_a_bridge_between_two_cycles():
+    # Two cycles ({Ping, Pong} and {_CycleD, _CycleE}) linked by _Bridge, which
+    # is on neither cycle: it has a live predecessor and successor but no way
+    # back to itself, so leaf-peeling would wrongly report it.
+    graph = build_graph(_registry(Ping(), Pong(), _Bridge(), _CycleD(), _CycleE()))
+    with pytest.raises(DependencyCycleError) as exc:
+        graph.startup_order()
+    assert set(exc.value.cycle) == {"Ping", "Pong", "_CycleD", "_CycleE"}
+
+
 # --- validation ----------------------------------------------------------------
 
 

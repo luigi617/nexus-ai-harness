@@ -48,3 +48,20 @@ def test_links_tool_result_to_its_originating_call():
     )
     assert tool_edge.source == call.id
     assert tool_edge.metadata["call_id"] == "c1"
+
+
+def test_does_not_bridge_the_chain_across_sessions():
+    # A forked/subagent session inherits the same tracer instance; its chain
+    # must stay independent instead of linking back to the parent's last node.
+    g = Graph()
+    tracer = GraphTracer(g)
+    parent = make_ctx()
+    child = make_ctx()  # a distinct Session -> distinct session_id
+    assert parent.session_id != child.session_id
+
+    last_parent = Message(role="assistant", content="parent-final")
+    first_child = Message(role="user", content="child-first")
+    tracer.on(MessageAdded(last_parent), parent)
+    tracer.on(MessageAdded(first_child), child)
+
+    assert g.successors(last_parent.id) == []  # no cross-session "next" edge

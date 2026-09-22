@@ -5,6 +5,7 @@ import asyncio
 from core.events import Event
 from plugins.permissions import AllowList
 from protocols.hook import Hook
+from protocols.tool import Tool
 from services.tool_runner import ToolRunner
 from tests.conftest import RecordingTool, make_ctx
 
@@ -57,3 +58,25 @@ def test_result_message_links_tool_use_id():
     tool = RecordingTool("echo")
     msg, _ = run({"name": "echo", "id": "abc"}, AllowList(["echo"]), tools=[tool])
     assert msg.role == "tool" and msg.tool_use_id == "abc" and msg.name == "echo"
+
+
+class _ExplodingTool(Tool):
+    def __init__(self) -> None:
+        self.name = "boom"
+        self.description = ""
+        self.parameters = {}
+
+    def run(self, arguments, ctx):
+        raise ValueError("kaboom")
+
+
+def test_raising_tool_becomes_error_message_not_a_crash():
+    # A tool that raises must degrade to an observable tool result, not
+    # propagate out of gather and tear down the whole run.
+    rec = EventRecorder()
+    msg, _ = run(
+        {"name": "boom", "id": "1"}, AllowList(["boom"]), rec, tools=[_ExplodingTool()]
+    )
+    assert msg.role == "tool"
+    assert "error" in msg.content and "kaboom" in msg.content
+    assert rec.events == ["ToolCallStarted", "ToolCallCompleted"]

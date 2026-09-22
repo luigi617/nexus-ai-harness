@@ -87,9 +87,15 @@ class BedrockModel(Model):
         messages: list[dict] = []
         pending_results: list[dict] = []
 
+        def add_turn(role: str, blocks: list[dict]) -> None:
+            if messages and messages[-1]["role"] == role:
+                messages[-1]["content"].extend(blocks)
+            else:
+                messages.append({"role": role, "content": list(blocks)})
+
         def flush_results() -> None:
             if pending_results:
-                messages.append({"role": "user", "content": list(pending_results)})
+                add_turn("user", pending_results)
                 pending_results.clear()
 
         for m in history:
@@ -109,7 +115,7 @@ class BedrockModel(Model):
             if m.role == "system":
                 system.append({"text": m.content})
             elif m.role == "user":
-                messages.append({"role": "user", "content": [{"text": m.content}]})
+                add_turn("user", [{"text": m.content}])
             elif m.role == "assistant":
                 blocks: list[dict] = []
                 if m.content:
@@ -124,7 +130,7 @@ class BedrockModel(Model):
                             }
                         }
                     )
-                messages.append({"role": "assistant", "content": blocks})
+                add_turn("assistant", blocks)
 
         flush_results()
         return system, messages

@@ -7,7 +7,6 @@ from typing import Any, TypeVar
 from core.events import Event, MessageAdded
 from core.invoke import call
 from core.message import Message
-from core.phase import Phase
 from core.spawn import SpawnState
 from core.subscription import Subscription
 from harness.registry import Registry
@@ -15,6 +14,7 @@ from harness.session import Session
 from protocols.approver import Approver
 from protocols.context import Context
 from protocols.hook import Hook
+from protocols.interceptor import Interceptor
 from protocols.plugin import Plugin
 
 T = TypeVar("T")
@@ -32,6 +32,11 @@ def _dispatch(handler: Callable[[Event, Any], Any], event: Event, ctx: Context) 
             f"{type(result).__name__}; handlers must be synchronous because emit() "
             "is synchronous"
         )
+
+
+def _overrides(interceptor: Interceptor, method: str) -> bool:
+    """Whether ``interceptor`` overrides the given phase method of ``Interceptor``."""
+    return getattr(type(interceptor), method) is not getattr(Interceptor, method)
 
 
 class RunContext(Context):
@@ -89,22 +94,30 @@ class RunContext(Context):
 
     async def invoke(self, fn: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
         plugin = getattr(fn, "__self__", None)
+        interceptors = (
+            self._registry.interceptors_for(plugin) if plugin is not None else []
+        )
         result: Any = None
         error: BaseException | None = None
+        # Interceptors whose ``before`` completed; only these get an ``after`` so
+        # that a raising ``before`` never triggers an unpaired teardown.
+        entered: list[Interceptor] = []
         try:
-            if plugin is not None:
-                for fire in self._registry.interceptors(plugin, Phase.BEFORE):
-                    await call(fire, self)
+            for interceptor in interceptors:
+                if _overrides(interceptor, "before"):
+                    await call(interceptor.before, self)
+                entered.append(interceptor)
             result = await call(fn, *args, **kwargs)
         except BaseException as exc:  # captured, re-raised once teardown is done
             error = exc
         after_error: BaseException | None = None
-        if plugin is not None:
-            for fire in self._registry.interceptors(plugin, Phase.AFTER):
-                try:
-                    await call(fire, self)
-                except BaseException as exc:  # keep running the remaining ones
-                    after_error = after_error or exc
+        for interceptor in entered:
+            if not _overrides(interceptor, "after"):
+                continue
+            try:
+                await call(interceptor.after, self)
+            except BaseException as exc:  # keep running the remaining ones
+                after_error = after_error or exc
         if error is not None:
             raise error
         if after_error is not None:

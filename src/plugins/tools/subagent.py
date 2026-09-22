@@ -23,6 +23,8 @@ class Subagent(Tool):
     parent's model and permissions.
     """
 
+    requires = (Spawner,)
+
     name = "subagent"
     description = (
         "Delegate a self-contained sub-task to an isolated agent. It runs with "

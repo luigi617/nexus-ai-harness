@@ -171,3 +171,23 @@ def test_subagent_tool_rejects_empty_task():
 
     out = asyncio.run(Subagent().run({"task": "  "}, make_ctx(InProcessSpawner())))
     assert "no task" in out
+
+
+def test_subagent_declares_its_spawner_requirement():
+    from plugins.tools import Subagent
+    from protocols.spawner import Spawner
+
+    # The hard runtime dependency on a Spawner must be declared so validation
+    # and the dependency graph reflect it.
+    assert Spawner in Subagent.requires
+
+
+def test_validate_flags_a_subagent_without_a_spawner():
+    from harness.graph import build_graph
+    from harness.registry import Registry
+    from plugins.tools import Subagent
+
+    reg = Registry()
+    reg.add(Subagent())
+    graph = build_graph(reg)
+    assert ("Subagent", "Spawner") in graph.unmet_requirements()

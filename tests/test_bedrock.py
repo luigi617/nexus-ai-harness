@@ -33,6 +33,21 @@ def test_to_converse_splits_system_and_batches_tool_results():
     assert result_turn["content"][0]["toolResult"]["content"] == [{"text": "4"}]
 
 
+def test_to_converse_merges_consecutive_same_role_turns():
+    # An injected summary sits next to the first user turn; Converse requires
+    # alternating roles, so consecutive same-role turns must be merged.
+    history = [
+        Message(role="system", content="sys"),
+        Message(role="user", content="task"),
+        Message(role="user", content="summary"),
+        Message(role="user", content="tail"),
+    ]
+    system, messages = BedrockModel._to_converse(history)
+    assert system == [{"text": "sys"}]
+    assert [m["role"] for m in messages] == ["user"]  # collapsed to one turn
+    assert len(messages[0]["content"]) == 3
+
+
 def test_parse_extracts_text_tool_calls_and_usage():
     response = {
         "output": {

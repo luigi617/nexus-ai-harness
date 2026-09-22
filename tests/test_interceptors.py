@@ -238,6 +238,32 @@ def test_before_and_after_both_run_in_registration_order():
     assert order == ["before-A", "before-B", "after-A", "after-B"]
 
 
+def test_after_is_skipped_when_before_never_completed():
+    """A raising `before` must not trigger an unpaired `after` (double-release)."""
+    counter = {"n": 0}
+
+    class Raising(Interceptor):
+        target = _Widget
+
+        def before(self, ctx: Context) -> None:
+            raise RuntimeError("before failed")
+
+    class Paired(Interceptor):
+        target = _Widget
+
+        def before(self, ctx: Context) -> None:
+            counter["n"] += 1  # acquire
+
+        def after(self, ctx: Context) -> None:
+            counter["n"] -= 1  # release
+
+    # Raising is registered first, so its before aborts the pass before Paired's.
+    ctx = _ctx_with(Raising(), Paired())
+    with pytest.raises(RuntimeError, match="before failed"):
+        asyncio.run(ctx.invoke(_Widget().go))
+    assert counter["n"] == 0  # Paired.before never ran, so its after was skipped
+
+
 def test_invoke_passes_through_args_and_kwargs():
     class Adder(Plugin):
         async def add(self, a: int, b: int = 0) -> int:

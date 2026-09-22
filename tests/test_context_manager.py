@@ -87,3 +87,36 @@ def test_noop_when_no_provider():
     cm = SummarizingContextManager(max_messages=6, keep_recent=3)
     out = process(cm, history(10), ctx)
     assert len(out) == 12  # unchanged; summarization unavailable
+
+
+def test_boundary_skips_orphaned_tool_results():
+    # new_cutoff = len - keep_recent = 5 lands on the tool result at index 5,
+    # whose parent tool_use (index 4) is folded into the summary; the kept tail
+    # must not begin with that orphaned tool result.
+    hist = [
+        Message(role="system", content="sys"),
+        Message(role="user", content="task"),
+        Message(role="assistant", content="a1"),
+        Message(role="user", content="u1"),
+        Message(role="assistant", content="", tool_calls=[{"id": "c", "name": "t"}]),
+        Message(role="tool", content="r1", tool_use_id="c", name="t"),
+        Message(role="user", content="u2"),
+    ]
+    ctx = make_ctx(SummarizerModel())
+    cm = SummarizingContextManager(max_messages=3, keep_recent=2)
+    out = process(cm, hist, ctx)
+    tail = out[out.index(next(m for m in out if "RECAP" in m.content)) + 1 :]
+    assert not tail or tail[0].role != "tool"
+
+
+def test_summary_transcript_includes_tool_call_intent():
+    # Tool-only assistant turns (content="" with tool_calls) must not be dropped.
+    rendered = SummarizingContextManager._render(
+        Message(
+            role="assistant",
+            content="",
+            tool_calls=[{"name": "search", "arguments": {"q": "x"}}],
+        )
+    )
+    assert rendered is not None
+    assert "search" in rendered and "tool_call" in rendered

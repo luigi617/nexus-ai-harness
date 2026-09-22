@@ -41,6 +41,11 @@ class SummarizingContextManager(ContextManager):
         # Re-summarize only once the live tail outgrows the budget; else reuse.
         if len(history) - cutoff > self._max_messages:
             new_cutoff = len(history) - self._keep_recent
+            # Never let the live tail begin with an orphaned tool result whose
+            # parent tool_use is being folded into the summary; a toolResult with
+            # no preceding toolUse block is rejected by the model backend.
+            while new_cutoff < len(history) and history[new_cutoff].role == "tool":
+                new_cutoff += 1
             folded = await self._summarize(state.text, history[cutoff:new_cutoff], ctx)
             if folded is None:
                 return history  # summarization unavailable — stay a no-op
@@ -70,6 +75,24 @@ class SummarizingContextManager(ContextManager):
             i += 1
         return i
 
+    @staticmethod
+    def _render(m: Message) -> str | None:
+        """Render a message for the summary transcript, or None if it is empty.
+
+        Includes tool-call intent so tool-only assistant turns (``content=""``
+        with populated ``tool_calls``) are not silently dropped from the recap.
+        """
+        parts: list[str] = []
+        if m.content:
+            parts.append(m.content)
+        for tc in m.tool_calls:
+            parts.append(
+                f"[tool_call {tc.get('name', '')} args={tc.get('arguments', {})}]"
+            )
+        if not parts:
+            return None
+        return f"{m.role}: {' '.join(parts)}"
+
     async def _summarize(
         self, prior: str, messages: list[Message], ctx: Context
     ) -> str | None:
@@ -77,7 +100,9 @@ class SummarizingContextManager(ContextManager):
         if model is None or not messages:
             return None
 
-        transcript = "\n".join(f"{m.role}: {m.content}" for m in messages if m.content)
+        transcript = "\n".join(
+            line for line in (self._render(m) for m in messages) if line is not None
+        )
         body = (
             transcript
             if not prior

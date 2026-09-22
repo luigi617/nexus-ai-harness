@@ -19,7 +19,6 @@ from core.guard import GuardDecision
 from core.ids import new_id
 from core.message import Message
 from core.permission import PermissionDecision, PermissionVerdict
-from core.phase import Phase
 from core.response import Response
 
 __all__ = [
@@ -34,7 +33,6 @@ __all__ = [
     "ModelCallStarted",
     "PermissionDecision",
     "PermissionVerdict",
-    "Phase",
     "Response",
     "ResponseReceived",
     "SessionEnded",
