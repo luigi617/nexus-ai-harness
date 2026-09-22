@@ -7,7 +7,19 @@ from plugins.hooks import CostCounter, ElapsedTime, IterationCounter
 from plugins.interventions import InjectMessage
 from plugins.loops import AgenticLoop, ChatLoop
 from plugins.memory import FileMemoryStore
-from plugins.models import BedrockModel
+from plugins.models import (
+    AnthropicModel,
+    BedrockModel,
+    DeepSeekModel,
+    GeminiModel,
+    GLMModel,
+    GroqModel,
+    MiniMaxModel,
+    OpenAICompatibleModel,
+    OpenAIModel,
+    QwenModel,
+    XAIModel,
+)
 from plugins.permissions import (
     AllowList,
     AskUnless,
@@ -24,6 +36,7 @@ from protocols.model import Model
 __all__ = [
     "AgenticLoop",
     "AllowList",
+    "AnthropicModel",
     "AskUnless",
     "AutoApprove",
     "BedrockModel",
@@ -31,22 +44,31 @@ __all__ = [
     "ChatLoop",
     "ConsoleApprover",
     "CostCounter",
+    "DeepSeekModel",
     "DenyList",
     "ElapsedTime",
     "FileMemoryStore",
     "Forget",
+    "GLMModel",
+    "GeminiModel",
     "GraphTracer",
+    "GroqModel",
     "InProcessSpawner",
     "InjectMessage",
     "IterationCounter",
     "LLMRouter",
     "MaxIterations",
+    "MiniMaxModel",
+    "OpenAICompatibleModel",
+    "OpenAIModel",
+    "QwenModel",
     "Recall",
     "Remember",
     "StickyRouter",
     "Subagent",
     "SummarizingContextManager",
     "Timeout",
+    "XAIModel",
     "default_harness",
 ]
 

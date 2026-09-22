@@ -1,35 +1,32 @@
 from __future__ import annotations
 
 import os
-from typing import Any
+from typing import Any, ClassVar
 
 import boto3
 from dotenv import load_dotenv
 
 from core.message import Message
 from core.response import Response
-from protocols.context import Context
-from protocols.model import Model
+from plugins.models.base import BaseModel
 from protocols.tool import Tool
 
 DEFAULT_REGION = "us-east-1"
 
-# USD per 1M tokens: (input, output). Models not listed here cost 0
-PRICING: dict[str, tuple[float, float]] = {
-    "us.anthropic.claude-opus-4-8": (15.0, 75.0),
-    "us.anthropic.claude-3-5-sonnet-20241022-v2:0": (3.0, 15.0),
-    "us.anthropic.claude-3-5-haiku-20241022-v1:0": (0.8, 4.0),
-}
 
-DESCRIPTIONS: dict[str, str] = {
-    "us.anthropic.claude-opus-4-8": "most capable; hard reasoning and complex tasks",
-    "us.anthropic.claude-3-5-sonnet-20241022-v2:0": "balanced capability and cost",
-    "us.anthropic.claude-3-5-haiku-20241022-v1:0": "fastest and cheapest; simple tasks",
-}
-
-
-class BedrockModel(Model):
+class BedrockModel(BaseModel):
     provider = "bedrock"
+    # USD per 1M tokens: (input, output). Models not listed here cost 0.
+    pricing: ClassVar[dict[str, tuple[float, float]]] = {
+        "us.anthropic.claude-opus-4-8": (15.0, 75.0),
+        "us.anthropic.claude-3-5-sonnet-20241022-v2:0": (3.0, 15.0),
+        "us.anthropic.claude-3-5-haiku-20241022-v1:0": (0.8, 4.0),
+    }
+    descriptions: ClassVar[dict[str, str]] = {
+        "us.anthropic.claude-opus-4-8": "most capable; hard reasoning, complex tasks",
+        "us.anthropic.claude-3-5-sonnet-20241022-v2:0": "balanced capability and cost",
+        "us.anthropic.claude-3-5-haiku-20241022-v1:0": "fastest and cheapest; simple",
+    }
 
     def __init__(
         self,
@@ -40,16 +37,13 @@ class BedrockModel(Model):
         **params,
     ) -> None:
         self.name = model
-        self.description = DESCRIPTIONS.get(model, "")
+        self.description = self.descriptions.get(model, "")
         self.params = params
         load_dotenv()
         self.region = region or os.getenv("AWS_REGION") or DEFAULT_REGION
         self.api_key = api_key or os.getenv("AWS_BEARER_TOKEN_BEDROCK")
         self.max_tokens = max_tokens
         self._client: Any = None
-
-    def complete(self, history: list[Message], ctx: Context) -> Response:
-        return self._generate(history, ctx.all(Tool))
 
     def _get_client(self) -> Any:
         if self._client is None:
@@ -73,13 +67,6 @@ class BedrockModel(Model):
         parsed = self._parse(response)
         parsed.cost = self._cost(parsed.usage)
         return parsed
-
-    def _cost(self, usage: dict) -> float:
-        input_price, output_price = PRICING.get(self.name, (0.0, 0.0))
-        return (
-            usage.get("input_tokens", 0) * input_price
-            + usage.get("output_tokens", 0) * output_price
-        ) / 1_000_000
 
     @staticmethod
     def _to_converse(history: list[Message]) -> tuple[list[dict], list[dict]]:
