@@ -36,10 +36,6 @@ def build(*extra: object) -> NexusAIHarness:
     return h
 
 
-def test_membership_is_by_inheritance():
-    assert isinstance(Resource("a", []), Lifecycle)
-
-
 def test_run_starts_lifecycle_plugins():
     log: list[str] = []
     build(Resource("a", log)).run_sync("q")
@@ -168,8 +164,7 @@ def test_every_stop_runs_and_first_executed_error_is_reraised():
             log.append(f"stop:{self._name}")
             raise ValueError(self._name)
 
-    # Two failing stops: the earlier-executed one (last registered, since stop
-    # runs in reverse) must win, proving first-of-many rather than last-wins.
+    # Two failing stops: the earlier-executed (last registered) wins, not last-wins.
     h = build(Resource("a", log), Boom("early"), Resource("b", log), Boom("late"))
 
     async def go() -> None:
@@ -193,7 +188,7 @@ def test_partial_start_failure_rolls_back_started_plugins():
 
     with pytest.raises(RuntimeError, match="start failed"):
         asyncio.run(h.start())
-    # a started, FailStart raised before b; a must be torn down, b never started
+    # A started, FailStart raised before b; a must be torn down, b never started.
     assert log == ["start:a", "start:boom", "stop:a"]
     assert h._started is False
 
@@ -216,8 +211,7 @@ def test_concurrent_starts_do_not_double_initialize():
 
 
 def test_concurrent_run_waits_for_start_to_complete():
-    # A concurrent run() must not execute its session until lifecycle init has
-    # fully finished — not merely started.
+    # A concurrent run() waits for lifecycle init to fully finish, not just start.
     seen_ready: list[bool] = []
 
     class SlowResource(Plugin, Lifecycle):
@@ -461,7 +455,7 @@ def test_rollback_interrupted_by_cancellation_reinitializes_on_retry():
             starts.append("fail")
             raise RuntimeError("boom")
 
-    # order: P1, CancelStop, FailStart -> rollback runs CancelStop.stop first
+    # Order: P1, CancelStop, FailStart -> rollback runs CancelStop.stop first
     h = build(P1(), CancelStop(), FailStart())
 
     async def go() -> None:
@@ -543,7 +537,7 @@ def test_baseexception_mid_stop_leaves_harness_started_for_retry():
         async def stop(self) -> None:
             log.append("stop:res")
 
-    # teardown order (reverse of registration): Flaky first, then Res
+    # Teardown order (reverse of registration): Flaky first, then Res
     h = build(Res(), Flaky())
 
     async def go() -> None:

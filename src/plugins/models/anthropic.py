@@ -95,7 +95,8 @@ class AnthropicModel(BaseModel):
                             "input": call.get("arguments", {}),
                         }
                     )
-                add_turn("assistant", blocks)
+                if blocks:  # an empty assistant turn is rejected by the API
+                    add_turn("assistant", blocks)
 
         flush_results()
         return "\n".join(system_parts), messages

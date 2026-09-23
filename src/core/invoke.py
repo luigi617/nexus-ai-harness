@@ -14,4 +14,12 @@ async def call(fn: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
     """
     if inspect.iscoroutinefunction(fn):
         return await fn(*args, **kwargs)
+    # A callable object with async __call__ needs awaiting, not thread-offloading.
+    dunder_call = getattr(fn, "__call__", None)  # noqa: B004
+    if (
+        not inspect.isroutine(fn)
+        and not inspect.isclass(fn)
+        and inspect.iscoroutinefunction(dunder_call)
+    ):
+        return await fn(*args, **kwargs)
     return await asyncio.to_thread(fn, *args, **kwargs)

@@ -90,7 +90,7 @@ def test_before_runs_ahead_of_target_after_runs_behind():
         AfterMark(Model, "after-model", order),
     )
     harness.run_sync("go")
-    # the model call itself sits between the two interceptors
+    # The model call itself sits between the two interceptors.
     assert order == ["before-model", "after-model"]
 
 
@@ -138,8 +138,7 @@ def test_interceptor_only_fires_for_its_target():
 
 
 def test_target_type_does_not_leak_across_types_sharing_a_method():
-    # Tool and Loop both expose `run`, but a Tool does not subclass Loop, so a
-    # Loop-bound interceptor must not fire on tool calls.
+    # Tool and Loop share `run` but Tool isn't a Loop, so a Loop interceptor won't fire.
     order: list[str] = []
     model = ScriptedModel(
         Response(text="", tool_calls=[{"name": "echo", "id": "1", "arguments": {}}]),
@@ -304,3 +303,47 @@ def test_a_plugin_invoking_another_plugin_is_also_intercepted():
     ctx = _ctx_with(BeforeMark(Inner, "inner", order))
     asyncio.run(ctx.invoke(outer.go, ctx))
     assert order == ["inner"]  # fires for the nested call, not just top-level
+
+
+# --- teardown error is surfaced alongside a failing invocation -----------
+
+
+class _FailingAfter(Interceptor):
+    target = _Widget
+
+    def after(self, ctx: Context) -> None:
+        raise RuntimeError("teardown")
+
+
+def test_invoke_surfaces_teardown_error_alongside_primary():
+    # When wrapped call and after() both raise, primary error wins but chain teardown.
+    widget = _Widget()  # its boom() raises ValueError
+    ctx = _ctx_with(_FailingAfter())
+    with pytest.raises(ValueError) as excinfo:
+        asyncio.run(ctx.invoke(widget.boom))
+    assert isinstance(excinfo.value.__context__, RuntimeError)
+
+
+class _CtxWidget(Plugin):
+    def work(self) -> None:
+        try:
+            raise KeyError("root")
+        except KeyError:
+            raise ValueError("primary")  # noqa: B904 - context set implicitly
+
+
+class _CtxFailingAfter(Interceptor):
+    target = _CtxWidget
+
+    def after(self, ctx: Context) -> None:
+        raise RuntimeError("teardown")
+
+
+def test_invoke_preserves_primary_cause_and_appends_teardown_at_tail():
+    # Primary error keeps its cause chain; teardown is appended at the tail, not lost.
+    widget = _CtxWidget()
+    ctx = _ctx_with(_CtxFailingAfter())
+    with pytest.raises(ValueError) as excinfo:
+        asyncio.run(ctx.invoke(widget.work))
+    assert isinstance(excinfo.value.__context__, KeyError)  # primary cause kept
+    assert isinstance(excinfo.value.__context__.__context__, RuntimeError)  # teardown

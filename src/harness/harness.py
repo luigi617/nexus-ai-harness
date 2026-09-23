@@ -30,8 +30,7 @@ class NexusAIHarness:
 
     async def unuse(self, plugin: Plugin) -> NexusAIHarness:
         """Remove ``plugin`` and automatically drop every registration it owns."""
-        # TODO: drain in-flight runs before teardown so unuse()/stop() are safe
-        # to call concurrently with run().
+        # TODO: drain in-flight runs so unuse()/stop() are safe to call during run().
         async with self._lifecycle_lock:
             if isinstance(plugin, Lifecycle) and self._registry.is_started(plugin):
                 await call(plugin.stop)
@@ -79,14 +78,15 @@ class NexusAIHarness:
             The harness itself, so the call can be awaited and chained.
         """
         async with self._lifecycle_lock:
+            # Fail closed: a plugin with unmet requires would otherwise run as a no-op.
+            validate_registry(self._registry)
             session = Session()
             newly: list[Lifecycle] = []
             current: Lifecycle | None = None
             try:
                 for plugin in self._registry.unstarted(Lifecycle):
                     current = plugin
-                    # A context owned by the plugin, so subscriptions its start()
-                    # makes belong to it whatever the handler's shape.
+                    # Owned context so its start()'s subscriptions belong to it.
                     await call(
                         plugin.start,
                         RunContext(session, self._registry, owner=plugin),
@@ -96,11 +96,9 @@ class NexusAIHarness:
                     current = None
             except BaseException as exc:
                 if current is not None:
-                    # Drop what the interrupted start() had already subscribed,
+                    # Drop what the interrupted start() had already subscribed.
                     self._registry.remove_subscriptions(current)
-                    # A genuine start error disables the plugin so later runs
-                    # skip it; a cancellation is not a defect, so leave it
-                    # retryable.
+                    # A real error disables the plugin; cancellation stays retryable.
                     if isinstance(exc, Exception):
                         self._registry.set_status(current, PluginStatus.FAILED)
                 for started_plugin in reversed(newly):  # roll back this pass only
@@ -109,9 +107,7 @@ class NexusAIHarness:
                         with contextlib.suppress(Exception):
                             await call(started_plugin.stop)
                     finally:
-                        # Un-track even if stop() is interrupted, so a retried
-                        # start() re-initializes this plugin instead of skipping
-                        # a half-torn-down one; drop the effects its start() set up.
+                        # Un-track even if stop() is interrupted, so a retry re-inits.
                         self._registry.set_status(
                             started_plugin, PluginStatus.REGISTERED
                         )
@@ -138,14 +134,11 @@ class NexusAIHarness:
                     await call(plugin.stop)
                 except Exception as exc:  # keep tearing the rest down
                     first_error = first_error or exc
-                # A BaseException propagates before these, leaving the plugin
-                # marked started so a retried stop() resumes where it left off.
+                # A BaseException here leaves the plugin started for a retried stop().
                 self._registry.set_status(plugin, PluginStatus.REGISTERED)
-                # Drop the subscriptions its start() set up, so a later start()
-                # re-subscribes cleanly instead of stacking duplicate handlers.
+                # Drop its subscriptions so a later start() adds no duplicates.
                 self._registry.remove_subscriptions(plugin)
-            # Flip only after the sweep: a BaseException mid-teardown leaves the
-            # harness started, so cleanup can be retried instead of leaking.
+            # Flip only after sweep, so a mid-teardown BaseException stays retryable.
             self._started = False
             if first_error is not None:
                 raise first_error

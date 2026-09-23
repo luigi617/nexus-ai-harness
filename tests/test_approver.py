@@ -4,6 +4,8 @@ import asyncio
 import builtins
 import time
 
+import pytest
+
 from core.permission import ApprovalRequest
 from plugins.permissions import AutoApprove, ConsoleApprover
 from tests.conftest import make_ctx
@@ -68,3 +70,54 @@ def test_console_serializes_concurrent_prompts(monkeypatch):
 
     assert asyncio.run(go()) == [True, True, True]
     assert max_live == 1  # lock serialized the prompts
+
+
+def test_console_concurrent_same_tool_prompts_once(monkeypatch):
+    # Concurrent asks for one tool must prompt once: 2nd hits the always fast-path.
+    ctx = make_ctx()
+    ap = ConsoleApprover()
+    calls = []
+
+    def blocking(p):
+        calls.append(p)
+        time.sleep(0.05)  # hold the lock long enough for the second to queue
+        return "a"
+
+    monkeypatch.setattr(builtins, "input", blocking)
+
+    async def go():
+        return await asyncio.gather(
+            ap.approve(req("writefile"), ctx),
+            ap.approve(req("writefile"), ctx),
+        )
+
+    assert asyncio.run(go()) == [True, True]
+    assert len(calls) == 1  # only one prompt for the shared tool name
+
+
+@pytest.mark.parametrize(
+    ("answer", "expected"),
+    [
+        ("yes", False),
+        ("", False),
+        ("  ", False),
+        ("Y", True),
+        ("y", True),
+        ("n", False),
+    ],
+)
+def test_console_answer_parsing(monkeypatch, answer, expected):
+    # Only "y"/"Y" (after strip().lower()) approve; everything else denies.
+    ctx = make_ctx()
+    monkeypatch.setattr(builtins, "input", lambda _p: answer)
+    assert asyncio.run(ConsoleApprover().approve(req(), ctx)) is expected
+
+
+def test_console_handles_none_reason(monkeypatch):
+    # A None reason is interpolated raw as "None" and approve() still works.
+    ctx = make_ctx()
+    seen = []
+    monkeypatch.setattr(builtins, "input", lambda p: (seen.append(p), "y")[1])
+    request = ApprovalRequest(call={"name": "tool", "arguments": {}}, reason=None)
+    assert asyncio.run(ConsoleApprover().approve(request, ctx)) is True
+    assert "None" in seen[0]

@@ -32,7 +32,7 @@ class NeedsModelAndTool(Loop):
 
 
 class NeedsNothing(Hook):
-    # inherits no `requires`; validation must treat it as satisfied
+    # Inherits no `requires`; validation must treat it as satisfied.
 
     def on(self, event, ctx):  # pragma: no cover
         pass
@@ -60,7 +60,6 @@ def test_validate_passes_when_dependencies_present():
     reg = _registry(
         NeedsModelAndTool(), ScriptedModel(Response(text="x")), RecordingTool()
     )
-    # Returns None and does not raise.
     assert validate_registry(reg) is None
 
 
@@ -105,8 +104,7 @@ def test_tree_uses_branch_glyphs():
 
 
 def test_single_requirement_renders_satisfied_last_branch():
-    # A plugin with exactly one requirement: its only row is also the last row,
-    # so it must use the last-branch glyph paired with the satisfied mark.
+    # One requirement: its only row is the last, so it uses the last-branch glyph.
     reg = _registry(AgenticLoop(), ScriptedModel(Response(text="x")))
     assert describe_registry(reg) == "AgenticLoop\n└── Model ✓"
 
@@ -119,9 +117,7 @@ class NeedsModel(Router):
 
 
 def test_validate_filters_to_only_unsatisfied_plugin_trees():
-    # Two plugins declare requires: NeedsModel is satisfied, NeedsModelAndTool
-    # is not (Tool absent). Only the unsatisfied plugin's tree is rendered, and
-    # missing tuples come in registry order.
+    # Only the unsatisfied plugin's tree renders; missing tuples in registry order.
     reg = _registry(
         NeedsModel(), NeedsModelAndTool(), ScriptedModel(Response(text="x"))
     )
@@ -181,11 +177,10 @@ def test_harness_validate_raises_when_model_missing():
     assert exc.value.missing == [("AgenticLoop", "Model")]
 
 
-def test_harness_validate_does_not_change_run_behavior():
-    # An invalid harness still resolves lazily at run time (old behavior): a
-    # loop with no model raises LookupError from run(), not the validation path.
+def test_run_validates_before_executing():
+    # run() validates on start, so an invalid harness fails up front, not lazily.
     h = NexusAIHarness().use(AgenticLoop())
-    with pytest.raises(LookupError):
+    with pytest.raises(MissingDependencyError):
         h.run_sync("q")
 
 
@@ -204,8 +199,7 @@ def test_concrete_class_requirement_needs_the_exact_plugin():
     from plugins.guards import BudgetGuard
     from plugins.hooks import CostCounter, IterationCounter
 
-    # BudgetGuard requires the concrete CostCounter, not just "some hook".
-    # A different hook does NOT satisfy it.
+    # BudgetGuard requires the concrete CostCounter; a different hook won't satisfy it.
     with pytest.raises(MissingDependencyError) as exc:
         validate_registry(_registry(BudgetGuard(5.0), IterationCounter()))
     assert exc.value.missing == [("BudgetGuard", "CostCounter")]
@@ -226,8 +220,7 @@ def test_concrete_class_requirement_matches_subclass():
 
 
 def test_base_requirement_matches_any_subclass():
-    # A dependency on a base (Model) is satisfied by ANY plugin that subclasses
-    # it — the coarse, registry-style match — unlike a concrete-class dependency.
+    # A base dependency is satisfied by ANY subclass, unlike a concrete-class one.
     validate_registry(_registry(NeedsModel(), ScriptedModel(Response(text="x"))))
 
 
@@ -247,15 +240,13 @@ def test_memory_tools_require_a_memory_store(tmp_path):
 def test_default_harness_validates(tmp_path):
     from plugins import default_harness
 
-    # The batteries-included harness wires every guard's required hook and the
-    # loop's required model, so validation passes end to end.
+    # The default harness wires every required hook and model, so validation passes.
     h = default_harness(ScriptedModel(Response(text="x")), memory_dir=str(tmp_path))
     assert h.validate() is h
 
 
 def test_context_manager_dependency_scenario():
-    # Mirrors the issue's example: a loop-like plugin that also needs a
-    # ContextManager surfaces the missing one.
+    # Mirrors the issue's example: a loop-like plugin also needing a ContextManager.
     class NeedsCM(Loop):
         requires: ClassVar[tuple[type[Plugin], ...]] = (Model, ContextManager)
 

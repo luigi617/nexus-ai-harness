@@ -41,7 +41,10 @@ class Remember(Tool):
         if not text:
             return "error: nothing to remember (empty text)"
         id = arguments.get("id") or None
-        updating = id is not None and store.get(id) is not None
-        item = store.save(text, id)
+        try:
+            updating = id is not None and store.get(id) is not None
+            item = store.save(text, id)
+        except ValueError as exc:  # e.g. an id the store refuses to store under
+            return f"error: {exc}"
         verb = "updated" if updating else "remembered"
         return f"{verb} ({item.id})"

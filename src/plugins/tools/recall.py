@@ -40,7 +40,9 @@ class Recall(Tool):
             return "error: no memory store configured"
         query = str(arguments.get("query", "")).strip()
         limit = arguments.get("limit", 5)
-        limit = limit if isinstance(limit, int) and limit > 0 else 5
+        # bool is a subclass of int, so exclude it explicitly.
+        if not isinstance(limit, int) or isinstance(limit, bool) or limit <= 0:
+            limit = 5
 
         results = store.search(query, limit)
         if not results:

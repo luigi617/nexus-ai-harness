@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import Counter
 from collections.abc import Iterable
 from dataclasses import dataclass
 
@@ -199,13 +200,15 @@ class HarnessGraph:
         dependency edges, so the result reads as what was added or removed going
         from this graph to ``other``.
         """
-        mine, theirs = set(self._plugin_names()), set(other._plugin_names())
-        my_edges, their_edges = set(self._edge_triples()), set(other._edge_triples())
+        # Multisets, not sets, so duplicate-class plugins aren't merged into one node.
+        mine, theirs = Counter(self._plugin_names()), Counter(other._plugin_names())
+        my_edges = Counter(self._edge_triples())
+        their_edges = Counter(other._edge_triples())
         return GraphDiff(
-            added_plugins=tuple(sorted(theirs - mine)),
-            removed_plugins=tuple(sorted(mine - theirs)),
-            added_dependencies=tuple(sorted(their_edges - my_edges)),
-            removed_dependencies=tuple(sorted(my_edges - their_edges)),
+            added_plugins=tuple(sorted((theirs - mine).elements())),
+            removed_plugins=tuple(sorted((mine - theirs).elements())),
+            added_dependencies=tuple(sorted((their_edges - my_edges).elements())),
+            removed_dependencies=tuple(sorted((my_edges - their_edges).elements())),
         )
 
     def to_dict(self) -> dict:
@@ -342,7 +345,7 @@ class HarnessGraph:
         for root in self._graph.node_ids():
             if root in index_of:
                 continue
-            # work stack of (node, iterator over its successors)
+            # Work stack of (node, iterator over its successors).
             work: list[tuple[str, list[str]]] = []
             index_of[root] = low[root] = counter
             counter += 1

@@ -123,8 +123,7 @@ def test_emit_reaches_both_hooks_and_subscriptions():
 
 
 def test_handler_may_remove_a_subscription_mid_emit():
-    # subscribers() must hand back a fresh list so a handler that cancels a
-    # subscription during dispatch does not corrupt the iteration.
+    # subscribers() returns a fresh list so a mid-emit cancel can't corrupt iteration.
     other = Listener()
     ctx = make_ctx()
     victim: list[Subscription] = []
@@ -137,6 +136,52 @@ def test_handler_may_remove_a_subscription_mid_emit():
     ctx.emit(_msg())  # must not raise
     ctx.emit(_msg())
     assert len(other.seen) == 2
+
+
+def test_handler_removing_a_different_handler_mid_emit_still_fires_it_this_round():
+    # emit() iterates a snapshot, so a removed but pending handler still fires once.
+    ctx = make_ctx()
+    fired: list[str] = []
+    victim: list[Subscription] = []
+
+    def a(event: Event, _ctx: object) -> None:
+        fired.append("a")
+        victim[0].remove()  # cancel b during a's dispatch
+
+    def b(event: Event, _ctx: object) -> None:
+        fired.append("b")
+
+    ctx.on(MessageAdded, a)  # registered first, so dispatched first
+    victim.append(ctx.on(MessageAdded, b))
+
+    ctx.emit(_msg())
+    assert fired == ["a", "b"]  # b still fired despite a removing it (snapshot)
+
+    fired.clear()
+    ctx.emit(_msg())
+    assert fired == ["a"]  # b's removal is now visible
+
+
+def test_handler_adding_a_subscription_mid_emit_does_not_fire_it_until_next_emit():
+    # Snapshot is taken before dispatch, so subscriptions added mid-emit won't fire yet.
+    ctx = make_ctx()
+    fired: list[str] = []
+
+    def late(event: Event, _ctx: object) -> None:
+        fired.append("late")
+
+    def adder(event: Event, _ctx: object) -> None:
+        fired.append("adder")
+        ctx.on(MessageAdded, late)
+
+    ctx.on(MessageAdded, adder)
+
+    ctx.emit(_msg())
+    assert fired == ["adder"]  # late was added mid-emit, so it did not fire yet
+
+    fired.clear()
+    ctx.emit(_msg())
+    assert fired == ["adder", "late"]  # now the newly-added handler fires
 
 
 def test_fork_inherits_owned_subscription_so_it_fires_in_the_child():

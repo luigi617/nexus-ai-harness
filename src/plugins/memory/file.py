@@ -81,7 +81,11 @@ class FileMemoryStore(MemoryStore):
     # --- persistence helpers -------------------------------------------------
 
     def _path(self, id: str) -> Path:
-        return self._dir / f"{id}.md"
+        # The id is model-controlled; confine it to the store dir so it can't escape.
+        candidate = (self._dir / f"{id}.md").resolve()
+        if candidate.parent != self._dir.resolve():
+            raise ValueError(f"invalid memory id: {id!r}")
+        return candidate
 
     @staticmethod
     def _serialize(item: FileMemoryItem) -> str:

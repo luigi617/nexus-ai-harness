@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 from typing import ClassVar
 
 import pytest
@@ -18,6 +17,7 @@ from harness.registry import Registry
 from plugins.guards import BudgetGuard
 from plugins.hooks import CostCounter
 from plugins.loops import AgenticLoop
+from protocols.lifecycle import Lifecycle
 from protocols.model import Model
 from protocols.plugin import Plugin
 from protocols.tool import Tool
@@ -273,6 +273,19 @@ def test_diff_is_not_empty_when_graphs_differ():
     assert before.diff(after).is_empty() is False
 
 
+def test_diff_detects_added_duplicate_class_plugin():
+    # diff() compares plugins as multisets, so adding a second instance of an
+    # already-present class is a real change (the graph models the two instances
+    # as distinct nodes — see test_repeated_plugin_class_yields_distinct_nodes).
+    before = build_graph(_registry(RecordingTool("a")))
+    after = build_graph(_registry(RecordingTool("a"), RecordingTool("b")))
+    diff = before.diff(after)
+    assert diff.is_empty() is False
+    assert diff.added_plugins == ("RecordingTool",)
+    # Sanity: the two-instance graph really does hold two distinct nodes.
+    assert len(after.startup_order()) == 2
+
+
 # --- serialization -------------------------------------------------------------
 
 
@@ -336,6 +349,35 @@ def test_render_survives_a_cycle():
     assert "Pong" in rendered
 
 
+def test_render_of_a_cycle_pins_the_fallback_root_structure():
+    # With every plugin in a cycle there are no natural roots, so render() falls
+    # back to listing all nodes as roots and cuts recursion at the cycle boundary.
+    graph = build_graph(_registry(Ping(), Pong()))
+    lines = graph.render().splitlines()
+    assert lines == [
+        "NexusAIHarness",
+        "Ping",  # fallback root
+        "└── Pong",
+        "    └── Ping",  # recursion into Pong -> Ping stops here (Ping on path)
+        "Pong",  # fallback root
+        "└── Ping",
+        "    └── Pong",
+    ]
+    # Recursion is bounded: each name appears a fixed number of times.
+    rendered = "\n".join(lines)
+    assert rendered.count("Ping") == 3
+    assert rendered.count("Pong") == 3
+
+
+def test_render_shows_an_unmet_requirement_as_a_childless_leaf():
+    # AgenticLoop requires Model, but no Model is registered: the capability must
+    # render as a leaf with no provider nested beneath it.
+    graph = build_graph(_registry(AgenticLoop()))
+    assert graph.is_valid() is False
+    lines = graph.render().splitlines()
+    assert lines == ["NexusAIHarness", "AgenticLoop", "└── Model"]
+
+
 # --- lookups -------------------------------------------------------------------
 
 
@@ -355,6 +397,16 @@ def test_unknown_plugin_lookup_raises():
         graph.dependents_of("Nope")
 
 
+def test_lookup_of_an_unregistered_instance_raises_with_class_name():
+    # A Plugin *instance* that was never added takes the id-lookup branch of
+    # _resolve (distinct from the string-name branch) and reports the class name.
+    graph = _chain()
+    stranger = RecordingTool("never-registered")
+    with pytest.raises(KeyError) as exc:
+        graph.dependents_of(stranger)
+    assert "RecordingTool" in str(exc.value)
+
+
 def test_repeated_plugin_class_yields_distinct_nodes():
     a = RecordingTool("a")
     b = RecordingTool("b")
@@ -365,17 +417,22 @@ def test_repeated_plugin_class_yields_distinct_nodes():
     assert graph.dependents_of(b) == ()
 
 
-def test_graph_never_starts_plugins_even_after_start():
-    async def run() -> HarnessGraph:
-        h = NexusAIHarness().use(AgenticLoop()).use(ScriptedModel(Response(text="x")))
-        await h.start()
-        try:
-            return h.graph()
-        finally:
-            await h.stop()
+class _StartablePlugin(Plugin, Lifecycle):
+    """A Lifecycle plugin that WOULD reach STARTED if the harness started it."""
 
-    graph = asyncio.run(run())
-    assert all(p.status is PluginStatus.REGISTERED for p in graph.plugins())
+
+def test_graph_does_not_start_plugins():
+    # A Lifecycle plugin that *could* start proves graph() itself never starts plugins.
+    startable = _StartablePlugin()
+    h = (
+        NexusAIHarness()
+        .use(AgenticLoop())
+        .use(ScriptedModel(Response(text="x")))
+        .use(startable)
+    )
+    graph = h.graph()
+    node = next(p for p in graph.plugins() if p.instance is startable)
+    assert node.status is PluginStatus.REGISTERED
 
 
 class _NamedModel(Model):
@@ -383,3 +440,17 @@ class _NamedModel(Model):
 
     async def complete(self, history, ctx) -> Response:  # pragma: no cover
         return Response(text="named")
+
+
+# --- diff() distinguishes duplicate-class instances ----------------------
+
+
+class _DupTool(_NamedTool):
+    """Two instances share the class name, so a name-set diff would collapse them."""
+
+
+def test_diff_detects_an_added_duplicate_class_instance():
+    # Adding a second instance of the same class is a real structural change.
+    one = build_graph(_registry(_DupTool()))
+    two = build_graph(_registry(_DupTool(), _DupTool()))
+    assert not one.diff(two).is_empty()

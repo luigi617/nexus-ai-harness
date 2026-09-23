@@ -4,6 +4,7 @@ import os
 from typing import Any, ClassVar
 
 import boto3
+from botocore.config import Config
 from dotenv import load_dotenv
 
 from core.message import Message
@@ -34,6 +35,7 @@ class BedrockModel(BaseModel):
         region: str | None = None,
         api_key: str | None = None,
         max_tokens: int = 1024,
+        timeout: float = 60.0,
         **params,
     ) -> None:
         self.name = model
@@ -43,13 +45,20 @@ class BedrockModel(BaseModel):
         self.region = region or os.getenv("AWS_REGION") or DEFAULT_REGION
         self.api_key = api_key or os.getenv("AWS_BEARER_TOKEN_BEDROCK")
         self.max_tokens = max_tokens
+        # Accepted explicitly so it is not swept into self.params, where it would
+        # pollute inferenceConfig (Converse rejects unknown members).
+        self.timeout = timeout
         self._client: Any = None
 
     def _get_client(self) -> Any:
         if self._client is None:
             if self.api_key:
                 os.environ["AWS_BEARER_TOKEN_BEDROCK"] = self.api_key
-            self._client = boto3.client("bedrock-runtime", region_name=self.region)
+            self._client = boto3.client(
+                "bedrock-runtime",
+                region_name=self.region,
+                config=Config(connect_timeout=self.timeout, read_timeout=self.timeout),
+            )
         return self._client
 
     def _generate(self, history: list[Message], tools: list[Tool]) -> Response:
@@ -117,7 +126,8 @@ class BedrockModel(BaseModel):
                             }
                         }
                     )
-                add_turn("assistant", blocks)
+                if blocks:  # an empty assistant turn is rejected by the API
+                    add_turn("assistant", blocks)
 
         flush_results()
         return system, messages

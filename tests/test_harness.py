@@ -7,6 +7,8 @@ from core.response import Response
 from harness import NexusAIHarness
 from plugins.loops import AgenticLoop
 from protocols.hook import Hook
+from protocols.lifecycle import Lifecycle
+from protocols.plugin import Plugin
 from tests.conftest import ScriptedModel
 
 
@@ -71,9 +73,7 @@ def test_default_harness_runs(tmp_path):
 def test_default_harness_bounds_a_runaway_loop(tmp_path):
     from plugins import default_harness
 
-    # A model that never stops calling a tool would loop forever; the default
-    # MaxIterations guard must halt it. Use `recall` (trusted, so no approval
-    # prompt) so the test stays non-interactive.
+    # MaxIterations must halt a runaway tool loop; `recall` is trusted so no prompt.
     model = ScriptedModel(
         Response(
             text="",
@@ -87,8 +87,7 @@ def test_default_harness_bounds_a_runaway_loop(tmp_path):
 
 
 def test_conversation_continues_across_runs():
-    # A model that echoes how many user messages it has seen; a continued
-    # session must accumulate history across run() calls.
+    # A continued session must accumulate history across run() calls.
     class Counter(ScriptedModel):
         async def complete(self, history, ctx):
             users = sum(1 for m in history if m.role == "user")
@@ -100,6 +99,37 @@ def test_conversation_continues_across_runs():
     r2 = h.run_sync("second", session=r1.session)  # continue the conversation
     assert r2.output == "seen 2"
     assert r2.session is r1.session
+
+
+class SlowStopLifecycle(Plugin, Lifecycle):
+    """A lifecycle plugin whose stop() yields, to force stop() calls to interleave."""
+
+    def __init__(self) -> None:
+        self.starts = 0
+        self.stops = 0
+
+    async def start(self, ctx) -> None:
+        self.starts += 1
+
+    async def stop(self) -> None:
+        # Yield so a second stop() interleaves and hits the double-checked return.
+        await asyncio.sleep(0)
+        self.stops += 1
+
+
+def test_concurrent_double_stop_tears_down_exactly_once():
+    plugin = SlowStopLifecycle()
+
+    async def go() -> None:
+        h = NexusAIHarness().use(plugin)
+        await h.start()
+        assert plugin.starts == 1
+        # Race two stop()s: the second must early-return after re-checking _started.
+        await asyncio.gather(h.stop(), h.stop())
+        assert plugin.stops == 1  # teardown ran exactly once despite the race
+        assert h._started is False
+
+    asyncio.run(go())
 
 
 def test_result_exposes_run_state(tmp_path):

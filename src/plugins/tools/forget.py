@@ -32,4 +32,8 @@ class Forget(Tool):
         id = str(arguments.get("id", "")).strip()
         if not id:
             return "error: no id provided"
-        return f"forgot ({id})" if store.delete(id) else f"no memory with id {id!r}"
+        try:
+            deleted = store.delete(id)
+        except ValueError as exc:  # e.g. an id the store refuses to resolve
+            return f"error: {exc}"
+        return f"forgot ({id})" if deleted else f"no memory with id {id!r}"

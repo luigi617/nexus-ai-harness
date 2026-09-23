@@ -15,6 +15,7 @@ from harness.registry import Registry
 from plugins.loops import AgenticLoop, ChatLoop
 from protocols.context_manager import ContextManager
 from protocols.interceptor import Interceptor
+from protocols.lifecycle import Lifecycle
 from protocols.loop import Loop
 from protocols.memory import MemoryStore
 from protocols.model import Model
@@ -152,9 +153,20 @@ def test_lookups_are_empty_for_unknown_capabilities():
     assert snapshot.plugin("Nope") is None
 
 
+class _StartablePlugin(Plugin, Lifecycle):
+    """A Lifecycle plugin that reaches STARTED once the harness starts."""
+
+
 def test_status_reflects_started_plugins():
+    startable = _StartablePlugin()
+
     async def run() -> HarnessInspection:
-        h = NexusAIHarness().use(AgenticLoop()).use(ScriptedModel(Response(text="x")))
+        h = (
+            NexusAIHarness()
+            .use(AgenticLoop())
+            .use(ScriptedModel(Response(text="x")))
+            .use(startable)
+        )
         await h.start()
         try:
             return h.graph().inspection()
@@ -164,9 +176,14 @@ def test_status_reflects_started_plugins():
     import asyncio
 
     snapshot = asyncio.run(run())
-    # AgenticLoop/ScriptedModel are not Lifecycle plugins, so they stay
-    # REGISTERED; the snapshot still reports the live registry status.
-    assert all(p.status is PluginStatus.REGISTERED for p in snapshot.plugins)
+    status = {p.instance: p.status for p in snapshot.plugins}
+    # The Lifecycle plugin was started; non-Lifecycle plugins stay REGISTERED.
+    assert status[startable] is PluginStatus.STARTED
+    assert all(
+        s is PluginStatus.REGISTERED
+        for inst, s in status.items()
+        if inst is not startable
+    )
 
 
 def test_render_draws_a_tree_rooted_at_the_harness():

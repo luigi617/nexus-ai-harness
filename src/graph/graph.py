@@ -51,7 +51,11 @@ class Graph:
     ) -> str:
         """Add a node wired to already-present parents, and return its final id."""
         if node_id in self._nodes:
-            node_id = f"{node_id}#{len(self._nodes)}"
+            base, n = node_id, len(self._nodes)
+            node_id = f"{base}#{n}"
+            while node_id in self._nodes:  # keep bumping until genuinely unique
+                n += 1
+                node_id = f"{base}#{n}"
         self.add_node(node_id, data=data)
         for dep in (needs,) if isinstance(needs, str) else tuple(needs or ()):
             if dep not in self._nodes:

@@ -31,7 +31,7 @@ class AgenticLoop(Loop):
 
         i = 0
         while True:
-            if ctx.interrupted:  # control
+            if ctx.interrupted:
                 ctx.state(RunState).stop_reason = "interrupted"
                 ctx.emit(LoopStopped("interrupted"))
                 return "stopped: interrupted"
@@ -69,6 +69,14 @@ class AgenticLoop(Loop):
             )
 
             if not response.tool_calls:  # natural exit — model is done
+                # Re-check guards: a final response over budget isn't a clean exit.
+                post = guards.check(ctx)
+                if post.stop:
+                    reason = f"guard: {post.reason}"
+                    ctx.state(RunState).stop_reason = reason
+                    ctx.emit(IterationCompleted(i))
+                    ctx.emit(LoopStopped(reason))
+                    return f"stopped: {post.reason}"
                 ctx.emit(IterationCompleted(i))
                 ctx.state(RunState).stop_reason = "completed"
                 ctx.emit(LoopStopped("completed"))

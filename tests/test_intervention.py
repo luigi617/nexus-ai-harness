@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 
+from core.message import Message
 from core.response import Response
 from core.spawn import SpawnState
 from harness import NexusAIHarness, Session
@@ -9,9 +10,10 @@ from harness.context import RunContext
 from harness.registry import Registry
 from plugins.interventions import InjectMessage
 from plugins.loops import AgenticLoop
+from plugins.permissions import AllowList, AutoApprove
 from protocols.intervention import Intervention
 from protocols.model import Model
-from tests.conftest import ScriptedModel, make_ctx
+from tests.conftest import RecordingTool, ScriptedModel, make_ctx
 
 
 def test_inject_message_is_an_intervention():
@@ -36,7 +38,7 @@ def test_injected_message_steers_the_next_turn():
     session.submit(InjectMessage("use the metric system"))
     h = NexusAIHarness().use(AgenticLoop()).use(Echo())
     result = h.run_sync("convert 5 miles", session=session)
-    # the injected message was appended after the user input, so it's the last
+    # The injected message was appended after the user input, so it's the last.
     assert result.output == "answering: use the metric system"
 
 
@@ -46,6 +48,26 @@ def test_interventions_are_drained_once():
     session.submit(InjectMessage("b"))
     assert len(session.take_interventions()) == 2
     assert session.take_interventions() == []  # drained
+
+
+def test_injection_lands_once_before_the_turn_and_is_not_reapplied():
+    # One injected message must appear once, land before the turn-0 call, not re-apply.
+    tc = {"name": "echo", "id": "1", "arguments": {}}
+    model = ScriptedModel(
+        Response(text="", tool_calls=[tc]),
+        Response(text="final"),
+    )
+    ctx = make_ctx(model, RecordingTool("echo"), AllowList(["echo"]), AutoApprove())
+    ctx.add_message(Message(role="user", content="hello"))
+    ctx._session.submit(InjectMessage("steer"))
+    asyncio.run(AgenticLoop().run(ctx))
+
+    # Injected exactly once into the real history
+    assert [m.content for m in ctx.history].count("steer") == 1
+    # Applied before the turn-0 model call, after the existing "hello"
+    assert [m.content for m in model.calls[0]] == ["hello", "steer"]
+    # Turn-1 model call carries no duplicate injection
+    assert [m.content for m in model.calls[1]].count("steer") == 1
 
 
 # --- interrupt propagation to subagents ----------------------------------

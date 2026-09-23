@@ -27,7 +27,8 @@ class PermissionGate:
             approved = await ctx.invoke(approver.approve, request, ctx)
             if approved:
                 return PermissionDecision.allow()
-        return PermissionDecision.deny(decision.reason or "not approved")
+        # Don't echo the ASK prompt as the denial reason; report a rejection instead.
+        return PermissionDecision.deny("not approved")
 
     @staticmethod
     def _origin(ctx: Context) -> str:

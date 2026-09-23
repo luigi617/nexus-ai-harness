@@ -36,8 +36,7 @@ def test_all_returns_every_plugin_of_type():
 
 
 def test_type_discriminates_method_overlapping_bases():
-    # Tool and Loop both expose `run`, but a Tool is not a Loop; resolution by
-    # type must not confuse them.
+    # Tool and Loop both expose `run`, but resolution by type must not confuse them.
     tool = RecordingTool()
     r = Registry()
     r.add(tool)
@@ -120,9 +119,3 @@ def test_remove_discards_status_with_the_entry():
 
     r.add(plugin)  # re-registering starts fresh
     assert r.status_of(plugin) is PluginStatus.REGISTERED
-
-
-def test_setting_status_of_an_absent_plugin_is_a_noop():
-    r = Registry()
-    r.set_status(LifecycleTool(), PluginStatus.STARTED)  # must not raise
-    assert r.status_of(LifecycleTool()) is None

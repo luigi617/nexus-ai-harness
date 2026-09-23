@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 
 from core.events import Event
-from plugins.permissions import AllowList
+from plugins.permissions import AllowList, DenyList
 from protocols.hook import Hook
 from protocols.tool import Tool
 from services.tool_runner import ToolRunner
@@ -71,8 +71,7 @@ class _ExplodingTool(Tool):
 
 
 def test_raising_tool_becomes_error_message_not_a_crash():
-    # A tool that raises must degrade to an observable tool result, not
-    # propagate out of gather and tear down the whole run.
+    # A raising tool must degrade to an observable tool result, not tear down the run.
     rec = EventRecorder()
     msg, _ = run(
         {"name": "boom", "id": "1"}, AllowList(["boom"]), rec, tools=[_ExplodingTool()]
@@ -80,3 +79,35 @@ def test_raising_tool_becomes_error_message_not_a_crash():
     assert msg.role == "tool"
     assert "error" in msg.content and "kaboom" in msg.content
     assert rec.events == ["ToolCallStarted", "ToolCallCompleted"]
+
+
+def test_late_registered_tool_runs():
+    # A tool added after construction (not via the constructor) must still run normally.
+    tool = RecordingTool("echo", "ok")
+    rec = EventRecorder()
+    ctx = make_ctx(AllowList(["echo"]), rec)
+    runner = ToolRunner()  # no tools at construction
+    runner.add(tool)
+    call = {"name": "echo", "id": "1", "arguments": {"a": 2}}
+    msg = asyncio.run(runner.run(call, ctx))
+    assert msg.content == "ok"
+    assert tool.calls == [{"a": 2}]
+    assert rec.events == ["ToolCallStarted", "ToolCallCompleted"]
+
+
+def test_call_missing_name_denied_by_allowlist():
+    # A call with no "name" defaults it to "", which AllowList([]) denies.
+    tool = RecordingTool("echo")
+    rec = EventRecorder()
+    msg, _ = run({"id": "1", "arguments": {}}, AllowList([]), rec, tools=[tool])
+    assert "denied" in msg.content
+    assert tool.calls == []
+    assert rec.events == ["ToolCallDenied"]
+
+
+def test_call_missing_name_permissive_policy_hits_unknown_tool():
+    # A permissive DenyList lets the empty name pass, but no tool exists under "".
+    rec = EventRecorder()
+    msg, _ = run({"id": "1", "arguments": {}}, DenyList([]), rec)
+    assert "unknown tool" in msg.content
+    assert rec.events == ["ToolCallDenied"]

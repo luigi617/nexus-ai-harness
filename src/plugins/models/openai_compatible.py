@@ -55,6 +55,8 @@ class OpenAICompatibleModel(BaseModel):
                     }
                 )
             elif m.role == "assistant":
+                if not m.content and not m.tool_calls:
+                    continue  # an empty assistant turn is rejected by the API
                 msg: dict[str, Any] = {
                     "role": "assistant",
                     "content": m.content or None,

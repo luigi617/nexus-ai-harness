@@ -88,7 +88,8 @@ class GeminiModel(BaseModel):
                             }
                         }
                     )
-                add_turn("model", parts)
+                if parts:  # an empty assistant turn is rejected by the API
+                    add_turn("model", parts)
 
         return "\n".join(system_parts), contents
 

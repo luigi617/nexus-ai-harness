@@ -99,8 +99,7 @@ class RunContext(Context):
         )
         result: Any = None
         error: BaseException | None = None
-        # Interceptors whose ``before`` completed; only these get an ``after`` so
-        # that a raising ``before`` never triggers an unpaired teardown.
+        # Only entered interceptors get an after, avoiding unpaired teardown.
         entered: list[Interceptor] = []
         try:
             for interceptor in interceptors:
@@ -119,6 +118,15 @@ class RunContext(Context):
             except BaseException as exc:  # keep running the remaining ones
                 after_error = after_error or exc
         if error is not None:
+            # Chain the teardown error onto the primary's context so it isn't lost.
+            if after_error is not None:
+                tail: BaseException = error
+                seen = {id(error)}
+                while tail.__context__ is not None and id(tail.__context__) not in seen:
+                    tail = tail.__context__
+                    seen.add(id(tail))
+                if tail is not after_error and tail.__context__ is None:
+                    tail.__context__ = after_error
             raise error
         if after_error is not None:
             raise after_error
@@ -138,8 +146,7 @@ class RunContext(Context):
         child_registry = Registry()
         for plugin in members:
             child_registry.add(plugin)
-        # Event subscriptions follow their owner into the child so ctx.on()
-        # observes forks like a Hook does; unowned ones are cross-cutting.
+        # Subscriptions follow their owner into the child; unowned ones cross-cut.
         for subscription in self._registry.subscriptions():
             owner = subscription.owner
             if owner is None or any(owner is member for member in members):
