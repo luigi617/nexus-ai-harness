@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from harness import NexusAIHarness
 from plugins.context_manager import SummarizingContextManager
+from plugins.evaluators import JevEvaluator
 from plugins.guards import BudgetGuard, MaxIterations, Timeout
 from plugins.hooks import CostCounter, ElapsedTime, IterationCounter
 from plugins.interventions import InjectMessage
@@ -56,6 +57,7 @@ __all__ = [
     "InProcessSpawner",
     "InjectMessage",
     "IterationCounter",
+    "JevEvaluator",
     "LLMRouter",
     "MaxIterations",
     "MiniMaxModel",

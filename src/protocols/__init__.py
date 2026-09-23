@@ -3,6 +3,7 @@ from __future__ import annotations
 from protocols.approver import Approver
 from protocols.context import Context
 from protocols.context_manager import ContextManager
+from protocols.evaluator import Evaluator
 from protocols.guard import Guard
 from protocols.hook import Hook
 from protocols.interceptor import Interceptor
@@ -16,6 +17,7 @@ __all__ = [
     "Approver",
     "Context",
     "ContextManager",
+    "Evaluator",
     "Guard",
     "Hook",
     "Interceptor",
