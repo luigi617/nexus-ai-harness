@@ -219,3 +219,7 @@ __marimo__/
 
 example/
 
+# Benchmark fetched datasets and run outputs (regenerated on demand)
+benchmarks/data/
+runs/
+

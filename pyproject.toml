@@ -22,6 +22,10 @@ dev = [
     "ruff==0.16.4",
     "mypy==2.3.1"
 ]
+# All benchmark dependencies
+benchmarks = [
+    "tau-bench @ git+https://github.com/sierra-research/tau-bench",
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -53,6 +57,7 @@ convention = "google"
 
 [tool.ruff.lint.isort]
 known-first-party = [
+    "benchmarks",
     "core",
     "graph",
     "harness",
