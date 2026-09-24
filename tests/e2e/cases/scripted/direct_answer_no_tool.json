@@ -1,0 +1,16 @@
+{
+  "name": "scripted_direct_answer_no_tool",
+  "description": "Deterministic: model answers directly with no tool call. Runs in CI.",
+  "tags": ["scripted", "smoke", "no-tool"],
+  "model": "scripted",
+  "input": "In one sentence, what is the capital of France?",
+  "scripted_responses": [
+    { "text": "The capital of France is Paris." }
+  ],
+  "expect": {
+    "no_error": true,
+    "stop_reason": "completed",
+    "tool_names": [],
+    "output_contains": ["Paris"]
+  }
+}

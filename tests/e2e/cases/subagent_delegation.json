@@ -1,0 +1,14 @@
+{
+  "name": "subagent_delegation",
+  "description": "Parent delegates a self-contained calculation to a subagent and reports its answer.",
+  "tags": ["subagent", "delegation", "tools"],
+  "harness": "subagent",
+  "input": "Delegate to a subagent this self-contained task: 'Use the calculator tool to compute 347 * 29 and report the number.' Then tell me the number the subagent returned.",
+  "expect": {
+    "no_error": true,
+    "stop_reason": "completed",
+    "tool_calls": [{ "name": "subagent" }],
+    "output_contains_any": ["10063", "10,063"],
+    "max_cost_usd": 0.15
+  }
+}

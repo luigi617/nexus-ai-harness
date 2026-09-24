@@ -1,0 +1,19 @@
+{
+  "name": "scripted_tool_calls_ordered",
+  "description": "Deterministic: two tools called across iterations; asserts the ordered subsequence path. Runs in CI.",
+  "tags": ["scripted", "tools", "multi-step"],
+  "model": "scripted",
+  "input": "First add 2 + 2 with the calculator, then echo the word done.",
+  "scripted_responses": [
+    { "tool_calls": [{ "name": "calculator", "arguments": { "expression": "2 + 2" } }] },
+    { "tool_calls": [{ "name": "echo", "arguments": { "text": "done" } }] },
+    { "text": "Calculator gave 4 and echo returned done." }
+  ],
+  "expect": {
+    "no_error": true,
+    "stop_reason": "completed",
+    "tool_calls": [{ "name": "calculator" }, { "name": "echo" }],
+    "tool_calls_ordered": true,
+    "tool_names": ["calculator", "echo"]
+  }
+}

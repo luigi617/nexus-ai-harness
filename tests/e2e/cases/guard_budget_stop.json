@@ -1,0 +1,12 @@
+{
+  "name": "guard_budget_stop",
+  "description": "A near-zero budget makes the BudgetGuard halt the loop after the first model call.",
+  "tags": ["guards", "control-flow"],
+  "harness": "tiny_budget",
+  "input": "Write a short paragraph about the history of the abacus.",
+  "expect": {
+    "no_error": true,
+    "stop_reason_contains": "guard:",
+    "max_cost_usd": 0.02
+  }
+}

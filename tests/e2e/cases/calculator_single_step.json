@@ -1,0 +1,13 @@
+{
+  "name": "calculator_single_step",
+  "description": "Model uses the calculator tool for a multiplication too big to eyeball.",
+  "tags": ["tools", "single-step"],
+  "input": "Use the calculator tool to compute 4817 * 293, then state the result.",
+  "expect": {
+    "no_error": true,
+    "stop_reason": "completed",
+    "tool_calls": [{ "name": "calculator" }],
+    "output_contains_any": ["1411381", "1,411,381"],
+    "max_cost_usd": 0.03
+  }
+}

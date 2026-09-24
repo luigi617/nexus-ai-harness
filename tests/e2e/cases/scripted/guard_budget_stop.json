@@ -1,0 +1,15 @@
+{
+  "name": "scripted_guard_budget_stop",
+  "description": "Deterministic: a response carrying cost trips the near-zero BudgetGuard. Runs in CI.",
+  "tags": ["scripted", "guards", "control-flow"],
+  "model": "scripted",
+  "harness": "tiny_budget",
+  "input": "Write a short paragraph about the history of the abacus.",
+  "scripted_responses": [
+    { "text": "The abacus is one of the oldest counting tools.", "cost": 0.01 }
+  ],
+  "expect": {
+    "no_error": true,
+    "stop_reason_contains": "guard:"
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "name": "calculator_multi_step",
+  "description": "A two-step calculation that requires more than one agent iteration.",
+  "tags": ["tools", "multi-step"],
+  "input": "Using the calculator tool: first compute 1234 + 5678, then multiply that result by 3. Report only the final number.",
+  "expect": {
+    "no_error": true,
+    "stop_reason": "completed",
+    "tool_calls": [{ "name": "calculator" }],
+    "output_contains_any": ["20736", "20,736"],
+    "max_cost_usd": 0.05
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "name": "direct_answer_no_tool",
+  "description": "General-knowledge question answered directly, no tool needed.",
+  "tags": ["smoke", "no-tool"],
+  "input": "In one sentence, what is the capital of France?",
+  "expect": {
+    "no_error": true,
+    "stop_reason": "completed",
+    "tool_names": [],
+    "output_contains": ["Paris"],
+    "max_cost_usd": 0.02
+  }
+}

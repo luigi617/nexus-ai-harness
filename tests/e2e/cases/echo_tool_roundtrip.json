@@ -1,0 +1,13 @@
+{
+  "name": "echo_tool_roundtrip",
+  "description": "Model routes a verbatim string through the echo tool and reports it back.",
+  "tags": ["tools", "single-step"],
+  "input": "Use the echo tool to echo back exactly this token: BANANA-7788. Then tell me what it returned.",
+  "expect": {
+    "no_error": true,
+    "stop_reason": "completed",
+    "tool_calls": [{ "name": "echo", "arguments_contains": { "text": "BANANA-7788" } }],
+    "output_contains": ["BANANA-7788"],
+    "max_cost_usd": 0.03
+  }
+}

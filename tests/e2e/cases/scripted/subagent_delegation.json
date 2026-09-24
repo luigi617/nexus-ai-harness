@@ -1,0 +1,22 @@
+{
+  "name": "scripted_subagent_delegation",
+  "description": "Deterministic: parent delegates a calculation to a subagent, whose internal steps must NOT surface on parent-level metrics. Runs in CI; guards the recorder-scoping fix.",
+  "tags": ["scripted", "subagent", "delegation", "tools"],
+  "model": "scripted",
+  "harness": "subagent",
+  "input": "Delegate to a subagent this self-contained task: 'compute 347 * 29 and report the number.' Then tell me the number it returned.",
+  "scripted_responses": [
+    { "tool_calls": [{ "name": "subagent", "arguments": { "task": "Use the calculator tool to compute 347 * 29 and report the number." } }] },
+    { "tool_calls": [{ "name": "calculator", "arguments": { "expression": "347 * 29" } }] },
+    { "text": "10063" },
+    { "text": "The subagent returned 10063." }
+  ],
+  "expect": {
+    "no_error": true,
+    "stop_reason": "completed",
+    "tool_calls": [{ "name": "subagent" }],
+    "tool_names": ["subagent"],
+    "max_iterations": 2,
+    "output_contains": ["10063"]
+  }
+}

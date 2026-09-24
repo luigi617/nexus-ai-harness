@@ -1,0 +1,16 @@
+{
+  "name": "scripted_guard_max_iterations_stop",
+  "description": "Deterministic: a script that always calls a tool is halted by the 1-iteration cap. Runs in CI.",
+  "tags": ["scripted", "guards", "control-flow", "tools"],
+  "model": "scripted",
+  "harness": "one_iteration",
+  "input": "Keep using the calculator tool step by step until I say stop.",
+  "scripted_responses": [
+    { "tool_calls": [{ "name": "calculator", "arguments": { "expression": "347 * 29" } }] }
+  ],
+  "expect": {
+    "no_error": true,
+    "stop_reason_contains": "iterations",
+    "tool_calls": [{ "name": "calculator" }]
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "name": "permission_denied_tool",
+  "description": "Calculator is on a DenyList; the model's call is blocked at the permission layer.",
+  "tags": ["permissions", "control-flow", "tools"],
+  "harness": "deny_calculator",
+  "input": "Use the calculator tool to compute 347 * 29 and tell me the result.",
+  "expect": {
+    "no_error": true,
+    "stop_reason": "completed",
+    "tool_denied": [{ "name": "calculator" }],
+    "max_cost_usd": 0.05
+  }
+}
