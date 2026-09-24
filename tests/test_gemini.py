@@ -122,8 +122,7 @@ def test_generate_builds_url_headers_and_wires_cost(monkeypatch):
     result = model._generate(history, [tool])
 
     assert captured["url"] == (
-        "https://generativelanguage.googleapis.com/v1beta"
-        f"/models/{mid}:generateContent"
+        f"https://generativelanguage.googleapis.com/v1beta/models/{mid}:generateContent"
     )
     assert captured["headers"]["x-goog-api-key"] == "gk-test"
 

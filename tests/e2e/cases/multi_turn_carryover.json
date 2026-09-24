@@ -1,0 +1,17 @@
+{
+  "name": "multi_turn_carryover",
+  "description": "Fact stated in turn 1 must be recalled and used with a tool in a later turn.",
+  "tags": ["multi-turn", "tools", "memory-in-context"],
+  "input": "My favorite number is 42. Please remember it for later.",
+  "user_turns": [
+    "By the way, I like the color teal.",
+    "Now, using the calculator tool, multiply my favorite number by 2 and give me the result."
+  ],
+  "expect": {
+    "no_error": true,
+    "stop_reason": "completed",
+    "tool_calls": [{ "name": "calculator" }],
+    "output_contains": ["84"],
+    "max_cost_usd": 0.05
+  }
+}

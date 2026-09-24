@@ -1,0 +1,17 @@
+{
+  "name": "scripted_echo_roundtrip",
+  "description": "Deterministic: model echoes a token through the echo tool and reports it back. Runs in CI.",
+  "tags": ["scripted", "tools", "single-step"],
+  "model": "scripted",
+  "input": "Use the echo tool to echo back exactly this token: BANANA-7788. Then tell me what it returned.",
+  "scripted_responses": [
+    { "tool_calls": [{ "name": "echo", "arguments": { "text": "BANANA-7788" } }] },
+    { "text": "The echo tool returned BANANA-7788." }
+  ],
+  "expect": {
+    "no_error": true,
+    "stop_reason": "completed",
+    "tool_calls": [{ "name": "echo", "arguments_contains": { "text": "BANANA-7788" } }],
+    "output_contains": ["BANANA-7788"]
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "name": "memory_remember_recall",
+  "description": "Store a fact with the remember tool, then retrieve it with recall on a later turn.",
+  "tags": ["memory", "tools", "multi-turn"],
+  "harness": "memory",
+  "input": "Use your 'remember' tool to store this fact for later: my project codename is FALCON-9.",
+  "user_turns": [
+    "Now use your 'recall' tool to look up my project codename, and tell me exactly what it is."
+  ],
+  "expect": {
+    "no_error": true,
+    "stop_reason": "completed",
+    "tool_calls": [{ "name": "remember" }, { "name": "recall" }],
+    "output_contains": ["FALCON-9"],
+    "max_cost_usd": 0.05
+  }
+}

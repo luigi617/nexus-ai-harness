@@ -1,0 +1,17 @@
+{
+  "name": "scripted_permission_denied_tool",
+  "description": "Deterministic: calculator is on a DenyList, so the model's call is blocked at the permission layer. Runs in CI.",
+  "tags": ["scripted", "permissions", "control-flow", "tools"],
+  "model": "scripted",
+  "harness": "deny_calculator",
+  "input": "Use the calculator tool to compute 347 * 29 and tell me the result.",
+  "scripted_responses": [
+    { "tool_calls": [{ "name": "calculator", "arguments": { "expression": "347 * 29" } }] },
+    { "text": "I could not use the calculator; it was blocked." }
+  ],
+  "expect": {
+    "no_error": true,
+    "stop_reason": "completed",
+    "tool_denied": [{ "name": "calculator" }]
+  }
+}

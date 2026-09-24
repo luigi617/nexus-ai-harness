@@ -1,0 +1,13 @@
+{
+  "name": "guard_max_iterations_stop",
+  "description": "A multi-step tool task under a 1-iteration cap is stopped by MaxIterations.",
+  "tags": ["guards", "control-flow", "tools"],
+  "harness": "one_iteration",
+  "input": "You must use the calculator tool for every step. First compute 347 * 29. Then, in a separate step, compute 512 * 64. Finally add the two results together and report the total.",
+  "expect": {
+    "no_error": true,
+    "stop_reason_contains": "iterations",
+    "tool_calls": [{ "name": "calculator" }],
+    "max_cost_usd": 0.05
+  }
+}

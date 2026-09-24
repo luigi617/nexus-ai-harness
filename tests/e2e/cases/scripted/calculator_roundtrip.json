@@ -1,0 +1,17 @@
+{
+  "name": "scripted_calculator_roundtrip",
+  "description": "Deterministic: model routes a multiplication through the calculator, then reports it. Runs in CI.",
+  "tags": ["scripted", "tools", "single-step"],
+  "model": "scripted",
+  "input": "Use the calculator tool to compute 4817 * 293, then state the result.",
+  "scripted_responses": [
+    { "tool_calls": [{ "name": "calculator", "arguments": { "expression": "4817 * 293" } }] },
+    { "text": "The result is 1411381." }
+  ],
+  "expect": {
+    "no_error": true,
+    "stop_reason": "completed",
+    "tool_calls": [{ "name": "calculator", "arguments_contains": { "expression": "4817 * 293" } }],
+    "output_contains": ["1411381"]
+  }
+}
