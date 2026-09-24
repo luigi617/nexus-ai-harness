@@ -46,7 +46,11 @@ jobs:
       - name: Create pull request
         uses: peter-evans/create-pull-request@v6
         with:
+<<<<<<< Updated upstream
           token: ${{ secrets.GITHUB_TOKEN }}
+=======
+          token: ${{ secrets.BOT_TOKEN }}
+>>>>>>> Stashed changes
           branch: bot/model-pricing-update
           delete-branch: true
           commit-message: "chore(models): refresh pricing from models.dev"
