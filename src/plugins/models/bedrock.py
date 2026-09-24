@@ -19,14 +19,40 @@ class BedrockModel(BaseModel):
     provider = "bedrock"
     # USD per 1M tokens: (input, output). Models not listed here cost 0.
     pricing: ClassVar[dict[str, tuple[float, float]]] = {
-        "us.anthropic.claude-opus-4-8": (15.0, 75.0),
-        "us.anthropic.claude-3-5-sonnet-20241022-v2:0": (3.0, 15.0),
         "us.anthropic.claude-3-5-haiku-20241022-v1:0": (0.8, 4.0),
+        "us.anthropic.claude-3-5-sonnet-20241022-v2:0": (3.0, 15.0),
+        "us.anthropic.claude-fable-5": (11.0, 55.0),
+        "us.anthropic.claude-fable-5-1": (11.0, 55.0),
+        "us.anthropic.claude-haiku-4-5-20251001-v1:0": (1.1, 5.5),
+        "us.anthropic.claude-opus-4-1-20250805-v1:0": (15.0, 75.0),
+        "us.anthropic.claude-opus-4-5-20251101-v1:0": (5.5, 27.5),
+        "us.anthropic.claude-opus-4-6-v1": (5.5, 27.5),
+        "us.anthropic.claude-opus-4-7": (5.5, 27.5),
+        "us.anthropic.claude-opus-4-8": (5.5, 27.5),
+        "us.anthropic.claude-opus-5": (5.5, 27.5),
+        "us.anthropic.claude-opus-5-5": (4.4, 22.0),
+        "us.anthropic.claude-sonnet-4-20250514-v1:0": (3.0, 15.0),
+        "us.anthropic.claude-sonnet-4-5-20250929-v1:0": (3.3, 16.5),
+        "us.anthropic.claude-sonnet-4-6": (3.3, 16.5),
+        "us.anthropic.claude-sonnet-5": (2.2, 11.0),
     }
     descriptions: ClassVar[dict[str, str]] = {
-        "us.anthropic.claude-opus-4-8": "most capable; hard reasoning, complex tasks",
-        "us.anthropic.claude-3-5-sonnet-20241022-v2:0": "balanced capability and cost",
         "us.anthropic.claude-3-5-haiku-20241022-v1:0": "fastest and cheapest; simple",
+        "us.anthropic.claude-3-5-sonnet-20241022-v2:0": "balanced capability and cost",
+        "us.anthropic.claude-fable-5": "Claude model for creative writing, analysis, a",
+        "us.anthropic.claude-fable-5-1": "Claude model for demanding reasoning and lon",
+        "us.anthropic.claude-haiku-4-5-20251001-v1:0": "Fast Claude model for responsi",
+        "us.anthropic.claude-opus-4-1-20250805-v1:0": "Flagship Claude model for deep",
+        "us.anthropic.claude-opus-4-5-20251101-v1:0": "Flagship Claude model for deep",
+        "us.anthropic.claude-opus-4-6-v1": "High-end Claude for difficult coding, plan",
+        "us.anthropic.claude-opus-4-7": "Stronger Opus tier for advanced software work",
+        "us.anthropic.claude-opus-4-8": "most capable; hard reasoning, complex tasks",
+        "us.anthropic.claude-opus-5": "Strongest Claude Opus model for coding, agents,",
+        "us.anthropic.claude-opus-5-5": "Claude model for long-running agentic coding",
+        "us.anthropic.claude-sonnet-4-20250514-v1:0": "Balanced Claude model for codin",
+        "us.anthropic.claude-sonnet-4-5-20250929-v1:0": "Balanced Claude model for cod",
+        "us.anthropic.claude-sonnet-4-6": "Claude workhorse for coding agents, careful",
+        "us.anthropic.claude-sonnet-5": "Everyday Claude agent model for coding, plann",
     }
 
     def __init__(
