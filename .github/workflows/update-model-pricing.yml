@@ -1,0 +1,57 @@
+name: Update Model Pricing
+
+# Refreshes per-provider model pricing/descriptions from models.dev and opens a
+# PR with the diff. Runs weekly and on demand.
+on:
+  schedule:
+    - cron: "0 7 * * 1" # Mondays 07:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: update-model-pricing
+  cancel-in-progress: true
+
+jobs:
+  update:
+    name: Refresh pricing
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup
+        with:
+          python-version: "3.13"
+
+      - name: Refresh pricing from models.dev
+        run: |
+          python scripts/update_model_pricing.py --summary pricing-summary.md
+
+      - name: Normalize formatting
+        run: |
+          ruff check --fix src/plugins/models/
+          ruff format src/plugins/models/
+
+      - name: Sanity-check backends still lint, type-check, and import
+        run: |
+          ruff check src/plugins/models/
+          mypy src/plugins/models/
+          python -c "import importlib; [importlib.import_module(f'plugins.models.{m}') for m in ['openai','anthropic','gemini','bedrock','groq','deepseek','xai','minimax','qwen','glm']]"
+        env:
+          PYTHONPATH: src
+
+      - name: Create pull request
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: bot/model-pricing-update
+          delete-branch: true
+          commit-message: "chore(models): refresh pricing from models.dev"
+          title: "chore(models): refresh model pricing"
+          body-path: pricing-summary.md
+          labels: dependencies, automated
+          add-paths: |
+            src/plugins/models/*.py
