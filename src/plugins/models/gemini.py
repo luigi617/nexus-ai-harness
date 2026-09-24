@@ -17,8 +17,6 @@ class GeminiModel(BaseModel):
     api_key_env = "GEMINI_API_KEY"
     # USD per 1M tokens: (input, output). Indicative — verify current pricing.
     pricing: ClassVar[dict[str, tuple[float, float]]] = {
-        "gemini-1.5-flash": (0.075, 0.3),
-        "gemini-1.5-pro": (1.25, 5.0),
         "gemini-2.5-computer-use-preview-10-2025": (1.25, 10.0),
         "gemini-2.5-flash": (0.3, 2.5),
         "gemini-2.5-flash-lite": (0.1, 0.4),
@@ -37,8 +35,6 @@ class GeminiModel(BaseModel):
         "gemini-flash-lite-latest": (0.3, 2.5),
     }
     descriptions: ClassVar[dict[str, str]] = {
-        "gemini-1.5-flash": "fast and cheap; simple tasks",
-        "gemini-1.5-pro": "capable general-purpose model",
         "gemini-2.5-computer-use-preview-10-2025": "Specialized Gemini 2.5 model for b",
         "gemini-2.5-flash": "Fast Gemini workhorse for multimodal apps where latency a",
         "gemini-2.5-flash-lite": "Lean Gemini 2.5 lane for cheap multimodal traffic an",

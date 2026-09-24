@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ast
 import importlib.util
+import json
 import sys
 from pathlib import Path
 
@@ -68,15 +69,20 @@ def test_collect_skips_models_without_full_cost():
     assert prices == {}
 
 
-# --- description line fitting ---------------------------------------------
+# --- description rendering ------------------------------------------------
 
 
-def test_fit_desc_keeps_line_within_limit():
-    long_id = "us.anthropic.claude-some-very-long-model-identifier-v1:0"
-    desc = "a very long marketing description " * 5
-    fitted = ump._fit_desc(long_id, desc)
-    line = f'        "{long_id}": "{fitted}",'
-    assert len(line) <= ump.LINE_LIMIT
+def test_description_kept_full_and_noqa_only_when_long():
+    long_desc = "a very long marketing description that clearly exceeds the limit " * 2
+    line = ump._desc_line("m", long_desc)
+    assert json.dumps(long_desc) in line  # full text preserved, not truncated
+    assert line.endswith("# noqa: E501")
+
+
+def test_description_short_line_has_no_noqa():
+    line = ump._desc_line("m", "short")
+    assert "noqa" not in line
+    assert line == '        "m": "short",'
 
 
 # --- AST rewrite ----------------------------------------------------------

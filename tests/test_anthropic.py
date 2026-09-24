@@ -107,9 +107,10 @@ def test_parse_extracts_text_tool_calls_and_usage():
 
 
 def test_cost_uses_pricing_table():
-    m = AnthropicModel(model="claude-3-5-haiku-20241022")
+    mid, (pin, pout) = next(iter(AnthropicModel.pricing.items()))
+    m = AnthropicModel(model=mid)
     cost = m._cost({"input_tokens": 1_000_000, "output_tokens": 1_000_000})
-    assert abs(cost - (0.8 + 4.0)) < 1e-9
+    assert abs(cost - (pin + pout)) < 1e-9
 
 
 def test_cost_zero_for_unknown_model():
@@ -138,8 +139,9 @@ def test_generate_builds_request_headers_and_wires_cost(monkeypatch):
     }
     captured = _patch_post_json(monkeypatch, canned)
 
+    mid, (pin, pout) = next(iter(AnthropicModel.pricing.items()))
     model = AnthropicModel(
-        model="claude-3-5-haiku-20241022",
+        model=mid,
         api_key="sk-test",
         temperature=0.5,
     )
@@ -159,15 +161,15 @@ def test_generate_builds_request_headers_and_wires_cost(monkeypatch):
     assert headers["x-api-key"] == "sk-test"
 
     payload = captured["payload"]
-    assert payload["model"] == "claude-3-5-haiku-20241022"
+    assert payload["model"] == mid
     assert payload["max_tokens"] == 1024
     assert payload["messages"][0]["role"] == "user"
     assert payload["system"] == "sys"  # present because a system msg exists
     assert payload["temperature"] == 0.5  # **self.params merged in
     assert payload["tools"] == [AnthropicModel._tool_spec(tool)]
 
-    # cost = (1M*0.8 + 1M*4.0)/1M for the haiku pricing row
-    assert abs(result.cost - (0.8 + 4.0)) < 1e-9
+    # cost = 1M*input + 1M*output for the selected pricing row
+    assert abs(result.cost - (pin + pout)) < 1e-9
     assert result.text == "hi"
 
 

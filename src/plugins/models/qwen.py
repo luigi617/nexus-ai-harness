@@ -11,6 +11,10 @@ class QwenModel(OpenAICompatibleModel):
     base_url = "https://dashscope-intl.aliyuncs.com/compatible-mode/v1"
     api_key_env = "DASHSCOPE_API_KEY"
     pricing: ClassVar[dict[str, tuple[float, float]]] = {
+        "deepseek-v4-flash-0731": (0.2, 0.4),
+        "glm-5.2": (1.4, 4.4),
+        "kimi-k3": (3.0, 15.0),
+        "qvq-max": (1.2, 4.8),
         "qwen-flash": (0.05, 0.4),
         "qwen-max": (1.6, 6.4),
         "qwen-plus": (0.4, 1.2),
@@ -52,8 +56,13 @@ class QwenModel(OpenAICompatibleModel):
         "qwen3.7-plus": (0.5, 3.0),
         "qwen3.8-flash": (0.15, 0.47),
         "qwen3.8-max": (2.0, 6.0),
+        "qwq-plus": (0.8, 2.4),
     }
     descriptions: ClassVar[dict[str, str]] = {
+        "deepseek-v4-flash-0731": "Official DeepSeek V4 Flash release with enhanced agentic capabilities and integrated DSpark speculative decoding",  # noqa: E501
+        "glm-5.2": "Open flagship GLM for long-horizon coding agents and million-token context work",  # noqa: E501
+        "kimi-k3": "Multimodal Kimi model with 1M context and toggleable max-effort thinking for long-horizon agent work",  # noqa: E501
+        "qvq-max": "Qwen vision-language model for visual reasoning, documents, and agent tasks",  # noqa: E501
         "qwen-flash": "Efficient Qwen model for fast chat, extraction, and high-volume",
         "qwen-max": "Flagship Qwen model for complex reasoning, coding, and agentic wo",
         "qwen-plus": "Qwen instruction model for multilingual chat, reasoning, and too",
@@ -95,4 +104,5 @@ class QwenModel(OpenAICompatibleModel):
         "qwen3.7-plus": "Multimodal Qwen workhorse for long-context agents, visual inp",
         "qwen3.8-flash": "Qwen vision-language model for visual reasoning, documents,",
         "qwen3.8-max": "2.4-trillion-parameter MoE flagship for coding, professional w",
+        "qwq-plus": "Qwen reasoning model for deliberate problem solving, math, and coding",  # noqa: E501
     }

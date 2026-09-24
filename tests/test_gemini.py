@@ -88,9 +88,10 @@ def test_parse_extracts_text_tool_calls_and_usage():
 
 
 def test_cost_uses_pricing_table():
-    m = GeminiModel(model="gemini-1.5-flash")
+    mid, (pin, pout) = next(iter(GeminiModel.pricing.items()))
+    m = GeminiModel(model=mid)
     cost = m._cost({"input_tokens": 1_000_000, "output_tokens": 1_000_000})
-    assert abs(cost - (0.075 + 0.3)) < 1e-9
+    assert abs(cost - (pin + pout)) < 1e-9
 
 
 def test_cost_zero_for_unknown_model():
@@ -111,7 +112,8 @@ def test_generate_builds_url_headers_and_wires_cost(monkeypatch):
     }
     captured = _patch_post_json(monkeypatch, canned)
 
-    model = GeminiModel(model="gemini-1.5-flash", api_key="gk-test", topP=0.9)
+    mid, (pin, pout) = next(iter(GeminiModel.pricing.items()))
+    model = GeminiModel(model=mid, api_key="gk-test", topP=0.9)
     history = [
         Message(role="system", content="sys"),
         Message(role="user", content="hi"),
@@ -121,7 +123,7 @@ def test_generate_builds_url_headers_and_wires_cost(monkeypatch):
 
     assert captured["url"] == (
         "https://generativelanguage.googleapis.com/v1beta"
-        "/models/gemini-1.5-flash:generateContent"
+        f"/models/{mid}:generateContent"
     )
     assert captured["headers"]["x-goog-api-key"] == "gk-test"
 
@@ -133,7 +135,7 @@ def test_generate_builds_url_headers_and_wires_cost(monkeypatch):
     assert payload["generationConfig"]["maxOutputTokens"] == 1024
     assert payload["generationConfig"]["topP"] == 0.9  # **self.params merged
 
-    assert abs(result.cost - (0.075 + 0.3)) < 1e-9
+    assert abs(result.cost - (pin + pout)) < 1e-9
 
 
 def test_generate_omits_api_key_system_and_tools_when_absent(monkeypatch):

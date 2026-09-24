@@ -19,8 +19,6 @@ class AnthropicModel(BaseModel):
     api_key_env = "ANTHROPIC_API_KEY"
     # USD per 1M tokens: (input, output). Indicative — verify current pricing.
     pricing: ClassVar[dict[str, tuple[float, float]]] = {
-        "claude-3-5-haiku-20241022": (0.8, 4.0),
-        "claude-3-5-sonnet-20241022": (3.0, 15.0),
         "claude-fable-5": (10.0, 50.0),
         "claude-fable-5-1": (10.0, 50.0),
         "claude-haiku-4-5": (1.0, 5.0),
@@ -38,8 +36,6 @@ class AnthropicModel(BaseModel):
         "claude-sonnet-5": (2.0, 10.0),
     }
     descriptions: ClassVar[dict[str, str]] = {
-        "claude-3-5-haiku-20241022": "fastest and cheapest; simple tasks",
-        "claude-3-5-sonnet-20241022": "balanced capability and cost",
         "claude-fable-5": "Claude model for creative writing, analysis, and controlled",
         "claude-fable-5-1": "Claude model for demanding reasoning and long-horizon age",
         "claude-haiku-4-5": "Fast Claude lane for lightweight agents, office tasks, an",

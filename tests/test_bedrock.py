@@ -103,9 +103,10 @@ def test_parse_extracts_text_tool_calls_and_usage():
 
 
 def test_cost_uses_pricing_table():
-    p = BedrockModel(model="us.anthropic.claude-3-5-haiku-20241022-v1:0")
+    mid, (pin, pout) = next(iter(BedrockModel.pricing.items()))
+    p = BedrockModel(model=mid)
     cost = p._cost({"input_tokens": 1_000_000, "output_tokens": 1_000_000})
-    assert abs(cost - (0.8 + 4.0)) < 1e-9  # $/1M in + $/1M out
+    assert abs(cost - (pin + pout)) < 1e-9  # $/1M in + $/1M out
 
 
 def test_cost_zero_for_unknown_model():
@@ -196,9 +197,8 @@ def test_generate_builds_converse_kwargs_and_wires_cost(monkeypatch):
     }
     client = _fake_converse_client(monkeypatch, canned)
 
-    model = BedrockModel(
-        model="us.anthropic.claude-3-5-haiku-20241022-v1:0", region="us-east-1"
-    )
+    mid, (pin, pout) = next(iter(BedrockModel.pricing.items()))
+    model = BedrockModel(model=mid, region="us-east-1")
     history = [
         Message(role="system", content="sys"),
         Message(role="user", content="hi"),
@@ -207,13 +207,13 @@ def test_generate_builds_converse_kwargs_and_wires_cost(monkeypatch):
     result = model._generate(history, [tool])
 
     kwargs = client.converse.call_args.kwargs
-    assert kwargs["modelId"] == "us.anthropic.claude-3-5-haiku-20241022-v1:0"
+    assert kwargs["modelId"] == mid
     assert kwargs["inferenceConfig"]["maxTokens"] == 1024
     assert kwargs["system"] == [{"text": "sys"}]  # present: system msg exists
     assert kwargs["toolConfig"] == {
         "tools": [BedrockModel._tool_spec(tool)]
     }  # present: tools given
-    assert abs(result.cost - (0.8 + 4.0)) < 1e-9
+    assert abs(result.cost - (pin + pout)) < 1e-9
 
 
 def test_generate_omits_system_and_toolconfig_when_absent(monkeypatch):

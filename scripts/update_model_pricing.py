@@ -33,20 +33,20 @@ class ProviderSpec:
     id_prefix: str = ""
 
 
+# Every backend takes all chat models its models.dev feed lists. Bedrock, Gemini,
+# and the dashscope-hosted Qwen feed each carry multiple families and regions —
+# ``id_prefix`` stays available for future narrowing but is intentionally unset.
 SPECS = [
     ProviderSpec("openai", "OpenAIModel", "openai"),
     ProviderSpec("anthropic", "AnthropicModel", "anthropic"),
-    ProviderSpec("gemini", "GeminiModel", "google", id_prefix="gemini"),
+    ProviderSpec("gemini", "GeminiModel", "google"),
     ProviderSpec("groq", "GroqModel", "groq"),
     ProviderSpec("deepseek", "DeepSeekModel", "deepseek"),
     ProviderSpec("xai", "XAIModel", "xai"),
     ProviderSpec("minimax", "MiniMaxModel", "minimax"),
-    ProviderSpec("qwen", "QwenModel", "alibaba", id_prefix="qwen"),
-    ProviderSpec("glm", "GLMModel", "zhipuai", id_prefix="glm"),
-    # Bedrock lists many families; scope to the region-profiled Anthropic ids.
-    ProviderSpec(
-        "bedrock", "BedrockModel", "amazon-bedrock", id_prefix="us.anthropic."
-    ),
+    ProviderSpec("qwen", "QwenModel", "alibaba"),
+    ProviderSpec("glm", "GLMModel", "zhipuai"),
+    ProviderSpec("bedrock", "BedrockModel", "amazon-bedrock"),
 ]
 
 
@@ -57,13 +57,13 @@ class ProviderChanges:
     provider: str
     added: list[str] = field(default_factory=list)
     updated: list[tuple[str, tuple, tuple]] = field(default_factory=list)
-    kept_unlisted: list[str] = field(default_factory=list)
+    removed: list[str] = field(default_factory=list)
     skipped_reason: str = ""
 
     @property
     def touched(self) -> bool:
-        """Whether the provider gained or repriced any models."""
-        return bool(self.added or self.updated)
+        """Whether the provider gained, repriced, or dropped any models."""
+        return bool(self.added or self.updated or self.removed)
 
 
 # --- source parsing -------------------------------------------------------
@@ -187,20 +187,18 @@ def _render_pricing(d: dict) -> list[str]:
     return _render("pricing", "ClassVar[dict[str, tuple[float, float]]]", items)
 
 
-def _fit_desc(model_id: str, desc: str) -> str:
-    """Trim a description so its rendered line stays within the line limit."""
-    budget = LINE_LIMIT - len(f"        {json.dumps(model_id)}: ") - len(",")
-    trimmed = desc
-    while trimmed and len(json.dumps(trimmed)) > budget:
-        trimmed = trimmed[:-1].rstrip()
-    return trimmed
+def _desc_line(model_id: str, desc: str) -> str:
+    """Render one description entry, keeping the full text.
+
+    Descriptions come verbatim from the source and can exceed the line limit;
+    tag only the over-long lines with ``noqa`` rather than truncating them.
+    """
+    line = f"        {json.dumps(model_id)}: {json.dumps(desc)},"
+    return f"{line}  # noqa: E501" if len(line) > LINE_LIMIT else line
 
 
 def _render_descriptions(d: dict) -> list[str]:
-    items = [
-        f"        {json.dumps(k)}: {json.dumps(_fit_desc(k, v))},"
-        for k, v in sorted(d.items())
-    ]
+    items = [_desc_line(k, v) for k, v in sorted(d.items())]
     return _render("descriptions", "ClassVar[dict[str, str]]", items)
 
 
@@ -265,19 +263,23 @@ def process(spec: ProviderSpec, source: dict, *, apply: bool) -> ProviderChanges
 
     cur_pricing, cur_desc = _current_dicts(path, spec.class_name)
 
-    new_pricing = dict(cur_pricing)
+    # Replace, don't union: the backend lists exactly the models the source
+    # currently offers, so entries the source has dropped (stale/unusable) are
+    # removed rather than lingering.
     for mid, price in prices.items():
         if mid not in cur_pricing:
             changes.added.append(mid)
         elif cur_pricing[mid] != price:
             changes.updated.append((mid, tuple(cur_pricing[mid]), price))
-        new_pricing[mid] = price
-    changes.kept_unlisted = [m for m in cur_pricing if m not in prices]
+    changes.removed = [m for m in cur_pricing if m not in prices]
 
-    new_desc = dict(cur_desc)
-    for mid in prices:  # preserve hand-written descriptions; only fill gaps
-        if mid not in new_desc and mid in blurbs:
-            new_desc[mid] = blurbs[mid]
+    new_pricing = dict(prices)
+    # Keep a hand-written description if present, else the source blurb.
+    new_desc = {
+        mid: cur_desc.get(mid) or blurbs.get(mid, "")
+        for mid in prices
+        if cur_desc.get(mid) or blurbs.get(mid)
+    }
 
     if apply and changes.touched:
         _rewrite_dict(path, spec.class_name, "pricing", _render_pricing(new_pricing))
@@ -300,15 +302,15 @@ def render_report(results: list[ProviderChanges]) -> str:
             continue
         any_change = True
         lines.append(
-            f"- **{r.provider}**: +{len(r.added)} added, {len(r.updated)} repriced"
+            f"- **{r.provider}**: +{len(r.added)} added, "
+            f"{len(r.updated)} repriced, -{len(r.removed)} removed"
         )
         for mid in sorted(r.added):
             lines.append(f"    - add `{mid}`")
         for mid, old, new in sorted(r.updated):
             lines.append(f"    - `{mid}` {old} → {new}")
-        if r.kept_unlisted:
-            kept = ", ".join(f"`{m}`" for m in sorted(r.kept_unlisted))
-            lines.append(f"    - kept (not in source): {kept}")
+        for mid in sorted(r.removed):
+            lines.append(f"    - remove `{mid}` (no longer in source)")
     if not any_change:
         lines.append("")
         lines.append("_No pricing changes._")
