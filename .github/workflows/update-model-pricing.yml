@@ -49,8 +49,8 @@ jobs:
           token: ${{ secrets.BOT_TOKEN }}
           branch: bot/model-pricing-update
           delete-branch: true
-          commit-message: "chore(models): refresh pricing from models.dev"
-          title: "chore(models): refresh model pricing"
+          commit-message: "Refresh pricing from models.dev"
+          title: "Refresh model pricing"
           body-path: pricing-summary.md
           labels: dependencies, automated
           add-paths: |
