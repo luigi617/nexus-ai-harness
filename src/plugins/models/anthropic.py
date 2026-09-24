@@ -19,12 +19,42 @@ class AnthropicModel(BaseModel):
     api_key_env = "ANTHROPIC_API_KEY"
     # USD per 1M tokens: (input, output). Indicative — verify current pricing.
     pricing: ClassVar[dict[str, tuple[float, float]]] = {
-        "claude-3-5-sonnet-20241022": (3.0, 15.0),
         "claude-3-5-haiku-20241022": (0.8, 4.0),
+        "claude-3-5-sonnet-20241022": (3.0, 15.0),
+        "claude-fable-5": (10.0, 50.0),
+        "claude-fable-5-1": (10.0, 50.0),
+        "claude-haiku-4-5": (1.0, 5.0),
+        "claude-haiku-4-5-20251001": (1.0, 5.0),
+        "claude-opus-4-5": (5.0, 25.0),
+        "claude-opus-4-5-20251101": (5.0, 25.0),
+        "claude-opus-4-6": (5.0, 25.0),
+        "claude-opus-4-7": (5.0, 25.0),
+        "claude-opus-4-8": (5.0, 25.0),
+        "claude-opus-5": (5.0, 25.0),
+        "claude-opus-5-5": (4.0, 20.0),
+        "claude-sonnet-4-5": (3.0, 15.0),
+        "claude-sonnet-4-5-20250929": (3.0, 15.0),
+        "claude-sonnet-4-6": (3.0, 15.0),
+        "claude-sonnet-5": (2.0, 10.0),
     }
     descriptions: ClassVar[dict[str, str]] = {
-        "claude-3-5-sonnet-20241022": "balanced capability and cost",
         "claude-3-5-haiku-20241022": "fastest and cheapest; simple tasks",
+        "claude-3-5-sonnet-20241022": "balanced capability and cost",
+        "claude-fable-5": "Claude model for creative writing, analysis, and controlled",
+        "claude-fable-5-1": "Claude model for demanding reasoning and long-horizon age",
+        "claude-haiku-4-5": "Fast Claude lane for lightweight agents, office tasks, an",
+        "claude-haiku-4-5-20251001": "Fast Claude model for responsive assistance, cla",
+        "claude-opus-4-5": "Flagship Claude model for deep reasoning, coding, and long",
+        "claude-opus-4-5-20251101": "Flagship Claude model for deep reasoning, coding,",
+        "claude-opus-4-6": "High-end Claude for difficult coding, planning, and slower",
+        "claude-opus-4-7": "Stronger Opus tier for advanced software work and high-sta",
+        "claude-opus-4-8": "Top Claude Opus tier for the hardest reasoning, coding, an",
+        "claude-opus-5": "Strongest Claude Opus model for coding, agents, and professi",
+        "claude-opus-5-5": "Claude model for long-running agentic coding and knowledge",
+        "claude-sonnet-4-5": "Balanced Claude model for coding, analysis, agent workfl",
+        "claude-sonnet-4-5-20250929": "Balanced Claude model for coding, analysis, age",
+        "claude-sonnet-4-6": "Claude workhorse for coding agents, careful analysis, an",
+        "claude-sonnet-5": "Everyday Claude agent model for coding, planning, browsing",
     }
 
     def _generate(self, history: list[Message], tools: list[Tool]) -> Response:
