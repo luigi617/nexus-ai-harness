@@ -153,6 +153,42 @@ def test_runner_drives_k_attempts_and_grades():
     assert report.pass_hat_k == 1.0
 
 
+def test_runner_tears_down_episode_lifecycle_after_grading():
+    # A per-task environment modeled as a Lifecycle plugin must be released after
+    # the attempt: the runner stops the harness, so its stop() runs exactly once.
+    from protocols.lifecycle import Lifecycle
+    from protocols.plugin import Plugin
+
+    events: list[str] = []
+
+    class _Env(Plugin, Lifecycle):
+        async def start(self, ctx) -> None:
+            events.append("start")
+
+        async def stop(self) -> None:
+            events.append("stop")
+
+    class _EnvBenchmark(Benchmark):
+        name = "_env"
+        description = "test double"
+
+        def load_tasks(self, *, limit=None):
+            return [Task(task_id="e1", prompt="hi")]
+
+        def build_harness(self, task, model, session):
+            harness = NexusAIHarness().use(ChatLoop()).use(model).use(_Env())
+            return Episode(harness, task.prompt)
+
+        def grade(self, task, result: RunResult) -> Score:
+            # Grading runs before teardown, so the env is still started here.
+            return Score(passed="stop" not in events)
+
+    model = ScriptedModel(Response(text="ok"))
+    report = asyncio.run(Runner(_EnvBenchmark(), model, k=1).run())
+    assert report.pass_at_1 == 1.0  # graded before teardown
+    assert events == ["start", "stop"]  # env set up once and released once
+
+
 def test_runner_isolates_grader_errors():
     model = ScriptedModel(Response(text="X"))
     report = asyncio.run(Runner(_EchoBenchmark(fail_grade=True), model, k=1).run())
@@ -429,8 +465,16 @@ def test_build_model_unknown_provider_raises():
 
 def test_suites_are_registered():
     names = registered_benchmarks()
-    assert "bfcl" in names
-    assert "tau-bench" in names
+    expected = {
+        "bfcl",
+        "tau-bench",
+        "humaneval",
+        "gpqa",
+        "gaia",
+        "tau2-bench",
+        "swe-bench",
+    }
+    assert expected <= set(names)
     assert get_benchmark("bfcl").name == "bfcl"
     with pytest.raises(KeyError):
         get_benchmark("does-not-exist")

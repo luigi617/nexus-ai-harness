@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import inspect
 import json
 import time
@@ -70,8 +71,13 @@ class Runner:
         async with self._sem:
             start = time.monotonic()
             session = Session()
+            episode: Episode | None = None
             try:
-                episode = self.benchmark.build_harness(task, self.model, session)
+                # Off the event loop: per-task setup (repo checkout, dataset
+                # download, container start) may block; keep other attempts live.
+                episode = await asyncio.to_thread(
+                    self.benchmark.build_harness, task, self.model, session
+                )
                 episode.harness.use(MetricsCollector())
                 # NOTE: wait_for cancels only the awaiting coroutine. A model
                 # call offloaded to a worker thread (sync backends) keeps running
@@ -97,8 +103,22 @@ class Runner:
                     metrics=read_metrics(session, seconds=time.monotonic() - start),
                     error=traceback.format_exc(limit=4),
                 )
+            finally:
+                # Release the episode's lifecycle plugins (a benchmark models a
+                # per-task environment as a Lifecycle whose stop() tears down its
+                # checkout/container). Grading has already run, so the env was
+                # alive when needed. Best-effort: cleanup must not sink the result.
+                await self._teardown(episode)
             await self._record(attempt)
             return attempt
+
+    @staticmethod
+    async def _teardown(episode: Episode | None) -> None:
+        """Stop the episode's harness, releasing its lifecycle plugins."""
+        if episode is None:  # build_harness failed before returning an episode
+            return
+        with contextlib.suppress(Exception):
+            await episode.harness.stop()
 
     async def _drive(self, episode: Episode, session: Session) -> RunResult:
         """Drive one episode to completion and return the final ``RunResult``.

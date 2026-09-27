@@ -8,6 +8,8 @@ import tempfile
 from collections.abc import Iterable
 from pathlib import Path
 
+from protocols.context import Context
+from protocols.lifecycle import Lifecycle
 from protocols.sandbox import Sandbox, SandboxResult, SandboxViolation
 
 # Exit code used when a command is killed for exceeding its timeout, matching
@@ -15,7 +17,7 @@ from protocols.sandbox import Sandbox, SandboxResult, SandboxViolation
 _TIMEOUT_RETURNCODE = 124
 
 
-class WorkspaceSandbox(Sandbox):
+class WorkspaceSandbox(Sandbox, Lifecycle):
     """A :class:`Sandbox` confined to a single workspace root directory.
 
     Paths are resolved and rejected if they escape the root (symlinks included);
@@ -38,6 +40,10 @@ class WorkspaceSandbox(Sandbox):
       through wrapper interpreters such as ``bash -c``/``python -c``.
     * Subprocesses are confined via :meth:`run_command`; the ``resolve_path``
       check applies to the filesystem tools, not to arbitrary shell argv.
+
+    It is a :class:`~protocols.lifecycle.Lifecycle`: the private scratch dir it
+    exposes as ``$TMPDIR`` is removed when the harness stops, so repeated tasks
+    (e.g. a benchmark run) don't leak temp directories.
 
     Attributes:
         allow_network: Whether the sandboxed process may reach the network.
@@ -77,6 +83,14 @@ class WorkspaceSandbox(Sandbox):
     def root(self) -> Path:
         """The resolved confinement root directory."""
         return self._root
+
+    async def start(self, ctx: Context) -> None:
+        """Recreate the private scratch dir, so the sandbox is restart-safe."""
+        self._tmpdir.mkdir(parents=True, exist_ok=True)
+
+    async def stop(self) -> None:
+        """Remove the private scratch dir the sandbox handed out as ``$TMPDIR``."""
+        shutil.rmtree(self._tmpdir, ignore_errors=True)
 
     def resolve_path(self, path: str) -> Path:
         """Resolve ``path`` under the root, rejecting anything that escapes it.

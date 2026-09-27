@@ -59,6 +59,13 @@ class Benchmark(ABC):
         ``None``. This keeps the production loop under test and layers the
         user simulation outside it. ``session`` is passed in so the driver
         callback and any tools can share the same typed run state.
+
+        Model a per-task environment that needs cleanup (a repo checkout, a
+        downloaded fixture, a container) as a :class:`~protocols.lifecycle.Lifecycle`
+        plugin: the runner stops the harness after grading, so releasing the
+        environment belongs in that plugin's ``stop()``. Setup that must exist
+        before the tools initialize (e.g. the directory a sandbox is rooted at)
+        may run here; this method is called off the event loop, so it may block.
         """
 
     @abstractmethod

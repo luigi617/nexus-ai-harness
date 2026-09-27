@@ -194,6 +194,22 @@ def test_profile_allows_writes_to_tmpdir(tmp_path):
     assert sandbox._sbpl(sandbox._tmpdir) in profile
 
 
+def test_lifecycle_stop_removes_scratch_dir(tmp_path):
+    import asyncio
+
+    from protocols.lifecycle import Lifecycle
+
+    sandbox = WorkspaceSandbox(tmp_path)
+    assert isinstance(sandbox, Lifecycle)
+    scratch = sandbox._tmpdir
+    assert scratch.is_dir()
+    asyncio.run(sandbox.stop())
+    assert not scratch.exists()
+    # start() is restart-safe: it recreates the scratch dir.
+    asyncio.run(sandbox.start(None))
+    assert scratch.is_dir()
+
+
 @pytest.mark.skipif(sys.platform != "darwin", reason="macOS sandbox-exec only")
 def test_run_command_can_write_to_tmpdir_on_macos(tmp_path):
     # A subprocess that follows $TMPDIR must be able to write there under the

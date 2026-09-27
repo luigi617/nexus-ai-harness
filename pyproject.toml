@@ -21,12 +21,15 @@ dev = [
     "pytest==9.1.1",
     "ruff==0.16.4",
     "mypy==2.3.1",
-    # CI installs .[dev] and importing `benchmarks` pulls in the tau-bench suite.
     "nexus-ai-harness[benchmarks]",
 ]
-# All benchmark dependencies
+# Every benchmark dependency.
 benchmarks = [
     "tau-bench @ git+https://github.com/sierra-research/tau-bench",
+    "tau2 @ git+https://github.com/sierra-research/tau2-bench",
+    "datasets",
+    "swebench",
+    "docker",
 ]
 
 [tool.setuptools.packages.find]
