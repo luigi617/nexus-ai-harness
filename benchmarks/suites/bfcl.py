@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import os
 import re
 import urllib.request
 from dataclasses import dataclass, field
@@ -9,6 +8,7 @@ from pathlib import Path
 from typing import Any, ClassVar
 
 from benchmarks.core.benchmark import Benchmark, Episode
+from benchmarks.core.config import BenchmarkConfig
 from benchmarks.core.registry import register
 from benchmarks.core.task import Score, Task
 from core.events import Event, ResponseReceived
@@ -21,7 +21,7 @@ from protocols.hook import Hook
 from protocols.model import Model
 from protocols.tool import Tool
 
-DEFAULT_CATEGORIES = ("simple", "multiple", "parallel", "parallel_multiple")
+DEFAULT_CATEGORIES = ["simple", "multiple", "parallel", "parallel_multiple"]
 # Category -> upstream file stem. ``simple`` maps to the Python split; the Java
 # and JavaScript splits are out of scope for this AST checker.
 _CATEGORY_FILE = {
@@ -31,19 +31,32 @@ _CATEGORY_FILE = {
     "parallel_multiple": "parallel_multiple",
     "irrelevance": "irrelevance",  # no ground truth: passing means calling nothing
 }
-_VERSION = os.getenv("BFCL_VERSION", "BFCL_v4")
 _CACHE_DIR = Path(__file__).resolve().parent.parent / "data" / "bfcl"
 _GORILLA = "https://raw.githubusercontent.com/ShishirPatil/gorilla/main"
-# Upstream has moved the data dir across versions; try known layouts in order.
-_RAW_BASES = tuple(
-    base
-    for base in (
-        os.getenv("BFCL_RAW_BASE"),
-        f"{_GORILLA}/berkeley-function-call-leaderboard/bfcl_eval/data",
-        f"{_GORILLA}/berkeley-function-call-leaderboard/data",
-    )
-    if base
+# Upstream data-dir layouts, tried in order until one serves the file.
+_DEFAULT_RAW_BASES: tuple[str, ...] = (
+    f"{_GORILLA}/berkeley-function-call-leaderboard/bfcl_eval/data",
+    f"{_GORILLA}/berkeley-function-call-leaderboard/data",
 )
+
+
+@dataclass
+class BFCLConfig(BenchmarkConfig):
+    """BFCL knobs.
+
+    Attributes:
+        categories: Which BFCL categories to score.
+        version: The BFCL dataset version (file stem prefix upstream).
+        raw_base: An extra dataset URL base tried before the built-in ones.
+        data_dir: When set, read from this local gorilla checkout (offline).
+    """
+
+    categories: list[str] = field(default_factory=lambda: list(DEFAULT_CATEGORIES))
+    version: str = "BFCL_v4"
+    raw_base: str | None = None
+    data_dir: str | None = None
+
+
 # BFCL uses dotted function names (e.g. ``math.factorial``), but every model
 # backend (Bedrock/OpenAI/Anthropic) requires tool names to match this pattern,
 # so sanitize before registering and match the sanitized form when grading.
@@ -99,14 +112,13 @@ class _FunctionSpecTool(Tool):
 class BFCL(Benchmark):
     name = "bfcl"
     description = "Berkeley Function-Calling Leaderboard (single-turn AST categories)"
-
-    def __init__(self, categories: tuple[str, ...] = DEFAULT_CATEGORIES) -> None:
-        self.categories = categories
+    config_type = BFCLConfig
 
     def load_tasks(self, *, limit: int | None = None) -> list[Task]:
         tasks: list[Task] = []
-        n_cats = len(self.categories)
-        for idx, category in enumerate(self.categories):
+        categories = self.config.categories
+        n_cats = len(categories)
+        for idx, category in enumerate(categories):
             # Distribute ``limit`` across categories, handing the remainder to
             # the earliest categories, so the total fills to exactly ``limit``
             # (data permitting) instead of floor-dividing and under-filling.
@@ -117,14 +129,17 @@ class BFCL(Benchmark):
             )
             stem = _CATEGORY_FILE.get(category, category)
             irrelevance = category == "irrelevance"
-            questions = _load_jsonl(f"{_VERSION}_{stem}.json")
+            questions = _load_jsonl(f"{self.config.version}_{stem}.json", self.config)
             # Irrelevance has no ground truth — passing means emitting no call.
             answers = (
                 {}
                 if irrelevance
                 else {
                     a["id"]: a["ground_truth"]
-                    for a in _load_jsonl(f"possible_answer/{_VERSION}_{stem}.json")
+                    for a in _load_jsonl(
+                        f"possible_answer/{self.config.version}_{stem}.json",
+                        self.config,
+                    )
                 }
             )
             for row in questions[:per_category]:
@@ -266,22 +281,22 @@ def _render_prompt(question: list) -> str:
     return f"{system}\n\n{user}".strip() if system else user
 
 
-def _load_jsonl(relpath: str) -> list[dict]:
+def _load_jsonl(relpath: str, config: BFCLConfig) -> list[dict]:
     """Load a BFCL JSONL file, fetching + caching from upstream on first use."""
-    local_dir = os.getenv("BFCL_DATA_DIR")
-    if local_dir:  # offline: read from a gorilla checkout
-        return _read_jsonl(Path(local_dir) / relpath)
+    if config.data_dir:  # offline: read from a gorilla checkout
+        return _read_jsonl(Path(config.data_dir) / relpath)
 
     cached = _CACHE_DIR / relpath
     if not cached.exists():
         cached.parent.mkdir(parents=True, exist_ok=True)
-        cached.write_bytes(_fetch(relpath))
+        cached.write_bytes(_fetch(relpath, config))
     return _read_jsonl(cached)
 
 
-def _fetch(relpath: str) -> bytes:
+def _fetch(relpath: str, config: BFCLConfig) -> bytes:
+    bases = tuple(b for b in (config.raw_base, *_DEFAULT_RAW_BASES) if b)
     errors = []
-    for base in _RAW_BASES:
+    for base in bases:
         url = f"{base}/{relpath}"
         try:
             with urllib.request.urlopen(url, timeout=30) as resp:
@@ -289,8 +304,8 @@ def _fetch(relpath: str) -> bytes:
         except Exception as exc:  # try the next known layout
             errors.append(f"{url}: {exc}")
     raise RuntimeError(
-        "could not fetch BFCL data (set BFCL_DATA_DIR to a local gorilla "
-        "checkout, or BFCL_RAW_BASE):\n  " + "\n  ".join(errors)
+        "could not fetch BFCL data (--set data_dir=<gorilla checkout>, or "
+        "--set raw_base=<URL>):\n  " + "\n  ".join(errors)
     )
 
 

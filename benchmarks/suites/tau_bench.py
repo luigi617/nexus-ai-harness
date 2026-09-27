@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 import threading
 from dataclasses import dataclass, field
 from typing import Any, ClassVar
@@ -9,6 +8,7 @@ from tau_bench.envs import get_env
 from tau_bench.types import Action
 
 from benchmarks.core.benchmark import Benchmark, Episode
+from benchmarks.core.config import BenchmarkConfig
 from benchmarks.core.registry import register
 from benchmarks.core.task import Score, Task
 from harness import NexusAIHarness
@@ -22,7 +22,28 @@ from protocols.context import Context
 from protocols.model import Model
 from protocols.tool import Tool
 
-_MAX_STEPS = int(os.getenv("TAU_MAX_STEPS", "30"))
+
+@dataclass
+class TauBenchConfig(BenchmarkConfig):
+    """tau-bench knobs.
+
+    Attributes:
+        env: The domain to run (``retail`` or ``airline``).
+        user_strategy: How the simulated user is driven (``llm``, ...).
+        user_provider: The provider serving the user-simulator model.
+        user_model: The user-simulator LLM id.
+        task_split: Which task split to load.
+        max_steps: Max agent steps per task.
+        timeout_s: Per-task wall-clock limit, in seconds.
+    """
+
+    env: str = "retail"
+    user_strategy: str = "llm"
+    user_provider: str = "openai"
+    user_model: str = "gpt-4o"
+    task_split: str = "test"
+    max_steps: int = 30
+    timeout_s: float = 300.0
 
 
 @dataclass
@@ -35,14 +56,14 @@ class TauState:
     extra: dict = field(default_factory=dict)
 
 
-def _make_env(task_index: int | None) -> Any:
+def _make_env(config: TauBenchConfig, task_index: int | None) -> Any:
     """Construct a tau-bench env for the configured domain."""
     return get_env(
-        os.getenv("TAU_ENV", "retail"),
-        user_strategy=os.getenv("TAU_USER_STRATEGY", "llm"),
-        user_model=os.getenv("TAU_USER_MODEL", "gpt-4o"),
-        user_provider=os.getenv("TAU_USER_PROVIDER", "openai"),
-        task_split=os.getenv("TAU_TASK_SPLIT", "test"),
+        config.env,
+        user_strategy=config.user_strategy,
+        user_model=config.user_model,
+        user_provider=config.user_provider,
+        task_split=config.task_split,
         task_index=task_index,
     )
 
@@ -125,14 +146,15 @@ class TauBench(Benchmark):
 
     name = "tau-bench"
     description = "Multi-turn tool use with a simulated user, graded by DB state"
+    config_type = TauBenchConfig
 
     def load_tasks(self, *, limit: int | None = None) -> list[Task]:
-        probe = _make_env(task_index=0)
+        probe = _make_env(self.config, task_index=0)
         count = len(probe.tasks)
         indices = range(count if limit is None else min(limit, count))
         return [
             Task(
-                task_id=f"{os.getenv('TAU_ENV', 'retail')}_{i}",
+                task_id=f"{self.config.env}_{i}",
                 prompt="",  # the opening user message comes from env.reset()
                 metadata={"task_index": i},
             )
@@ -140,7 +162,7 @@ class TauBench(Benchmark):
         ]
 
     def build_harness(self, task: Task, model: Model, session: Session) -> Episode:
-        env = _make_env(task_index=task.metadata["task_index"])
+        env = _make_env(self.config, task_index=task.metadata["task_index"])
         reset = env.reset(task_index=task.metadata["task_index"])
         lock = threading.Lock()  # serializes concurrent tool steps on this env
         # Seed the run with the domain policy (wiki) and the user's opening
@@ -161,8 +183,8 @@ class TauBench(Benchmark):
             .use(AutoApprove())
             .use(IterationCounter())
             .use(ElapsedTime())
-            .use(MaxIterations(_MAX_STEPS))  # bounds tool steps per agent turn
-            .use(Timeout(float(os.getenv("TAU_TIMEOUT_S", "300"))))
+            .use(MaxIterations(self.config.max_steps))  # bounds tool steps/turn
+            .use(Timeout(self.config.timeout_s))
         )
         for spec in env.tools_info:
             harness.use(_EnvTool(spec, env, lock))

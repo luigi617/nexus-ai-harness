@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-import os
 import random
 import re
+from dataclasses import dataclass
 
 from datasets import load_dataset
 
 from benchmarks.core.benchmark import Benchmark, Episode
+from benchmarks.core.config import BenchmarkConfig
 from benchmarks.core.registry import register
 from benchmarks.core.task import Score, Task
 from harness import NexusAIHarness
@@ -14,6 +15,18 @@ from harness.result import RunResult
 from harness.session import Session
 from plugins.loops import ChatLoop
 from protocols.model import Model
+
+
+@dataclass
+class GpqaConfig(BenchmarkConfig):
+    """GPQA knobs.
+
+    Attributes:
+        subset: The Hugging Face dataset config (e.g. ``gpqa_diamond``).
+    """
+
+    subset: str = "gpqa_diamond"
+
 
 _LETTERS = "ABCD"
 _INSTRUCTION = (
@@ -92,6 +105,7 @@ class GPQA(Benchmark):
     description = (
         "GPQA Diamond: graduate-level multiple-choice science QA (exact match)"
     )
+    config_type = GpqaConfig
 
     def load_tasks(self, *, limit: int | None = None) -> list[Task]:
         """Load GPQA rows from the gated HF dataset into labeled MCQ tasks.
@@ -100,12 +114,12 @@ class GPQA(Benchmark):
             RuntimeError: If the dataset cannot be loaded (it is gated and
                 requires Hugging Face authentication).
         """
-        config = os.getenv("GPQA_CONFIG", "gpqa_diamond")
+        subset = self.config.subset
         try:
-            rows = load_dataset("Idavidrein/gpqa", config, split="train")
+            rows = load_dataset("Idavidrein/gpqa", subset, split="train")
         except Exception as exc:
             raise RuntimeError(
-                f"could not load 'Idavidrein/gpqa' ({config}); it is a gated "
+                f"could not load 'Idavidrein/gpqa' ({subset}); it is a gated "
                 "dataset — request access on Hugging Face and authenticate "
                 "(huggingface-cli login or set HF_TOKEN)"
             ) from exc
@@ -119,10 +133,10 @@ class GPQA(Benchmark):
             options, correct_letter = _shuffle_options(index, correct, incorrect)
             tasks.append(
                 Task(
-                    task_id=f"{config}_{index}",
+                    task_id=f"{subset}_{index}",
                     prompt=_render_prompt(str(row["Question"]), options),
                     expected=correct_letter,
-                    metadata={"options": options, "config": config},
+                    metadata={"options": options, "subset": subset},
                 )
             )
         return tasks

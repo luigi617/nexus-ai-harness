@@ -13,6 +13,7 @@ from datasets import load_dataset
 from swebench.harness.run_evaluation import main as run_swebench_evaluation
 
 from benchmarks.core.benchmark import Benchmark, Episode
+from benchmarks.core.config import BenchmarkConfig
 from benchmarks.core.registry import register
 from benchmarks.core.task import Score, Task
 from harness import NexusAIHarness
@@ -28,12 +29,25 @@ from protocols.lifecycle import Lifecycle
 from protocols.model import Model
 from protocols.plugin import Plugin
 
-_MAX_STEPS = int(os.getenv("SWE_BENCH_MAX_STEPS", "50"))
-_TIMEOUT_S = float(os.getenv("SWE_BENCH_TIMEOUT_S", "1800"))
-# The agent's own shell runs on the host, not in the grading container; allow it
-# network by default so it can explore/build, override with SWE_BENCH_ALLOW_NETWORK=0.
-_ALLOW_NETWORK = os.getenv("SWE_BENCH_ALLOW_NETWORK", "1") != "0"
 _MODEL_NAME = "nexus-ai-harness"
+
+
+@dataclass
+class SWEBenchConfig(BenchmarkConfig):
+    """SWE-bench knobs.
+
+    Attributes:
+        dataset: The Hugging Face dataset name (Verified, Lite, ...).
+        max_steps: Max agent steps per task.
+        timeout_s: Per-task wall-clock limit, in seconds.
+        allow_network: Whether the agent's host-side shell may reach the network
+            (on by default so it can explore/build; grading always runs in Docker).
+    """
+
+    dataset: str = "princeton-nlp/SWE-bench_Verified"
+    max_steps: int = 50
+    timeout_s: float = 1800.0
+    allow_network: bool = True
 
 
 @dataclass
@@ -69,13 +83,11 @@ class SWEBench(Benchmark):
         "SWE-bench: fix a real GitHub issue; graded by the repo's "
         "FAIL_TO_PASS/PASS_TO_PASS tests"
     )
+    config_type = SWEBenchConfig
 
     def load_tasks(self, *, limit: int | None = None) -> list[Task]:
         """Load SWE-bench rows from the configured dataset into tasks."""
-        dataset = load_dataset(
-            os.getenv("SWE_BENCH_DATASET", "princeton-nlp/SWE-bench_Verified"),
-            split="test",
-        )
+        dataset = load_dataset(self.config.dataset, split="test")
         rows = (
             dataset
             if limit is None
@@ -115,9 +127,9 @@ class SWEBench(Benchmark):
             .use(AutoApprove())
             .use(IterationCounter())
             .use(ElapsedTime())
-            .use(MaxIterations(_MAX_STEPS))
-            .use(Timeout(_TIMEOUT_S))
-            .use(WorkspaceSandbox(checkout, allow_network=_ALLOW_NETWORK))
+            .use(MaxIterations(self.config.max_steps))
+            .use(Timeout(self.config.timeout_s))
+            .use(WorkspaceSandbox(checkout, allow_network=self.config.allow_network))
             .use(ReadFile())
             .use(WriteFile())
             .use(ListDir())
@@ -140,7 +152,9 @@ class SWEBench(Benchmark):
                 "no checkout recorded in session state; build_harness must run first"
             )
         model_patch = _git_diff(checkout)
-        report = await asyncio.to_thread(_run_swebench_evaluation, task, model_patch)
+        report = await asyncio.to_thread(
+            _run_swebench_evaluation, task, model_patch, self.config.dataset
+        )
         return _score_from_report(task.task_id, report)
 
 
@@ -272,7 +286,7 @@ def _clone_repo(repo: str, base_commit: str, dest: str) -> None:
     )
 
 
-def _run_swebench_evaluation(task: Task, model_patch: str) -> dict:
+def _run_swebench_evaluation(task: Task, model_patch: str, dataset: str) -> dict:
     """Run the official swebench harness on the model's patch and return its report.
 
     Requires a running Docker daemon (the swebench harness runs each test inside
@@ -281,11 +295,11 @@ def _run_swebench_evaluation(task: Task, model_patch: str) -> dict:
     Args:
         task: The graded task (its id selects the dataset instance).
         model_patch: The unified diff the agent produced.
+        dataset: The Hugging Face dataset name to evaluate against.
 
     Returns:
         The parsed swebench report for the instance.
     """
-    dataset = os.getenv("SWE_BENCH_DATASET", "princeton-nlp/SWE-bench_Verified")
     run_id = f"nexus-{task.task_id}"
     work = tempfile.mkdtemp(prefix="swe-bench-eval-")
     try:

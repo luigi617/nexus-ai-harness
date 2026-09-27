@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 import threading
 import uuid
 from dataclasses import dataclass, field
@@ -14,6 +13,7 @@ from tau2.registry import registry
 from tau2.user.user_simulator import UserSimulator
 
 from benchmarks.core.benchmark import Benchmark, Episode
+from benchmarks.core.config import BenchmarkConfig
 from benchmarks.core.registry import register
 from benchmarks.core.task import Score, Task
 from harness import NexusAIHarness
@@ -27,7 +27,24 @@ from protocols.context import Context
 from protocols.model import Model
 from protocols.tool import Tool
 
-_MAX_STEPS = int(os.getenv("TAU2_MAX_STEPS", "30"))
+
+@dataclass
+class Tau2Config(BenchmarkConfig):
+    """tau2-bench knobs.
+
+    Attributes:
+        domain: The tau2 task set / domain (``airline``, ``retail``, ...).
+        split: Optional task split; ``None`` uses the domain's default set.
+        user_model: The LLM id for the simulated user.
+        max_steps: Max agent steps per task.
+        timeout_s: Per-task wall-clock limit, in seconds.
+    """
+
+    domain: str = "airline"
+    split: str | None = None
+    user_model: str = "gpt-4o"
+    max_steps: int = 30
+    timeout_s: float = 300.0
 
 
 @dataclass
@@ -255,25 +272,24 @@ def _load_tau2_tasks(domain: str, split: str | None) -> list[Any]:
     except KeyError as exc:
         known = ", ".join(registry.get_task_sets())
         raise RuntimeError(
-            f"unknown tau2 task set {domain!r}; set TAU2_DOMAIN to one of: {known}"
+            f"unknown tau2 task set {domain!r}; --set domain to one of: {known}"
         ) from exc
     return loader(split) if split else loader()
 
 
-def _build_session(domain: str, task_index: int, split: str | None) -> _Tau2Session:
+def _build_session(
+    domain: str, task_index: int, split: str | None, user_model: str
+) -> _Tau2Session:
     """Construct the per-task tau2 environment, user simulator, and adapter."""
     try:
         env = registry.get_env_constructor(domain)()
     except KeyError as exc:
         known = ", ".join(registry.get_domains())
         raise RuntimeError(
-            f"unknown tau2 domain {domain!r}; set TAU2_DOMAIN to one of: {known}"
+            f"unknown tau2 domain {domain!r}; --set domain to one of: {known}"
         ) from exc
     task = _load_tau2_tasks(domain, split)[task_index]
-    user = UserSimulator(
-        llm=os.getenv("TAU2_USER_MODEL", "gpt-4o"),
-        instructions=str(task.user_scenario),
-    )
+    user = UserSimulator(llm=user_model, instructions=str(task.user_scenario))
     return _Tau2Session(env=env, user=user, task=task, domain=domain)
 
 
@@ -292,10 +308,10 @@ class Tau2Bench(Benchmark):
         "tau2-bench: dual-control multi-turn tool use with a simulated user, "
         "graded by task reward"
     )
+    config_type = Tau2Config
 
     def load_tasks(self, *, limit: int | None = None) -> list[Task]:
-        domain = os.getenv("TAU2_DOMAIN", "airline")
-        split = os.getenv("TAU2_TASK_SPLIT") or None
+        domain, split = self.config.domain, self.config.split
         count = len(_load_tau2_tasks(domain, split))
         indices = range(count if limit is None else min(limit, count))
         return [
@@ -309,7 +325,12 @@ class Tau2Bench(Benchmark):
 
     def build_harness(self, task: Task, model: Model, session: Session) -> Episode:
         meta = task.metadata
-        env = _build_session(meta["domain"], meta["task_index"], meta.get("split"))
+        env = _build_session(
+            meta["domain"],
+            meta["task_index"],
+            meta.get("split"),
+            self.config.user_model,
+        )
         lock = threading.Lock()  # serializes concurrent tool steps on this env
         # Seed with the domain policy + user's opening message; returned to the
         # runner, not written onto the shared Task (reused across k attempts).
@@ -328,8 +349,8 @@ class Tau2Bench(Benchmark):
             .use(AutoApprove())
             .use(IterationCounter())
             .use(ElapsedTime())
-            .use(MaxIterations(_MAX_STEPS))  # bounds tool steps per agent turn
-            .use(Timeout(float(os.getenv("TAU2_TIMEOUT_S", "300"))))
+            .use(MaxIterations(self.config.max_steps))  # bounds tool steps/turn
+            .use(Timeout(self.config.timeout_s))
         )
         for spec in env.tool_specs:
             harness.use(_EnvTool(spec, env, lock))

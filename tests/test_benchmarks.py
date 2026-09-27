@@ -304,7 +304,7 @@ def test_bfcl_limit_fills_across_categories(monkeypatch):
     # limit not divisible by category count must still fill to exactly limit.
     from benchmarks.suites import bfcl
 
-    def fake_load(relpath):
+    def fake_load(relpath, _config):
         # Each category file has plenty of rows; possible_answer files empty-ish.
         if relpath.startswith("possible_answer/"):
             return [{"id": f"{relpath}_{i}", "ground_truth": []} for i in range(50)]

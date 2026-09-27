@@ -1,15 +1,16 @@
 from __future__ import annotations
 
-import os
 import re
 import shutil
 import subprocess
 import sys
 import tempfile
+from dataclasses import dataclass
 
 from datasets import load_dataset
 
 from benchmarks.core.benchmark import Benchmark, Episode
+from benchmarks.core.config import BenchmarkConfig
 from benchmarks.core.registry import register
 from benchmarks.core.task import Score, Task
 from harness import NexusAIHarness
@@ -18,7 +19,6 @@ from harness.session import Session
 from plugins.loops import ChatLoop
 from protocols.model import Model
 
-_TIMEOUT_S = float(os.getenv("HUMANEVAL_TIMEOUT_S", "15"))
 _INSTRUCTION = (
     "Complete the following Python function. Return the full function "
     "definition including its signature, as Python code and nothing else."
@@ -28,12 +28,24 @@ _INSTRUCTION = (
 _FENCE = re.compile(r"```[^\n`]*\n(.*?)```", re.DOTALL)
 
 
+@dataclass
+class HumanEvalConfig(BenchmarkConfig):
+    """HumanEval knobs.
+
+    Attributes:
+        timeout_s: Per-completion execution timeout, in seconds.
+    """
+
+    timeout_s: float = 15.0
+
+
 @register
 class HumanEval(Benchmark):
     """HumanEval: complete a Python function, graded by executing its unit tests."""
 
     name = "humaneval"
     description = "HumanEval: function completion graded by executing unit tests"
+    config_type = HumanEvalConfig
 
     def load_tasks(self, *, limit: int | None = None) -> list[Task]:
         dataset = load_dataset("openai_humaneval", split="test")
@@ -64,7 +76,7 @@ class HumanEval(Benchmark):
             task.metadata["test"],
             task.metadata["entry_point"],
         )
-        passed = _run_check(program, _TIMEOUT_S)
+        passed = _run_check(program, self.config.timeout_s)
         return Score(
             passed=passed,
             detail={

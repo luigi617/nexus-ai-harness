@@ -1,0 +1,39 @@
+bfcl:
+  categories: [simple, multiple, parallel, parallel_multiple]
+  version: BFCL_v4
+  raw_base: null          # extra dataset URL base tried before the built-in ones
+  data_dir: null          # read from a local gorilla checkout instead of fetching
+
+tau-bench:
+  env: retail             # retail | airline
+  user_strategy: llm
+  user_provider: bedrock  # user simulator routed through Bedrock via litellm
+  user_model: bedrock/us.anthropic.claude-haiku-4-5-20251001-v1:0g
+  task_split: test
+  max_steps: 30
+  timeout_s: 300.0
+
+tau2-bench:
+  domain: airline         # see `python -m benchmarks list` errors for valid domains
+  split: null             # null uses the domain's full task set
+  user_model: bedrock/us.anthropic.claude-haiku-4-5-20251001-v1:0g
+  max_steps: 30
+  timeout_s: 300.0
+
+humaneval:
+  timeout_s: 15.0         # per-completion execution timeout
+
+gpqa:
+  subset: gpqa_diamond    # gated dataset; authenticate with `huggingface-cli login`
+
+gaia:
+  subset: 2023_all        # gated dataset; authenticate with `huggingface-cli login`
+  split: validation
+  max_steps: 30
+  timeout_s: 600.0
+
+swe-bench:
+  dataset: princeton-nlp/SWE-bench_Verified   # or princeton-nlp/SWE-bench_Lite
+  max_steps: 50
+  timeout_s: 1800.0
+  allow_network: true     # agent's host-side shell; grading always runs in Docker

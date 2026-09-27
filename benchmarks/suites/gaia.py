@@ -5,10 +5,12 @@ import re
 import shutil
 import string
 import tempfile
+from dataclasses import dataclass
 
 from datasets import load_dataset
 
 from benchmarks.core.benchmark import Benchmark, Episode
+from benchmarks.core.config import BenchmarkConfig
 from benchmarks.core.registry import register
 from benchmarks.core.task import Score, Task
 from harness import NexusAIHarness
@@ -24,8 +26,23 @@ from protocols.lifecycle import Lifecycle
 from protocols.model import Model
 from protocols.plugin import Plugin
 
-_MAX_STEPS = int(os.getenv("GAIA_MAX_STEPS", "30"))
-_TIMEOUT_S = float(os.getenv("GAIA_TIMEOUT_S", "600"))
+
+@dataclass
+class GaiaConfig(BenchmarkConfig):
+    """GAIA knobs.
+
+    Attributes:
+        subset: The Hugging Face dataset config (e.g. ``2023_all``).
+        split: The dataset split (e.g. ``validation``).
+        max_steps: Max agent steps per task.
+        timeout_s: Per-task wall-clock limit, in seconds.
+    """
+
+    subset: str = "2023_all"
+    split: str = "validation"
+    max_steps: int = 30
+    timeout_s: float = 600.0
+
 
 # GAIA prompts the agent to end with this exact marker; grading reads whatever
 # follows the last one.
@@ -72,12 +89,13 @@ class GAIA(Benchmark):
 
     name = "gaia"
     description = "GAIA: general assistant tasks graded by normalized exact match"
+    config_type = GaiaConfig
 
     def load_tasks(self, *, limit: int | None = None) -> list[Task]:
         dataset = load_dataset(
             "gaia-benchmark/GAIA",
-            os.getenv("GAIA_CONFIG", "2023_all"),
-            split=os.getenv("GAIA_SPLIT", "validation"),
+            self.config.subset,
+            split=self.config.split,
         )
         tasks: list[Task] = []
         for row in dataset:
@@ -112,8 +130,8 @@ class GAIA(Benchmark):
             .use(AutoApprove())
             .use(IterationCounter())
             .use(ElapsedTime())
-            .use(MaxIterations(_MAX_STEPS))
-            .use(Timeout(_TIMEOUT_S))
+            .use(MaxIterations(self.config.max_steps))
+            .use(Timeout(self.config.timeout_s))
             .use(WorkspaceSandbox(workspace))
             .use(ReadFile())
             .use(ListDir())

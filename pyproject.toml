@@ -30,6 +30,7 @@ benchmarks = [
     "datasets",
     "swebench",
     "docker",
+    "pyyaml",
 ]
 
 [tool.setuptools.packages.find]

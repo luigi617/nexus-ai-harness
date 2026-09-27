@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from benchmarks.core.benchmark import Benchmark
+from benchmarks.core.config import build_config
 
 _REGISTRY: dict[str, type[Benchmark]] = {}
 
@@ -15,13 +16,27 @@ def register(cls: type[Benchmark]) -> type[Benchmark]:
     return cls
 
 
-def get_benchmark(name: str) -> Benchmark:
-    """Instantiate the benchmark registered under ``name``."""
+def get_benchmark(name: str, overrides: dict[str, str] | None = None) -> Benchmark:
+    """Instantiate the benchmark registered under ``name``.
+
+    Args:
+        name: The registered benchmark name.
+        overrides: Optional ``field=value`` config overrides (from ``--set``),
+            coerced onto the suite's config defaults.
+
+    Returns:
+        The configured benchmark instance.
+
+    Raises:
+        KeyError: If no benchmark is registered under ``name``.
+        ValueError: If an override names an unknown field or an uncoercible value.
+    """
     try:
-        return _REGISTRY[name]()
+        cls = _REGISTRY[name]
     except KeyError:
         known = ", ".join(sorted(_REGISTRY)) or "(none)"
         raise KeyError(f"unknown benchmark {name!r}; registered: {known}") from None
+    return cls(build_config(cls.config_type, overrides or {}))
 
 
 def registered_benchmarks() -> dict[str, type[Benchmark]]:

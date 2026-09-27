@@ -5,6 +5,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import ClassVar
 
+from benchmarks.core.config import BenchmarkConfig
 from benchmarks.core.task import Score, Task
 from harness import NexusAIHarness
 from harness.result import RunResult
@@ -38,6 +39,12 @@ class Benchmark(ABC):
     name: ClassVar[str] = ""
     #: One-line human description shown by ``python -m benchmarks list``.
     description: ClassVar[str] = ""
+    #: The suite's config dataclass; the CLI builds one from ``--set`` overrides.
+    config_type: ClassVar[type[BenchmarkConfig]] = BenchmarkConfig
+
+    def __init__(self, config: BenchmarkConfig | None = None) -> None:
+        """Store the run config, defaulting to the suite's own defaults."""
+        self.config = config if config is not None else self.config_type()
 
     @abstractmethod
     def load_tasks(self, *, limit: int | None = None) -> list[Task]:
