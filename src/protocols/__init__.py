@@ -11,6 +11,7 @@ from protocols.lifecycle import Lifecycle
 from protocols.loop import Loop
 from protocols.model import Model
 from protocols.permission import Permission
+from protocols.skill import Skill
 from protocols.tool import Tool
 
 __all__ = [
@@ -25,5 +26,6 @@ __all__ = [
     "Loop",
     "Model",
     "Permission",
+    "Skill",
     "Tool",
 ]

@@ -29,6 +29,7 @@ from plugins.permissions import (
     DenyList,
 )
 from plugins.routers import LLMRouter, StickyRouter
+from plugins.skills import MarkdownSkill, load_skills
 from plugins.spawner import InProcessSpawner
 from plugins.tools import Forget, Recall, Remember, Subagent
 from plugins.tracers import GraphTracer
@@ -59,6 +60,7 @@ __all__ = [
     "IterationCounter",
     "JevEvaluator",
     "LLMRouter",
+    "MarkdownSkill",
     "MaxIterations",
     "MiniMaxModel",
     "OpenAICompatibleModel",
@@ -72,6 +74,7 @@ __all__ = [
     "Timeout",
     "XAIModel",
     "default_harness",
+    "load_skills",
 ]
 
 
@@ -86,7 +89,9 @@ def default_harness(
     """A batteries-included harness built around the given Model.
 
     Wires an agentic loop and context summarization, plus long-term memory,
-    subagent delegation, safety guards, and observability counters.
+    subagent delegation, safety guards, and observability counters. Add skills
+    with ``.use(skill)`` (or ``.use(s) for s in load_skills(dir)``) like any
+    other plugin.
     """
     return (
         NexusAIHarness()

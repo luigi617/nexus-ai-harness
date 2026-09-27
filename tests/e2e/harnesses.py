@@ -14,6 +14,7 @@ from plugins.spawner import InProcessSpawner
 from plugins.tools import Forget, Recall, Remember, Subagent
 from protocols.context import Context
 from protocols.model import Model
+from protocols.skill import Skill
 from protocols.tool import Tool
 
 HarnessBuilder = Callable[[Model], NexusAIHarness]  # model under test -> harness
@@ -158,3 +159,19 @@ def _memory(model: Model) -> NexusAIHarness:
 def _subagent(model: Model) -> NexusAIHarness:
     """Add subagent delegation; the child inherits all parent plugins."""
     return _base(model).use(Subagent()).use(InProcessSpawner())
+
+
+class _PirateSkill(Skill):
+    """A tiny code-authored skill for exercising the skill tool end to end."""
+
+    name = "pirate-speak"
+    description = "Respond in exaggerated pirate dialect."
+
+    def instructions(self) -> str:
+        return "Respond only as a pirate. Begin your reply with the word ARRR."
+
+
+@e2e_harness("skills")
+def _skills(model: Model) -> NexusAIHarness:
+    """Register one skill — a skill is a tool, so plain .use() is all it takes."""
+    return _base(model).use(_PirateSkill())

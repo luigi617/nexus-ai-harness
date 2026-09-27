@@ -10,4 +10,5 @@
 - [Routers](plugins/routers.md)
 - [Memory](plugins/memory.md)
 - [Subagents](plugins/subagents.md)
+- [Skills](plugins/skills.md)
 - [Interventions](plugins/interventions.md)

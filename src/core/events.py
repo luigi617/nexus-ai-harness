@@ -71,6 +71,13 @@ class ApprovalRequested(Event):
 
 
 @dataclass
+class SkillInvoked(Event):
+    """A skill was invoked to load its instructions into the conversation."""
+
+    name: str
+
+
+@dataclass
 class SessionStarted(Event):
     session_id: str
 

@@ -1,0 +1,14 @@
+{
+  "name": "skill_invocation",
+  "description": "Model recognizes a relevant skill in its tool list, calls it, and follows the injected instructions.",
+  "tags": ["skills", "tools"],
+  "harness": "skills",
+  "input": "Answer like a pirate: what is the capital of France? Use your available skills.",
+  "expect": {
+    "no_error": true,
+    "stop_reason": "completed",
+    "tool_calls": [{ "name": "pirate-speak" }],
+    "output_contains_any": ["ARRR", "Arrr", "arrr"],
+    "max_cost_usd": 0.05
+  }
+}
