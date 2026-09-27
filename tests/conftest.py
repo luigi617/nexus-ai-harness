@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import importlib.util
+
 import pytest
 
 from core.response import Response
@@ -8,6 +10,13 @@ from harness.registry import Registry
 from harness.session import Session
 from protocols.model import Model
 from protocols.tool import Tool
+
+# Only the tau2-bench suite requires tau2, which pins requires-python <3.14 and
+# can't install on 3.14. Its test module imports tau2 at top, so skip collecting
+# just that one when tau2 is absent; every other benchmark test runs everywhere
+# (import benchmarks tolerates a missing tau2 — see benchmarks/__init__.py).
+if importlib.util.find_spec("tau2") is None:
+    collect_ignore_glob = ["test_bench_tau2.py"]
 
 
 def make_ctx(*plugins: object) -> RunContext:

@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import asyncio
+import importlib.util
 import json
 import re
+import threading
+from types import SimpleNamespace
 
 import pytest
 
@@ -11,6 +14,7 @@ from benchmarks.core.benchmark import Benchmark, Episode
 from benchmarks.core.models import build_model
 from benchmarks.core.report import Report
 from benchmarks.core.task import Attempt, RunMetrics, Score, Task
+from benchmarks.suites import bfcl
 from benchmarks.suites.bfcl import (
     BFCL,
     _ast_match,
@@ -18,11 +22,14 @@ from benchmarks.suites.bfcl import (
     _normalize_schema,
     _params_match,
 )
+from benchmarks.suites.tau_bench import TauState, _respond
 from core.response import Response
 from harness import NexusAIHarness
 from harness.result import RunResult
 from harness.session import Session
 from plugins.loops import ChatLoop
+from protocols.lifecycle import Lifecycle
+from protocols.plugin import Plugin
 from tests.conftest import ScriptedModel
 
 
@@ -93,8 +100,6 @@ def test_report_mean_score_partial_credit():
 
 
 def test_report_summary_json_safe_when_nothing_solved():
-    import json
-
     report = Report(benchmark="x", model="m", k=1, attempts=[_attempt("a", 0, False)])
     summary = report.summary()
     assert summary["cost_per_solved_task_usd"] is None
@@ -157,9 +162,6 @@ def test_runner_drives_k_attempts_and_grades():
 def test_runner_tears_down_episode_lifecycle_after_grading():
     # A per-task environment modeled as a Lifecycle plugin must be released after
     # the attempt: the runner stops the harness, so its stop() runs exactly once.
-    from protocols.lifecycle import Lifecycle
-    from protocols.plugin import Plugin
-
     events: list[str] = []
 
     class _Env(Plugin, Lifecycle):
@@ -318,8 +320,6 @@ def test_bfcl_normalize_schema_maps_nested_types():
 
 def test_bfcl_limit_fills_across_categories(monkeypatch):
     # limit not divisible by category count must still fill to exactly limit.
-    from benchmarks.suites import bfcl
-
     def fake_load(relpath, _config):
         # Each category file has plenty of rows; possible_answer files empty-ish.
         if relpath.startswith("possible_answer/"):
@@ -440,12 +440,6 @@ def test_runner_respects_max_user_turns():
 def test_tau_bench_respond_records_and_signals_done():
     # tau-bench's respond relay records reward/done into TauState and returns
     # None once the env ends the conversation (the driver's stop signal).
-    pytest.importorskip("tau_bench")
-    import threading
-    from types import SimpleNamespace
-
-    from benchmarks.suites.tau_bench import TauState, _respond
-
     class FakeEnv:
         def __init__(self):
             self._n = 0
@@ -481,15 +475,11 @@ def test_build_model_unknown_provider_raises():
 
 def test_suites_are_registered():
     names = registered_benchmarks()
-    expected = {
-        "bfcl",
-        "tau-bench",
-        "humaneval",
-        "gpqa",
-        "gaia",
-        "tau2-bench",
-        "swe-bench",
-    }
+    expected = {"bfcl", "tau-bench", "humaneval", "gpqa", "gaia", "swe-bench"}
+    # tau2-bench registers only when tau2 is importable (it can't install on
+    # 3.14); benchmarks/__init__ skips it otherwise, so require it conditionally.
+    if importlib.util.find_spec("tau2") is not None:
+        expected.add("tau2-bench")
     assert expected <= set(names)
     assert get_benchmark("bfcl").name == "bfcl"
     with pytest.raises(KeyError):

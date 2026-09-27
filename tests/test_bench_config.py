@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 import pytest
 
 from benchmarks.core.config import BenchmarkConfig, build_config, load_config_file
+from benchmarks.core.registry import get_benchmark
 
 
 @dataclass
@@ -98,15 +99,11 @@ def test_partial_override_keeps_other_defaults():
 
 def test_get_benchmark_applies_overrides():
     # Full path through the registry: get_benchmark builds the config too.
-    from benchmarks.core.registry import get_benchmark
-
     bench = get_benchmark("humaneval", {"timeout_s": "5"})
     assert bench.config.timeout_s == 5.0
 
 
 def test_get_benchmark_rejects_bad_override():
-    from benchmarks.core.registry import get_benchmark
-
     with pytest.raises(ValueError, match="unknown config key"):
         get_benchmark("humaneval", {"nope": "x"})
 
@@ -173,7 +170,5 @@ def test_file_then_build_config_end_to_end(tmp_path):
     path = tmp_path / "bench.yaml"
     path.write_text("humaneval:\n  timeout_s: 45\n")
     section = load_config_file(path, "humaneval")
-    from benchmarks.core.registry import get_benchmark
-
     bench = get_benchmark("humaneval", section)
     assert bench.config.timeout_s == 45.0
