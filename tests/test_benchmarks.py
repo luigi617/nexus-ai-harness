@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import re
 
 import pytest
@@ -212,6 +213,21 @@ def test_runner_resume_skips_recorded_attempts(tmp_path):
     assert resumed.num_tasks == 1
     assert resumed.pass_at_1 == 1.0
     assert len(out.read_text().splitlines()) == 1  # not double-written
+
+
+def test_runner_non_resume_truncates_stale_output(tmp_path):
+    # Re-running to an existing --output path WITHOUT --resume must start fresh,
+    # not append stale attempts (which would inflate the JSONL past this run).
+    out = tmp_path / "runs.jsonl"
+    out.write_text('{"task_id": "stale", "run_index": 0, "passed": true}\n')
+    model = ScriptedModel(Response(text="X"))
+
+    report = asyncio.run(Runner(_EchoBenchmark(), model, k=1, output_path=out).run())
+
+    lines = out.read_text().splitlines()
+    assert len(lines) == 1  # only this run's attempt; stale line gone
+    assert json.loads(lines[0])["task_id"] == "t1"
+    assert len(report.attempts) == 1
 
 
 # --- BFCL AST checker (offline unit tests) --------------------------------

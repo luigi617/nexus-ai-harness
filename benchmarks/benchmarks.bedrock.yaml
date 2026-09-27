@@ -33,7 +33,7 @@ gaia:
   timeout_s: 600.0
 
 swe-bench:
-  dataset: princeton-nlp/SWE-bench_Verified   # or princeton-nlp/SWE-bench_Lite
+  dataset: SWE-bench/SWE-bench_Verified   # or SWE-bench/SWE-bench_Lite
   max_steps: 50
   timeout_s: 1800.0
   allow_network: true     # agent's host-side shell; grading always runs in Docker

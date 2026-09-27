@@ -49,6 +49,11 @@ class Runner:
     async def run(self, *, limit: int | None = None) -> Report:
         """Load tasks, attempt each ``k`` times, and return an aggregated report."""
         tasks = self.benchmark.load_tasks(limit=limit)
+        # A non-resume run starts a clean results file: attempts are appended as
+        # they finish, so a stale file from a prior run would otherwise leave the
+        # JSONL holding more attempts than this run produced. --resume keeps it.
+        if not self.resume and self.output_path and self.output_path.exists():
+            self.output_path.unlink()
         done = self._already_done()
         pending = [
             (task, run_index)

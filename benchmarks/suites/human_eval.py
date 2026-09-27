@@ -48,7 +48,7 @@ class HumanEval(Benchmark):
     config_type = HumanEvalConfig
 
     def load_tasks(self, *, limit: int | None = None) -> list[Task]:
-        dataset = load_dataset("openai_humaneval", split="test")
+        dataset = load_dataset("openai/openai_humaneval", split="test")
         if limit is not None:
             dataset = dataset.select(range(min(limit, len(dataset))))
         return [

@@ -37,14 +37,17 @@ class SWEBenchConfig(BenchmarkConfig):
     """SWE-bench knobs.
 
     Attributes:
-        dataset: The Hugging Face dataset name (Verified, Lite, ...).
+        dataset: The Hugging Face dataset name. Must be a ``SWE-bench/``-namespaced
+            dataset (Verified, Lite, ...): the swebench 5.x grader needs the
+            per-instance ``image``/``eval_script`` fields those carry, which the
+            older ``princeton-nlp/`` datasets lack.
         max_steps: Max agent steps per task.
         timeout_s: Per-task wall-clock limit, in seconds.
         allow_network: Whether the agent's host-side shell may reach the network
             (on by default so it can explore/build; grading always runs in Docker).
     """
 
-    dataset: str = "princeton-nlp/SWE-bench_Verified"
+    dataset: str = "SWE-bench/SWE-bench_Verified"
     max_steps: int = 50
     timeout_s: float = 1800.0
     allow_network: bool = True
@@ -316,12 +319,11 @@ def _run_swebench_evaluation(task: Task, model_patch: str, dataset: str) -> dict
             instance_ids=[task.task_id],
             predictions_path=preds_path,
             max_workers=1,
-            force_rebuild=False,
-            cache_level="env",
-            clean=False,
             open_file_limit=4096,
             run_id=run_id,
             timeout=1800,
+            rewrite_reports=False,
+            modal=False,
             report_dir=work,
         )
         return _load_report(run_id, [work, os.getcwd()])

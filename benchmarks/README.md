@@ -75,7 +75,7 @@ tau-bench:
   max_steps: 40
   user_model: gpt-4o
 swe-bench:
-  dataset: princeton-nlp/SWE-bench_Lite
+  dataset: SWE-bench/SWE-bench_Lite
   max_steps: 60
 bfcl:
   categories: [simple, parallel]   # YAML lists map to list fields directly
@@ -184,6 +184,6 @@ graded by the project's `FAIL_TO_PASS`/`PASS_TO_PASS` tests via the official
 ```bash
 # Verified (default); switch to Lite for a smaller split
 python -m benchmarks run swe-bench --model <provider:model-id> --limit 5 \
-    --set dataset=princeton-nlp/SWE-bench_Lite \
+    --set dataset=SWE-bench/SWE-bench_Lite \
     --task-timeout 2400 --output runs/swe.jsonl
 ```

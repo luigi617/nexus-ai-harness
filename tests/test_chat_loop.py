@@ -26,6 +26,26 @@ def test_chat_loop_returns_text_and_appends_assistant_message():
     assert ctx.history[-1].content == "hello"
 
 
+def test_chat_loop_advertises_registered_tools_to_the_model():
+    # Regression: ChatLoop must hand the model the registered tools so a caller
+    # can capture an emitted tool call (BFCL relies on this). A prior change that
+    # advertised none silently zeroed BFCL. It runs a single turn (no dispatch).
+    from tests.conftest import RecordingTool
+
+    class ToolCapturingModel(Model):
+        def __init__(self) -> None:
+            self.seen: list[str] = []
+
+        async def complete(self, history, tools, ctx) -> Response:
+            self.seen = [t.name for t in tools]
+            return Response(text="ok")
+
+    model = ToolCapturingModel()
+    ctx = make_ctx(model, RecordingTool("calc"), RecordingTool("echo"))
+    asyncio.run(ChatLoop().run(ctx))
+    assert set(model.seen) == {"calc", "echo"}
+
+
 def test_chat_loop_raises_without_provider():
     try:
         asyncio.run(ChatLoop().run(make_ctx()))

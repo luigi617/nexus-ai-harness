@@ -8,6 +8,7 @@ from protocols.context_manager import ContextManager
 from protocols.loop import Loop
 from protocols.model import Model
 from protocols.router import Router
+from protocols.tool import Tool
 
 
 class ChatLoop(Loop):
@@ -25,9 +26,7 @@ class ChatLoop(Loop):
         if model is None:
             raise LookupError("no model registered")
         ctx.emit(ModelCallStarted(list(history)))
-        # A single-shot chat dispatches no tools, so it advertises none — a
-        # populated tool_calls reply would otherwise be silently dropped.
-        response = await ctx.invoke(model.complete, history, [], ctx)
+        response = await ctx.invoke(model.complete, history, list(ctx.all(Tool)), ctx)
         ctx.emit(ResponseReceived(response))
         ctx.add_message(Message(role="assistant", content=response.text))
         ctx.state(RunState).stop_reason = "completed"
