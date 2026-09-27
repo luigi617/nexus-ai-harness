@@ -34,7 +34,7 @@ def test_interrupt_stops_between_iterations():
         def __init__(self, s: Session) -> None:
             self._s = s
 
-        async def complete(self, history, ctx) -> Response:
+        async def complete(self, history, tools, ctx) -> Response:
             self._s.interrupt()
             return Response(
                 text="", tool_calls=[{"name": "noop", "id": "1", "arguments": {}}]
@@ -76,7 +76,7 @@ def test_interrupt_raised_mid_iteration_stops_on_the_next_turn_after_the_tool_ra
         def __init__(self) -> None:
             self.n = 0
 
-        async def complete(self, history, ctx) -> Response:
+        async def complete(self, history, tools, ctx) -> Response:
             self.n += 1
             if self.n == 1:
                 return Response(
@@ -109,7 +109,7 @@ def test_interrupt_during_a_completed_turn_does_not_preempt_the_finish():
         def __init__(self, s: Session) -> None:
             self._s = s
 
-        async def complete(self, history, ctx) -> Response:
+        async def complete(self, history, tools, ctx) -> Response:
             self._s.interrupt()  # set mid-turn, but this turn has no tool calls
             return Response(text="final answer")
 

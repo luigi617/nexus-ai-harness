@@ -1,0 +1,23 @@
+{
+  "name": "scripted_filesystem_write_read",
+  "description": "Deterministic: write a token to a file with write_file, read it back with read_file, report it. Exercises the sandboxed filesystem tools end to end. Runs in CI.",
+  "tags": ["scripted", "filesystem", "sandbox", "tools", "multi-step"],
+  "model": "scripted",
+  "harness": "filesystem",
+  "input": "Write the token SANDBOX-TOKEN-42 into note.txt, then read it back and tell me what it says.",
+  "scripted_responses": [
+    { "tool_calls": [{ "name": "write_file", "arguments": { "path": "note.txt", "content": "SANDBOX-TOKEN-42" } }] },
+    { "tool_calls": [{ "name": "read_file", "arguments": { "path": "note.txt" } }] },
+    { "text": "note.txt contains SANDBOX-TOKEN-42." }
+  ],
+  "expect": {
+    "no_error": true,
+    "stop_reason": "completed",
+    "tool_calls": [
+      { "name": "write_file", "arguments_contains": { "path": "note.txt" } },
+      { "name": "read_file", "arguments_contains": { "path": "note.txt" } }
+    ],
+    "tool_calls_ordered": true,
+    "output_contains": ["SANDBOX-TOKEN-42"]
+  }
+}

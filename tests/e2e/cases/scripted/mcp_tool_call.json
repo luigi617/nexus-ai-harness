@@ -1,0 +1,18 @@
+{
+  "name": "scripted_mcp_tool_call",
+  "description": "Deterministic: a tool discovered from a (faked) MCP server is dispatched through the loop like any static tool. Exercises MCPClient/ToolProvider wiring end to end. Runs in CI.",
+  "tags": ["scripted", "mcp", "tools", "single-step"],
+  "model": "scripted",
+  "harness": "mcp",
+  "input": "Use the demo greet tool to greet Ada, then tell me what it said.",
+  "scripted_responses": [
+    { "tool_calls": [{ "name": "demo__greet", "arguments": { "name": "Ada" } }] },
+    { "text": "The MCP greet tool replied: Hello, Ada!" }
+  ],
+  "expect": {
+    "no_error": true,
+    "stop_reason": "completed",
+    "tool_calls": [{ "name": "demo__greet", "arguments_contains": { "name": "Ada" } }],
+    "output_contains": ["Ada"]
+  }
+}

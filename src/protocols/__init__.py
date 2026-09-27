@@ -11,8 +11,11 @@ from protocols.lifecycle import Lifecycle
 from protocols.loop import Loop
 from protocols.model import Model
 from protocols.permission import Permission
+from protocols.sandbox import Sandbox, SandboxResult, SandboxViolation
+from protocols.session_store import SessionStore
 from protocols.skill import Skill
 from protocols.tool import Tool
+from protocols.tool_provider import ToolProvider
 
 __all__ = [
     "Approver",
@@ -26,6 +29,11 @@ __all__ = [
     "Loop",
     "Model",
     "Permission",
+    "Sandbox",
+    "SandboxResult",
+    "SandboxViolation",
+    "SessionStore",
     "Skill",
     "Tool",
+    "ToolProvider",
 ]

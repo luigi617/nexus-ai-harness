@@ -225,7 +225,7 @@ def test_concurrent_run_waits_for_start_to_complete():
     resource = SlowResource()
 
     class Probe(ScriptedModel):
-        async def complete(self, history, ctx):
+        async def complete(self, history, tools, ctx):
             seen_ready.append(resource.ready)
             return Response(text="ok")
 

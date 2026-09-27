@@ -438,7 +438,7 @@ def test_graph_does_not_start_plugins():
 class _NamedModel(Model):
     """A distinct Model implementation, to exercise plugin-swap diffs."""
 
-    async def complete(self, history, ctx) -> Response:  # pragma: no cover
+    async def complete(self, history, tools, ctx) -> Response:  # pragma: no cover
         return Response(text="named")
 
 

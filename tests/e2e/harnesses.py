@@ -8,10 +8,21 @@ from harness import NexusAIHarness
 from plugins.guards import BudgetGuard, MaxIterations, Timeout
 from plugins.hooks import CostCounter, ElapsedTime, IterationCounter
 from plugins.loops import AgenticLoop
+from plugins.mcp import MCPClient, MCPServer
 from plugins.memory import FileMemoryStore
 from plugins.permissions import AutoApprove, DenyList
+from plugins.sandbox import WorkspaceSandbox
 from plugins.spawner import InProcessSpawner
-from plugins.tools import Forget, Recall, Remember, Subagent
+from plugins.tools import (
+    Forget,
+    ListDir,
+    ReadFile,
+    Recall,
+    Remember,
+    Shell,
+    Subagent,
+    WriteFile,
+)
 from protocols.context import Context
 from protocols.model import Model
 from protocols.skill import Skill
@@ -175,3 +186,51 @@ class _PirateSkill(Skill):
 def _skills(model: Model) -> NexusAIHarness:
     """Register one skill — a skill is a tool, so plain .use() is all it takes."""
     return _base(model).use(_PirateSkill())
+
+
+@e2e_harness("filesystem")
+def _filesystem(model: Model) -> NexusAIHarness:
+    """Add real filesystem/shell tools confined to an isolated temp workspace."""
+    root = tempfile.mkdtemp(prefix="nexus-e2e-fs-")
+    return (
+        _base(model)
+        .use(WorkspaceSandbox(root))
+        .use(ReadFile())
+        .use(WriteFile())
+        .use(ListDir())
+        .use(Shell())
+    )
+
+
+class _CannedMCPSession:
+    """A fake MCP session for e2e: one 'greet' tool, no subprocess or socket."""
+
+    async def list_tools(self) -> list[dict]:
+        return [
+            {
+                "name": "greet",
+                "description": "Greet someone by name.",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {"name": {"type": "string"}},
+                    "required": ["name"],
+                },
+            }
+        ]
+
+    async def call_tool(self, name: str, arguments: dict) -> str:
+        return f"Hello, {arguments.get('name', 'world')}! (via MCP {name})"
+
+
+async def _canned_connector(server: MCPServer) -> _CannedMCPSession:
+    return _CannedMCPSession()
+
+
+@e2e_harness("mcp")
+def _mcp(model: Model) -> NexusAIHarness:
+    """Expose a fake MCP server's tools through the loop via an injected connector."""
+    client = MCPClient(
+        [MCPServer(name="demo", command=["unused"])],
+        connector=_canned_connector,
+    )
+    return _base(model).use(client)

@@ -19,7 +19,7 @@ class FakeModel(Model):
         self.reply = reply or name
         self.calls = 0
 
-    async def complete(self, history, ctx) -> Response:
+    async def complete(self, history, tools, ctx) -> Response:
         self.calls += 1
         return Response(text=self.reply, tool_calls=[])
 
@@ -125,7 +125,7 @@ class RecordingDecider(Model):
         self.reply = reply
         self.seen: list | None = None
 
-    async def complete(self, history, ctx) -> Response:
+    async def complete(self, history, tools, ctx) -> Response:
         self.seen = list(history)
         return Response(text=self.reply)
 
@@ -202,7 +202,7 @@ def test_sticky_over_llm_decides_once_then_reuses():
     replies = iter(["smart", "fast"])
 
     class FlipDecider(Model):
-        async def complete(self, history, ctx):
+        async def complete(self, history, tools, ctx):
             return Response(text=next(replies))
 
     ctx = make_ctx(fast, smart)

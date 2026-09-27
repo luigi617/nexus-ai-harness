@@ -240,9 +240,9 @@ def test_skill_is_advertised_to_the_model_as_a_tool():
     captured: dict[str, str] = {}
 
     class Spy(ScriptedModel):
-        async def complete(self, history, ctx):
-            captured.update({t.name: t.description for t in ctx.all(Tool)})
-            return await super().complete(history, ctx)
+        async def complete(self, history, tools, ctx):
+            captured.update({t.name: t.description for t in tools})
+            return await super().complete(history, tools, ctx)
 
     harness = (
         NexusAIHarness()

@@ -112,7 +112,7 @@ def test_spawner_runs_child_within_depth():
     from protocols.model import Model
 
     class P(Model):
-        async def complete(self, history, ctx):
+        async def complete(self, history, tools, ctx):
             return Response(text="child-result")
 
     parent = make_ctx(AgenticLoop(), P())
@@ -130,7 +130,7 @@ def test_subagent_tool_delegates_and_returns_distilled_result():
     from protocols.model import Model
 
     class P(Model):
-        async def complete(self, history, ctx):
+        async def complete(self, history, tools, ctx):
             return Response(text="child-answer")
 
     sub = Subagent()
@@ -145,11 +145,11 @@ def test_subagent_tool_overrides_a_capability_for_the_child():
     from protocols.model import Model
 
     class Parent(Model):
-        async def complete(self, history, ctx):
+        async def complete(self, history, tools, ctx):
             return Response(text="parent-model")
 
     class Child(Model):
-        async def complete(self, history, ctx):
+        async def complete(self, history, tools, ctx):
             return Response(text="child-model")
 
     # Swap the model for the subagent only.

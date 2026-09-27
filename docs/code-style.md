@@ -8,7 +8,9 @@ The coding conventions for this repo.
 - `ruff check` must pass (lint, import order, docstring format).
 - `mypy` must pass. Annotate public function signatures; prefer `X | None` over
   `Optional[X]`.
-- Start every module with `from __future__ import annotations`.
+- Start every module with `from __future__ import annotations`. Nothing may
+  precede the imports — a file must not begin with a module docstring or a
+  comment.
 
 ## Imports
 

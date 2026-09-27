@@ -263,25 +263,13 @@ class _FakeModel(BaseModel):
         return Response(text="ok")
 
 
-class _FakeCtx:
-    def __init__(self, tools):
-        self._tools = tools
-        self.asked = None
-
-    def all(self, cls):
-        self.asked = cls
-        return self._tools
-
-
-def test_complete_forwards_tools_from_context():
-    from protocols.tool import Tool
-
+def test_complete_forwards_the_given_tools():
+    # complete() forwards exactly the tools the loop hands it to _generate,
+    # rather than discovering them itself.
     tools = [_tool("one"), _tool("two")]
-    ctx = _FakeCtx(tools)
     model = _FakeModel(model="m1")
-    result = model.complete([Message(role="user", content="hi")], ctx)
+    result = model.complete([Message(role="user", content="hi")], tools, ctx=None)
 
-    assert ctx.asked is Tool  # pulled the Tool list from the context
     assert model.received_tools is tools  # forwarded exactly
     assert result.text == "ok"
 

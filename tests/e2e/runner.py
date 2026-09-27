@@ -29,6 +29,7 @@ from plugins.models import (
 from protocols.context import Context
 from protocols.hook import Hook
 from protocols.model import Model
+from protocols.tool import Tool
 from tests.e2e.harnesses import build_harness
 from tests.e2e.spec import Spec
 
@@ -60,7 +61,9 @@ class ScriptedModel(Model):
         self._responses = responses or [Response(text="done")]
         self._calls = 0
 
-    async def complete(self, history: list[Message], ctx: Context) -> Response:
+    async def complete(
+        self, history: list[Message], tools: list[Tool], ctx: Context
+    ) -> Response:
         idx = min(self._calls, len(self._responses) - 1)
         self._calls += 1
         return self._responses[idx]

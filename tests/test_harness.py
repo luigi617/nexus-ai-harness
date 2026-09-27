@@ -70,6 +70,76 @@ def test_default_harness_runs(tmp_path):
     assert h.run_sync("q").output == "hi"
 
 
+def test_default_harness_workspace_registers_sandbox_and_fs_tools(tmp_path):
+    from plugins import default_harness
+    from plugins.sandbox import WorkspaceSandbox
+    from protocols.sandbox import Sandbox
+    from protocols.tool import Tool
+
+    ws = tmp_path / "ws"
+    h = default_harness(
+        ScriptedModel(Response(text="hi")),
+        memory_dir=str(tmp_path / "mem"),
+        workspace=str(ws),
+    )
+    assert isinstance(h._registry.get(Sandbox), WorkspaceSandbox)
+    tool_names = {t.name for t in h._registry.all(Tool)}
+    assert {"read_file", "write_file", "list_dir", "shell"} <= tool_names
+
+
+def test_default_harness_write_file_and_shell_are_not_auto_trusted(tmp_path):
+    # Only the read-only tools bypass the approver; write_file and shell mutate
+    # state and must resolve to ASK (regression for the trusted-list contract).
+    from core.permission import PermissionVerdict
+    from plugins import default_harness
+    from protocols.permission import Permission
+
+    h = default_harness(
+        ScriptedModel(Response(text="hi")),
+        memory_dir=str(tmp_path / "mem"),
+        workspace=str(tmp_path / "ws"),
+    )
+    from tests.conftest import make_ctx
+
+    ctx = make_ctx()  # AskUnless.check keys off the call name; ctx is unused
+    ask = next(
+        p for p in h._registry.all(Permission) if type(p).__name__ == "AskUnless"
+    )
+    verdict = lambda name: ask.check({"name": name}, ctx).verdict  # noqa: E731
+    assert verdict("read_file") == PermissionVerdict.ALLOW
+    assert verdict("list_dir") == PermissionVerdict.ALLOW
+    assert verdict("write_file") == PermissionVerdict.ASK
+    assert verdict("shell") == PermissionVerdict.ASK
+
+
+def test_default_harness_session_store_registers_autosave(tmp_path):
+    from plugins import FileSessionStore, default_harness
+    from plugins.persistence.autosave import AutoSave
+    from protocols.hook import Hook
+    from protocols.session_store import SessionStore
+
+    store = FileSessionStore(tmp_path / "sessions")
+    h = default_harness(
+        ScriptedModel(Response(text="hi")),
+        memory_dir=str(tmp_path / "mem"),
+        session_store=store,
+    )
+    assert h._registry.get(SessionStore) is store
+    assert any(isinstance(hook, AutoSave) for hook in h._registry.all(Hook))
+
+
+def test_default_harness_mcp_servers_registers_provider(tmp_path):
+    from plugins import MCPServer, default_harness
+    from protocols.tool_provider import ToolProvider
+
+    h = default_harness(
+        ScriptedModel(Response(text="hi")),
+        memory_dir=str(tmp_path / "mem"),
+        mcp_servers=[MCPServer(name="demo", command=["x"])],
+    )
+    assert h._registry.get(ToolProvider) is not None
+
+
 def test_default_harness_bounds_a_runaway_loop(tmp_path):
     from plugins import default_harness
 
@@ -89,7 +159,7 @@ def test_default_harness_bounds_a_runaway_loop(tmp_path):
 def test_conversation_continues_across_runs():
     # A continued session must accumulate history across run() calls.
     class Counter(ScriptedModel):
-        async def complete(self, history, ctx):
+        async def complete(self, history, tools, ctx):
             users = sum(1 for m in history if m.role == "user")
             return Response(text=f"seen {users}")
 

@@ -1,0 +1,32 @@
+{
+  "name": "scripted_shell_debug_workflow",
+  "description": "Deterministic multi-turn session mimicking a real debugging loop: write a script with a bug and run it (turn 1, real shell run surfaces the failure), then fix it and re-run (turn 2). Exercises the write -> run -> rewrite -> run cycle over the real sandbox. Runs in CI.",
+  "tags": ["scripted", "filesystem", "sandbox", "shell", "tools", "multi-turn", "workflow"],
+  "model": "scripted",
+  "harness": "filesystem",
+  "input": "Write calc.py that prints the product of 6 and 7, then run it.",
+  "scripted_responses": [
+    { "tool_calls": [{ "name": "write_file", "arguments": { "path": "calc.py", "content": "print(6 * )\n" } }] },
+    { "tool_calls": [{ "name": "shell", "arguments": { "command": "python3 calc.py" } }] },
+    { "text": "calc.py has a syntax error near the multiplication, so it failed to run." },
+    { "tool_calls": [{ "name": "write_file", "arguments": { "path": "calc.py", "content": "print(6 * 7)\n" } }] },
+    { "tool_calls": [{ "name": "shell", "arguments": { "command": "python3 calc.py" } }] },
+    { "text": "Fixed the syntax error; calc.py now runs and prints 42." }
+  ],
+  "user_turns": [
+    "That failed — fix the syntax error and run it again."
+  ],
+  "expect": {
+    "no_error": true,
+    "stop_reason": "completed",
+    "tool_calls": [
+      { "name": "write_file", "arguments_contains": { "path": "calc.py", "content": "print(6 * )\n" } },
+      { "name": "shell", "arguments_contains": { "command": "python3 calc.py" } },
+      { "name": "write_file", "arguments_contains": { "path": "calc.py", "content": "print(6 * 7)\n" } },
+      { "name": "shell", "arguments_contains": { "command": "python3 calc.py" } }
+    ],
+    "tool_calls_ordered": true,
+    "output_contains": ["42"],
+    "output_contains_any": ["syntax error", "SyntaxError"]
+  }
+}

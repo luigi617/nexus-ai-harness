@@ -1,0 +1,14 @@
+{
+  "name": "mcp_tool_use_live",
+  "description": "A real model discovers a tool contributed by an MCP server (via MCPClient/ToolProvider) and calls it to answer, proving remote tools are indistinguishable from static ones once expanded into the loop. Live counterpart of scripted_mcp_tool_call.",
+  "tags": ["mcp", "tools", "single-step"],
+  "harness": "mcp",
+  "input": "Greet Grace using the available greeting tool, then tell me exactly what it replied.",
+  "expect": {
+    "no_error": true,
+    "stop_reason": "completed",
+    "tool_calls": [{ "name": "demo__greet", "arguments_contains": { "name": "Grace" } }],
+    "output_contains_any": ["Grace"],
+    "max_cost_usd": 0.05
+  }
+}

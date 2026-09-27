@@ -17,6 +17,7 @@ from protocols.loop import Loop
 from protocols.model import Model
 from protocols.router import Router
 from protocols.tool import Tool
+from protocols.tool_provider import ToolProvider
 from services.guard_chain import GuardChain
 from services.tool_runner import ToolRunner
 
@@ -26,7 +27,11 @@ class AgenticLoop(Loop):
 
     async def run(self, ctx: Context) -> str:
         router = ctx.get(Router)
-        tools = ToolRunner(ctx.all(Tool))
+        available = list(ctx.all(Tool))
+        for provider in ctx.all(ToolProvider):  # tools discovered at runtime
+            provided = await ctx.invoke(provider.provide_tools, ctx)
+            available.extend(provided)
+        tools = ToolRunner(available)
         guards = GuardChain()
 
         i = 0
@@ -58,7 +63,8 @@ class AgenticLoop(Loop):
             if model is None:
                 raise LookupError("no model registered")
             ctx.emit(ModelCallStarted(list(history)))
-            response = await ctx.invoke(model.complete, history, ctx)
+            # Hand the model exactly the tools the runner can dispatch.
+            response = await ctx.invoke(model.complete, history, available, ctx)
             ctx.emit(ResponseReceived(response))
             ctx.add_message(
                 Message(

@@ -41,9 +41,8 @@ class SummarizingContextManager(ContextManager):
         # Re-summarize only once the live tail outgrows the budget; else reuse.
         if len(history) - cutoff > self._max_messages:
             new_cutoff = len(history) - self._keep_recent
-            # Never let the live tail begin with an orphaned tool result whose
-            # parent tool_use is being folded into the summary; a toolResult with
-            # no preceding toolUse block is rejected by the model backend.
+            # Never begin the live tail with an orphaned tool result: a toolResult
+            # whose toolUse was folded into the summary is rejected by the backend.
             while new_cutoff < len(history) and history[new_cutoff].role == "tool":
                 new_cutoff += 1
             folded = await self._summarize(state.text, history[cutoff:new_cutoff], ctx)
@@ -113,7 +112,8 @@ class SummarizingContextManager(ContextManager):
             Message(role="user", content=body),
         ]
         try:
-            response = await ctx.invoke(model.complete, request, ctx)
+            # Summarization is a plain completion with no tools to offer.
+            response = await ctx.invoke(model.complete, request, [], ctx)
         except Exception:
             return None
         text = (response.text or "").strip()

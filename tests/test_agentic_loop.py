@@ -346,6 +346,87 @@ def test_persisted_assistant_message_preserves_tool_calls():
     assert assistant.tool_calls == [call]
 
 
+def test_async_tool_provider_is_expanded_into_the_loop():
+    # A ToolProvider whose provide_tools is `async def` must be awaited and its
+    # tools made callable, exercising the loop's ctx.invoke adaptation.
+    from protocols.tool_provider import ToolProvider
+
+    class AsyncProvider(ToolProvider):
+        def __init__(self, tool: Tool) -> None:
+            self._tool = tool
+
+        async def provide_tools(self, ctx):
+            return [self._tool]
+
+    tool = RecordingTool("provided", "ok")
+    call = {"name": "provided", "id": "1", "arguments": {}}
+    model = ScriptedModel(
+        Response(text="", tool_calls=[call]),
+        Response(text="done"),
+    )
+    ctx = make_ctx(model, AsyncProvider(tool), AllowList(["provided"]), AutoApprove())
+    result = asyncio.run(AgenticLoop().run(ctx))
+    assert result == "done"
+    assert tool.calls == [{}]
+
+
+def test_provider_tools_are_advertised_to_the_model():
+    # Regression: provider-contributed tools must be advertised to the model,
+    # not merely dispatchable — a model that never sees them will never call
+    # them. Drive a real BaseModel subclass through the loop and capture the
+    # tools it is handed.
+    from core.response import Response as _Response
+    from plugins.models.base import BaseModel
+    from protocols.tool_provider import ToolProvider
+
+    class RecordingBaseModel(BaseModel):
+        provider = "test"
+
+        def __init__(self) -> None:
+            super().__init__(model="test-model")
+            self.seen_tool_names: list[str] = []
+
+        def _generate(self, history, tools):
+            self.seen_tool_names = [t.name for t in tools]
+            return _Response(text="done")
+
+    class StaticProvider(ToolProvider):
+        def __init__(self, tool: Tool) -> None:
+            self._tool = tool
+
+        def provide_tools(self, ctx):
+            return [self._tool]
+
+    static_tool = RecordingTool("static", "s")
+    provided_tool = RecordingTool("provided", "p")
+    model = RecordingBaseModel()
+    ctx = make_ctx(model, static_tool, StaticProvider(provided_tool))
+    asyncio.run(AgenticLoop().run(ctx))
+    assert set(model.seen_tool_names) == {"static", "provided"}
+
+
+def test_base_model_forwards_the_tools_it_is_given():
+    # complete() advertises exactly the tools it is handed, not a set it looks
+    # up itself — the loop owns tool assembly.
+    from core.response import Response as _Response
+    from plugins.models.base import BaseModel
+
+    class RecordingBaseModel(BaseModel):
+        provider = "test"
+
+        def __init__(self) -> None:
+            super().__init__(model="test-model")
+            self.seen_tool_names: list[str] = []
+
+        def _generate(self, history, tools):
+            self.seen_tool_names = [t.name for t in tools]
+            return _Response(text="done")
+
+    model = RecordingBaseModel()
+    model.complete([], [RecordingTool("only", "x")], ctx=None)  # sync
+    assert model.seen_tool_names == ["only"]
+
+
 def test_no_provider_raises():
     ctx = make_ctx()
     try:

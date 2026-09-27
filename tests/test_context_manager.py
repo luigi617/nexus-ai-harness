@@ -14,7 +14,7 @@ class SummarizerModel(Model):
         self.calls = 0
         self.bodies: list[str] = []
 
-    async def complete(self, history, ctx) -> Response:
+    async def complete(self, history, tools, ctx) -> Response:
         self.calls += 1
         self.bodies.append(history[-1].content)
         return Response(text=f"RECAP-{self.calls}")
@@ -126,7 +126,7 @@ class RaisingModel(Model):
     def __init__(self) -> None:
         self.calls = 0
 
-    async def complete(self, history, ctx) -> Response:
+    async def complete(self, history, tools, ctx) -> Response:
         self.calls += 1
         raise RuntimeError("backend exploded")
 
@@ -156,7 +156,7 @@ class FlakySummarizer(Model):
     def __init__(self) -> None:
         self.calls = 0
 
-    async def complete(self, history, ctx) -> Response:
+    async def complete(self, history, tools, ctx) -> Response:
         self.calls += 1
         if self.calls == 1:
             raise RuntimeError("backend exploded")

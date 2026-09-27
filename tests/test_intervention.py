@@ -30,7 +30,7 @@ def test_inject_message_adds_a_message():
 def test_injected_message_steers_the_next_turn():
     # The model echoes the last user message; an injected message must reach it.
     class Echo(Model):
-        async def complete(self, history, ctx) -> Response:
+        async def complete(self, history, tools, ctx) -> Response:
             last = next(m.content for m in reversed(history) if m.role == "user")
             return Response(text=f"answering: {last}")
 

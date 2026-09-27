@@ -1,0 +1,20 @@
+{
+  "name": "filesystem_project_workflow_live",
+  "description": "A real model drives a realistic build-and-verify session: write a program, run it through the shell, and report what it printed. Live counterpart of scripted_filesystem_project_workflow — the model chooses the tools, and the reported number reflects the real shell output.",
+  "tags": ["filesystem", "sandbox", "shell", "tools", "multi-turn", "workflow"],
+  "harness": "filesystem",
+  "input": "Create a file adder.py that defines add(a, b) returning a + b, and prints add(19, 23) when run. Use the write_file tool.",
+  "user_turns": [
+    "Now run adder.py with the shell tool and tell me the number it printed."
+  ],
+  "expect": {
+    "no_error": true,
+    "stop_reason": "completed",
+    "tool_calls": [
+      { "name": "write_file", "arguments_contains": { "path": "adder.py" } },
+      { "name": "shell" }
+    ],
+    "output_contains_any": ["42"],
+    "max_cost_usd": 0.1
+  }
+}

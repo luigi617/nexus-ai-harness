@@ -42,7 +42,8 @@ class LLMRouter(Router):
             Message(role="user", content=task),
         ]
         decider = self._decider or candidates[0]
-        response = await ctx.invoke(decider.complete, request, ctx)
+        # The decider only picks a model id; it calls no tools, so advertise none.
+        response = await ctx.invoke(decider.complete, request, [], ctx)
         return self._match(response.text, candidates)
 
     @staticmethod

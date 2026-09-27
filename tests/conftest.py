@@ -28,7 +28,7 @@ class ScriptedModel(Model):
         self._responses = list(responses) or [Response(text="done")]
         self.calls: list[list] = []
 
-    async def complete(self, history, ctx) -> Response:
+    async def complete(self, history, tools, ctx) -> Response:
         self.calls.append(list(history))
         idx = min(len(self.calls) - 1, len(self._responses) - 1)
         return self._responses[idx]

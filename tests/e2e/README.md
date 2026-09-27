@@ -81,6 +81,9 @@ answered in an earlier turn still counts:
 | `deny_calculator` | `default` + `DenyList(["calculator"])` |
 | `memory` | `default` + `FileMemoryStore` (temp dir) + remember/recall/forget tools |
 | `subagent` | `default` + `Subagent` + `InProcessSpawner` |
+| `skills` | `default` + one code-authored skill (`pirate-speak`) |
+| `filesystem` | `default` + `WorkspaceSandbox` (temp root) + real read_file/write_file/list_dir/shell tools |
+| `mcp` | `default` + `MCPClient` fronting a fake MCP server (one `demo__greet` tool, no subprocess) |
 
 ## Adding a harness
 

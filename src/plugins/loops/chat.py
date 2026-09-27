@@ -25,7 +25,9 @@ class ChatLoop(Loop):
         if model is None:
             raise LookupError("no model registered")
         ctx.emit(ModelCallStarted(list(history)))
-        response = await ctx.invoke(model.complete, history, ctx)
+        # A single-shot chat dispatches no tools, so it advertises none — a
+        # populated tool_calls reply would otherwise be silently dropped.
+        response = await ctx.invoke(model.complete, history, [], ctx)
         ctx.emit(ResponseReceived(response))
         ctx.add_message(Message(role="assistant", content=response.text))
         ctx.state(RunState).stop_reason = "completed"

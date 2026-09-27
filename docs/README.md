@@ -12,3 +12,7 @@
 - [Subagents](plugins/subagents.md)
 - [Skills](plugins/skills.md)
 - [Interventions](plugins/interventions.md)
+- Sandbox — confine tool file access and subprocesses to a workspace root.
+- Filesystem/shell tools — `read_file`, `write_file`, `list_dir`, and `shell`.
+- MCP — connect to MCP servers and expose their tools to the loop.
+- Persistence — save session snapshots and resume a run later.

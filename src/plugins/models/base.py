@@ -50,8 +50,10 @@ class BaseModel(Model):
         self.max_tokens = max_tokens
         self.timeout = timeout
 
-    def complete(self, history: list[Message], ctx: Context) -> Response:
-        return self._generate(history, ctx.all(Tool))
+    def complete(
+        self, history: list[Message], tools: list[Tool], ctx: Context
+    ) -> Response:
+        return self._generate(history, tools)
 
     def _cost(self, usage: dict) -> float:
         input_price, output_price = self.pricing.get(self.name, (0.0, 0.0))

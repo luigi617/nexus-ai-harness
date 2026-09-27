@@ -153,7 +153,7 @@ def test_plugin_requiring_its_own_type_needs_another_provider():
     class SelfWrapModel(Model):
         requires: ClassVar[tuple[type[Plugin], ...]] = (Model,)
 
-        def complete(self, history, ctx):  # pragma: no cover
+        def complete(self, history, tools, ctx):  # pragma: no cover
             return Response(text="")
 
     # Only the wrapper is registered → its Model requirement is unmet.
