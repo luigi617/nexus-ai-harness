@@ -1,0 +1,18 @@
+{
+  "name": "scripted_skill_invocation",
+  "description": "Deterministic: model calls the skill (a tool) by name, then follows its injected instructions. Runs in CI.",
+  "tags": ["scripted", "skills", "tools"],
+  "model": "scripted",
+  "harness": "skills",
+  "input": "Answer like a pirate: what is the capital of France?",
+  "scripted_responses": [
+    { "tool_calls": [{ "name": "pirate-speak", "arguments": {} }] },
+    { "text": "ARRR, the capital of France be Paris, matey!" }
+  ],
+  "expect": {
+    "no_error": true,
+    "stop_reason": "completed",
+    "tool_calls": [{ "name": "pirate-speak" }],
+    "output_contains": ["ARRR", "Paris"]
+  }
+}
