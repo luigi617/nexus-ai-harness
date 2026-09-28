@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 import os
 import shutil
 import socket
 import subprocess
 import sys
+import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import ClassVar
 
@@ -14,6 +17,7 @@ import pytest
 import benchmarks.suites.human_eval as human_eval
 from benchmarks.core.config import load_config_file
 from benchmarks.core.registry import get_benchmark
+from benchmarks.core.runner import Runner
 from benchmarks.core.task import Task
 from benchmarks.suites.human_eval import (
     HumanEval,
@@ -25,8 +29,10 @@ from benchmarks.suites.human_eval import (
     _run_check,
     resolve_isolation,
 )
+from nexus_ai_harness.core.response import Response
 from nexus_ai_harness.harness.result import RunResult
 from nexus_ai_harness.harness.session import Session
+from tests.conftest import ScriptedModel
 
 _POSIX = pytest.mark.skipif(os.name != "posix", reason="POSIX resource limits only")
 _MACOS_SANDBOX = pytest.mark.skipif(
@@ -427,3 +433,191 @@ def test_shipped_yaml_humaneval_section_builds(name):
     path = Path(human_eval.__file__).parents[1] / name
     bench = get_benchmark("humaneval", load_config_file(path, "humaneval"))
     assert bench.config == HumanEvalConfig()
+
+
+# --- review follow-ups: validation, off-loop grading, infra errors -------------
+
+
+@pytest.mark.parametrize(
+    ("key", "value"),
+    [
+        ("timeout_s", "0"),
+        ("timeout_s", "-1"),
+        ("memory_limit_mb", "0"),
+        ("memory_limit_mb", "5"),
+        ("max_file_size_mb", "0"),
+        ("max_processes", "-1"),
+    ],
+)
+def test_config_rejects_out_of_range_limits(key, value):
+    with pytest.raises(ValueError, match=key):
+        get_benchmark("humaneval", {key: value})
+
+
+def test_config_accepts_boundary_limits():
+    bench = get_benchmark(
+        "humaneval",
+        {"memory_limit_mb": "6", "max_file_size_mb": "1", "max_processes": "0"},
+    )
+    assert bench.config.memory_limit_mb == 6
+
+
+def test_grade_inside_event_loop_runs_off_the_loop():
+    sleepy = RunResult(
+        output="import time\ndef add(a, b):\n    time.sleep(0.5)\n    return a + b\n",
+        session=Session(),
+    )
+    bench = HumanEval(HumanEvalConfig(isolation="sandbox"))
+
+    async def grade_while_ticking() -> tuple[bool, int]:
+        ticks = 0
+
+        async def tick() -> None:
+            nonlocal ticks
+            while True:
+                ticks += 1
+                await asyncio.sleep(0.01)
+
+        ticker = asyncio.create_task(tick())
+        pending = bench.grade(_add_task(), sleepy)
+        assert inspect.isawaitable(pending)
+        score = await pending
+        ticker.cancel()
+        return score.passed, ticks
+
+    passed, ticks = asyncio.run(grade_while_ticking())
+    assert passed is True
+    assert ticks > 10  # the loop kept running while the check executed
+
+
+def test_build_harness_resolves_isolation_before_grading(monkeypatch):
+    calls = _fake_docker(monkeypatch, available=False, present=False)
+    bench = HumanEval(HumanEvalConfig(isolation="docker"))
+    bench.build_harness(_add_task(), ScriptedModel(Response(text="x")), Session())
+    assert calls == ["info"]
+    bench.grade(_add_task(), _correct_result())
+    assert calls == ["info"]
+
+
+def test_isolation_resolved_once_across_threads(monkeypatch):
+    calls: list[str] = []
+
+    def slow_resolve(requested, image):
+        calls.append(requested)
+        time.sleep(0.2)
+        return "sandbox"
+
+    monkeypatch.setattr(human_eval, "resolve_isolation", slow_resolve)
+    bench = HumanEval(HumanEvalConfig(isolation="docker"))
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        modes = list(pool.map(lambda _: bench.isolation, range(4)))
+    assert modes == ["sandbox"] * 4
+    assert calls == ["docker"]
+
+
+class _SingleTaskHumanEval(HumanEval):
+    def load_tasks(self, *, limit=None):
+        return [_add_task()]
+
+
+def test_runner_grades_humaneval_end_to_end():
+    bench = _SingleTaskHumanEval(HumanEvalConfig(isolation="sandbox"))
+    model = ScriptedModel(Response(text="def add(a, b):\n    return a + b\n"))
+    report = asyncio.run(Runner(bench, model, k=1).run())
+    [attempt] = report.attempts
+    assert attempt.error is None
+    assert attempt.passed is True
+    assert attempt.score.detail["isolation"] == "sandbox"
+
+
+def _fake_docker_run(monkeypatch, returncode: int, stderr: bytes = b""):
+    def run(command, **_kwargs):
+        return subprocess.CompletedProcess(command, returncode, b"", stderr)
+
+    monkeypatch.setattr(human_eval.subprocess, "run", run)
+
+
+@pytest.mark.parametrize("code", [125, 126, 127])
+def test_docker_infra_failure_raises_instead_of_failing(monkeypatch, code):
+    _fake_docker_run(monkeypatch, code, b"timeout: not found")
+    with pytest.raises(human_eval.IsolationError, match=f"exited {code}"):
+        _run_check("pass\n", timeout=5, isolation="docker", docker_image="img")
+
+
+@pytest.mark.parametrize(("code", "passed"), [(0, True), (1, False), (137, False)])
+def test_docker_program_exit_codes_score_normally(monkeypatch, code, passed):
+    _fake_docker_run(monkeypatch, code)
+    assert _run_check("pass\n", timeout=5, isolation="docker") is passed
+
+
+def test_runner_records_docker_infra_failure_as_error(monkeypatch):
+    monkeypatch.setattr(human_eval, "resolve_isolation", lambda *_: "docker")
+    bench = _SingleTaskHumanEval(HumanEvalConfig(isolation="docker"))
+    model = ScriptedModel(Response(text="def add(a, b):\n    return a + b\n"))
+    _fake_docker_run(monkeypatch, 125, b"docker: Error response from daemon")
+    report = asyncio.run(Runner(bench, model, k=1).run())
+    [attempt] = report.attempts
+    assert attempt.passed is False
+    assert attempt.error is not None
+    assert "IsolationError" in attempt.error
+
+
+@_POSIX
+def test_sandbox_child_cpu_time_is_capped():
+    program = (
+        "import resource\n"
+        "limit = resource.getrlimit(resource.RLIMIT_CPU)\n"
+        "assert limit[0] == 11, limit\n"
+    )
+    assert _run_check(program, timeout=10) is True
+
+
+def test_rlimits_add_process_allowance_to_user_count():
+    allowed = dict(ResourceLimits(processes=3).rlimits(1, nproc_base=100))
+    assert allowed["RLIMIT_NPROC"] == 103
+    # Zero means no forking at all, whatever the user already runs.
+    forbidden = dict(ResourceLimits(processes=0).rlimits(1, nproc_base=100))
+    assert forbidden["RLIMIT_NPROC"] == 0
+
+
+@_POSIX
+@pytest.mark.skipif(
+    os.name == "posix" and os.geteuid() == 0, reason="root ignores RLIMIT_NPROC"
+)
+def test_sandbox_positive_process_allowance_permits_fork():
+    program = (
+        "import os\n"
+        "pid = os.fork()\n"
+        "if pid == 0:\n"
+        "    os._exit(0)\n"
+        "os.waitpid(pid, 0)\n"
+    )
+    assert _run_check(program, timeout=10, limits=ResourceLimits(processes=4)) is True
+
+
+@_POSIX
+def test_user_task_count_sees_this_process():
+    count = human_eval._user_task_count()
+    assert count is not None
+    assert count >= 1
+
+
+def test_grade_reports_kernel_confinement():
+    score = HumanEval(HumanEvalConfig(isolation="none")).grade(
+        _add_task(), _correct_result()
+    )
+    assert score.detail["kernel_confined"] is False
+    assert human_eval.kernel_confined("docker") is True
+
+
+@_MACOS_SANDBOX
+def test_macos_sandbox_is_kernel_confined():
+    assert human_eval.kernel_confined("sandbox") is True
+
+
+def test_unconfined_sandbox_resolution_warns(monkeypatch, caplog):
+    monkeypatch.setattr(human_eval, "kernel_confined", lambda _mode: False)
+    bench = HumanEval(HumanEvalConfig(isolation="sandbox"))
+    with caplog.at_level("WARNING", logger=human_eval.__name__):
+        assert bench.isolation == "sandbox"
+    assert "does not confine file writes or network" in caplog.text
