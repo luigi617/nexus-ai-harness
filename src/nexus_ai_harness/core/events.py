@@ -33,7 +33,8 @@ class ModelCallStarted(Event):
     """
 
     history: list[Message]
-    call_id: str = field(default_factory=lambda: new_id("mcall"))
+    # compare=False keeps value equality as it was before ids were added.
+    call_id: str = field(default_factory=lambda: new_id("mcall"), compare=False)
 
 
 @dataclass
@@ -56,7 +57,8 @@ class ToolCallStarted(Event):
     """
 
     call: dict
-    call_id: str = field(default_factory=lambda: new_id("tcall"))
+    # compare=False keeps value equality as it was before ids were added.
+    call_id: str = field(default_factory=lambda: new_id("tcall"), compare=False)
 
 
 @dataclass

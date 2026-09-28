@@ -90,13 +90,13 @@ class _MCPTool(Tool):
         )
 
     async def run(self, arguments: dict, ctx: Context) -> str:
-        """Call the underlying MCP tool, returning its text or an error string."""
-        try:
-            return await self._session.call_tool(self._tool_name, arguments)
-        except Exception as exc:  # surface as a tool error the model can react to
-            # Arguments may hold user data, so only the tool name is logged.
-            logger.warning("MCP tool %r raised", self.name, exc_info=exc)
-            return f"error: {exc}"
+        """Call the underlying MCP tool and return its text.
+
+        A call that raises propagates, so the tool runner turns it into the
+        usual ``"error: ..."`` result, logs the traceback, and records the
+        exception on :class:`~core.events.ToolCallCompleted`.
+        """
+        return await self._session.call_tool(self._tool_name, arguments)
 
 
 class _SDKSession:

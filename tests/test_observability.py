@@ -16,11 +16,14 @@ from nexus_ai_harness.core.events import (
 )
 from nexus_ai_harness.core.message import Message
 from nexus_ai_harness.core.response import Response
+from nexus_ai_harness.core.run import CostState
 from nexus_ai_harness.harness.harness import NexusAIHarness
 from nexus_ai_harness.plugins import LoggingHook as ExportedLoggingHook
-from nexus_ai_harness.plugins.hooks import LoggingHook
+from nexus_ai_harness.plugins.context_manager import SummarizingContextManager
+from nexus_ai_harness.plugins.hooks import CostCounter, LoggingHook
 from nexus_ai_harness.plugins.loops import AgenticLoop, ChatLoop
 from nexus_ai_harness.plugins.permissions import AllowList, AutoApprove
+from nexus_ai_harness.plugins.routers import LLMRouter
 from nexus_ai_harness.protocols.context import Context
 from nexus_ai_harness.protocols.hook import Hook
 from tests.conftest import RecordingTool, ScriptedModel, make_ctx
@@ -83,7 +86,7 @@ def test_model_call_completed_precedes_response_received():
 
 
 def test_agentic_loop_model_call_duration_uses_the_clock(monkeypatch):
-    import nexus_ai_harness.plugins.loops.agentic as agentic_mod
+    import nexus_ai_harness.services.model_call as model_call_mod
 
     ticks = iter([1.0, 1.75])
 
@@ -91,7 +94,7 @@ def test_agentic_loop_model_call_duration_uses_the_clock(monkeypatch):
         def perf_counter(self) -> float:
             return next(ticks)
 
-    monkeypatch.setattr(agentic_mod, "time", _FakeTime())
+    monkeypatch.setattr(model_call_mod, "time", _FakeTime())
     sink = _Sink()
     ctx = make_ctx(ScriptedModel(Response(text="hi")), sink)
     asyncio.run(AgenticLoop().run(ctx))
@@ -100,7 +103,7 @@ def test_agentic_loop_model_call_duration_uses_the_clock(monkeypatch):
 
 
 def test_chat_loop_emits_model_call_completed(monkeypatch):
-    import nexus_ai_harness.plugins.loops.chat as chat_mod
+    import nexus_ai_harness.services.model_call as model_call_mod
 
     ticks = iter([5.0, 5.5])
 
@@ -108,7 +111,7 @@ def test_chat_loop_emits_model_call_completed(monkeypatch):
         def perf_counter(self) -> float:
             return next(ticks)
 
-    monkeypatch.setattr(chat_mod, "time", _FakeTime())
+    monkeypatch.setattr(model_call_mod, "time", _FakeTime())
     sink = _Sink()
     response = Response(text="hi")
     ctx = make_ctx(ScriptedModel(response), sink)
@@ -124,6 +127,55 @@ def test_model_call_started_keeps_its_positional_shape():
     event = ModelCallStarted([])
     assert event.history == []
     assert event.call_id.startswith("mcall_")
+
+
+def test_generated_call_ids_do_not_affect_event_equality():
+    call = {"name": "echo", "id": "1"}
+    assert ToolCallStarted(call) == ToolCallStarted(call)
+    assert ModelCallStarted([]) == ModelCallStarted([])
+    assert ToolCallStarted(call).call_id != ToolCallStarted(call).call_id
+
+
+def test_summarizer_model_call_is_timed_and_counted():
+    summarizer_response = Response(
+        text="RECAP", usage={"input_tokens": 50, "output_tokens": 5}, cost=0.5
+    )
+    model = ScriptedModel(summarizer_response)
+    sink = _Sink()
+    ctx = make_ctx(model, sink, CostCounter())
+    history = [Message(role="user", content=f"m{i}") for i in range(10)]
+    cm = SummarizingContextManager(max_messages=6, keep_recent=3)
+    asyncio.run(cm.process(history, ctx))
+    [started] = [e for e in sink.events if isinstance(e, ModelCallStarted)]
+    [completed] = [e for e in sink.events if isinstance(e, ModelCallCompleted)]
+    assert completed.call_id == started.call_id
+    assert completed.duration >= 0
+    # An auxiliary call is not a loop response.
+    assert not any(isinstance(e, ResponseReceived) for e in sink.events)
+    state = ctx.state(CostState)
+    assert (state.input_tokens, state.output_tokens, state.total) == (50, 5, 0.5)
+
+
+def test_llm_router_decision_is_timed_and_counted():
+    decider = ScriptedModel(
+        Response(text="x", usage={"input_tokens": 11, "output_tokens": 1})
+    )
+    sink = _Sink()
+    ctx = make_ctx(ScriptedModel(), sink, CostCounter())
+    asyncio.run(LLMRouter(decider).route([Message(role="user", content="hi")], ctx))
+    [completed] = [e for e in sink.events if isinstance(e, ModelCallCompleted)]
+    assert completed.response.usage["input_tokens"] == 11
+    assert ctx.state(CostState).input_tokens == 11
+
+
+def test_run_usage_includes_auxiliary_calls_without_double_counting():
+    decider = ScriptedModel(
+        Response(text="x", usage={"input_tokens": 100, "output_tokens": 1})
+    )
+    harness = _agentic(_tool_turn(), CostCounter(), LLMRouter(decider))
+    result = harness.run_sync("go")
+    # Two routing decisions plus the two loop calls (7+9), each counted once.
+    assert result.usage == {"input_tokens": 216, "output_tokens": 5}
 
 
 def test_tool_call_events_correlate_inside_a_run():
@@ -148,7 +200,7 @@ def test_model_calls_are_logged_at_debug(caplog):
     with caplog.at_level(logging.DEBUG, logger="nexus_ai_harness"):
         _agentic(ScriptedModel(Response(text="done"))).run_sync("go")
     names = {r.name for r in caplog.records}
-    assert "nexus_ai_harness.plugins.loops.agentic" in names
+    assert "nexus_ai_harness.services.model_call" in names
     assert "nexus_ai_harness.services.runner" in names
     assert all(r.levelno == logging.DEBUG for r in caplog.records)
 
@@ -215,6 +267,22 @@ def test_logging_hook_escalates_tool_errors_to_warning(caplog):
         hook.on(completed, make_ctx())
     [record] = caplog.records
     assert record.levelno == logging.WARNING
+    # The exception message can echo secrets, so only its type is logged.
+    assert record.event_fields["error"] == "ValueError"
+    assert "kaboom" not in record.getMessage()
+
+
+def test_logging_hook_include_content_logs_the_exception_message(caplog):
+    logger = logging.getLogger("tests.observability.content")
+    hook = LoggingHook(logger=logger, include_content=True)
+    completed = ToolCallCompleted(
+        {"name": "boom", "id": "1"},
+        Message(role="tool", content="error: kaboom"),
+        error=ValueError("kaboom"),
+    )
+    with caplog.at_level(logging.DEBUG, logger="tests.observability.content"):
+        hook.on(completed, make_ctx())
+    [record] = caplog.records
     assert record.event_fields["error"] == "ValueError: kaboom"
 
 

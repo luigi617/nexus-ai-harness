@@ -25,9 +25,9 @@ class LoggingHook(Hook):
 
     Bulky or sensitive payloads are summarized by default: the model history
     becomes a message count, messages and responses report sizes instead of
-    text, and tool calls keep only their ``id`` and ``name``. Pass
-    ``include_content=True`` to log message text, response text, and tool
-    arguments too.
+    text, tool calls keep only their ``id`` and ``name``, and a tool's exception
+    is reduced to its type name. Pass ``include_content=True`` to log message
+    text, response text, tool arguments, and exception messages too.
 
     Records go to the ``"nexus_ai_harness.events"`` logger unless another is
     given; like every harness logger it is silent until the application
@@ -112,7 +112,10 @@ class LoggingHook(Hook):
                 response["text"] = value.text
             return response
         if isinstance(value, BaseException):
-            return f"{type(value).__name__}: {value}"
+            # The message often echoes arguments or tool output, so it is content.
+            if self._include_content:
+                return f"{type(value).__name__}: {value}"
+            return type(value).__name__
         if isinstance(value, dict):  # a tool call
             call = {key: value[key] for key in ("id", "name") if key in value}
             if self._include_content:

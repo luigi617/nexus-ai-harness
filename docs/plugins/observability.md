@@ -45,8 +45,9 @@ Each record's message reads like `ToolCallCompleted call_id=tcall_... duration=0
 and its `extra` carries `event` (the event name), `session_id`, and
 `event_fields` (a JSON-friendly dict of the event's fields), ready for a JSON
 formatter. By default, message text, response text, the final answer, and tool
-arguments are reduced to sizes; pass `include_content=True` to keep them. A tool
-call that raised is logged at `WARNING`.
+arguments are reduced to sizes, and a tool's exception is reduced to its type
+name, since its message can echo arguments; pass `include_content=True` to keep
+them. A tool call that raised, including an MCP tool, is logged at `WARNING`.
 
 ## Timing and correlation
 
@@ -61,8 +62,14 @@ Model and tool calls each emit a started and a completed event that share a
 | `ToolCallCompleted` | `call`, `result`, `call_id`, `duration`, `error` |
 
 Durations are in seconds, measured with `time.perf_counter()`. `error` is the
-exception a tool raised, or `None`. `ModelCallCompleted` is emitted just before
-`ResponseReceived`.
+exception a tool raised, or `None`. Generated `call_id`s are excluded from event
+equality, so two events built from the same arguments still compare equal.
+
+Every model call goes through `services.model_call.timed_complete`, which emits
+the started/completed pair. That includes the auxiliary calls made by
+`SummarizingContextManager` and `LLMRouter`, not just the loop's own. For a loop
+call, `ModelCallCompleted` is emitted just before `ResponseReceived`; auxiliary
+calls emit no `ResponseReceived`, since their response is not a conversation turn.
 
 ```python
 from nexus_ai_harness.core.events import ModelCallCompleted
@@ -76,8 +83,11 @@ class Latency(Hook):
 
 ## Cost and token usage
 
-`CostCounter` adds up each response's cost and its `input_tokens` and
-`output_tokens`. The run result exposes the totals:
+`CostCounter` adds up the cost, `input_tokens`, and `output_tokens` of every
+`ModelCallCompleted`, so summarization and routing calls are included. A
+`ResponseReceived` from a loop that does not emit `ModelCallCompleted` is counted
+too, and a response carried by both events is counted once. The run result
+exposes the totals:
 
 ```python
 result = await harness.run("hello")
