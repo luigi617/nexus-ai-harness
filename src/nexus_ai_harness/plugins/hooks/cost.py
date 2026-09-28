@@ -1,20 +1,20 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-
 from nexus_ai_harness.core.events import Event, ResponseReceived
+from nexus_ai_harness.core.run import CostState
 from nexus_ai_harness.protocols.context import Context
 from nexus_ai_harness.protocols.hook import Hook
 
-
-@dataclass
-class CostState:
-    total: float = 0.0
+__all__ = ["CostCounter", "CostState"]
 
 
 class CostCounter(Hook):
-    """Accumulate the running cost (USD) from each response into CostState."""
+    """Accumulate each response's cost (USD) and token usage into CostState."""
 
     def on(self, event: Event, ctx: Context) -> None:
         if isinstance(event, ResponseReceived):
-            ctx.state(CostState).total += event.response.cost
+            state = ctx.state(CostState)
+            response = event.response
+            state.total += response.cost
+            state.input_tokens += response.usage.get("input_tokens", 0)
+            state.output_tokens += response.usage.get("output_tokens", 0)

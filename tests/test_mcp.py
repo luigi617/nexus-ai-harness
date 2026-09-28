@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 
 import pytest
 
@@ -111,6 +112,43 @@ def test_run_returns_error_on_failure():
 
     assert result.startswith("error:")
     assert "boom" in result
+
+
+def test_run_failure_logs_traceback_without_arguments(caplog):
+    class BoomSession(FakeSession):
+        async def call_tool(self, name: str, arguments: dict) -> str:
+            raise RuntimeError("boom")
+
+    client = MCPClient(
+        [MCPServer(name="fs", command=["run-fs"])],
+        connector=make_connector(BoomSession()),
+    )
+    ctx = make_ctx()
+    asyncio.run(client.start(ctx))
+    read = {t.name: t for t in client.provide_tools(ctx)}["fs__read"]
+
+    with caplog.at_level(logging.WARNING, logger="nexus_ai_harness"):
+        result = asyncio.run(read.run({"path": "secret.txt"}, ctx))
+
+    assert result == "error: boom"  # unchanged string for the model
+    [record] = caplog.records
+    assert record.name == "nexus_ai_harness.plugins.mcp.client"
+    assert record.exc_info is not None and record.exc_info[0] is RuntimeError
+    assert "fs__read" in record.getMessage()
+    assert "secret.txt" not in caplog.text
+
+
+def test_start_logs_server_label_but_never_command_or_env(caplog):
+    client = MCPClient(
+        [MCPServer(name="fs", command=["run-fs", "--token=hush"], env={"K": "hush"})],
+        connector=make_connector(FakeSession()),
+    )
+    with caplog.at_level(logging.DEBUG, logger="nexus_ai_harness"):
+        asyncio.run(client.start(make_ctx()))
+    assert any(
+        "'fs'" in r.getMessage() and "2 tools" in r.getMessage() for r in caplog.records
+    )
+    assert "hush" not in caplog.text
 
 
 def test_names_namespaced_across_servers():

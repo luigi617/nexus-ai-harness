@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import importlib
 import inspect
+import logging
 from collections.abc import Awaitable, Callable, Iterable
-from contextlib import AsyncExitStack, suppress
+from contextlib import AsyncExitStack
 from dataclasses import dataclass
 from typing import Any, Protocol
 
@@ -11,6 +12,8 @@ from nexus_ai_harness.protocols.context import Context
 from nexus_ai_harness.protocols.lifecycle import Lifecycle
 from nexus_ai_harness.protocols.tool import Tool
 from nexus_ai_harness.protocols.tool_provider import ToolProvider
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -91,6 +94,8 @@ class _MCPTool(Tool):
         try:
             return await self._session.call_tool(self._tool_name, arguments)
         except Exception as exc:  # surface as a tool error the model can react to
+            # Arguments may hold user data, so only the tool name is logged.
+            logger.warning("MCP tool %r raised", self.name, exc_info=exc)
             return f"error: {exc}"
 
 
@@ -171,11 +176,22 @@ class MCPClient(ToolProvider, Lifecycle):
             for server in self._servers:
                 session = await self._connector(server)
                 self._sessions.append(session)
+                discovered = 0
                 for spec in await session.list_tools():
                     if not str(spec.get("name", "")).strip():
+                        logger.debug(
+                            "MCP server %r advertised a tool with no name; skipped",
+                            server.name,
+                        )
                         continue  # skip malformed specs with no usable name
                     self._tools.append(_MCPTool(session, server.name, spec))
+                    discovered += 1
+                # Only the label is logged; command, url, and env stay out of logs.
+                logger.info(
+                    "connected to MCP server %r (%d tools)", server.name, discovered
+                )
         except BaseException:
+            logger.debug("MCP client start failed; closing opened sessions")
             await self.stop()  # close what opened; don't leak on partial start
             raise
 
@@ -200,14 +216,18 @@ class MCPClient(ToolProvider, Lifecycle):
             closer = getattr(session, "aclose", None) or getattr(session, "close", None)
             if closer is None:
                 continue
-            with suppress(Exception):
+            try:
                 result = closer()
                 if inspect.isawaitable(result):
                     await result
+            except Exception:  # best-effort; keep closing the rest
+                logger.debug("closing an MCP session failed", exc_info=True)
         self._sessions = []
         self._tools = []
-        with suppress(Exception):
+        try:
             await self._exit_stack.aclose()
+        except Exception:  # best-effort, as above
+            logger.debug("closing the MCP transport stack failed", exc_info=True)
         # Fresh stack so a subsequent start() never reuses a torn-down one.
         self._exit_stack = AsyncExitStack()
 

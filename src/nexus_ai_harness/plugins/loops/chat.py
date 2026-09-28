@@ -1,6 +1,13 @@
 from __future__ import annotations
 
-from nexus_ai_harness.core.events import ModelCallStarted, ResponseReceived
+import logging
+import time
+
+from nexus_ai_harness.core.events import (
+    ModelCallCompleted,
+    ModelCallStarted,
+    ResponseReceived,
+)
 from nexus_ai_harness.core.message import Message
 from nexus_ai_harness.core.run import RunState
 from nexus_ai_harness.protocols.context import Context
@@ -9,6 +16,8 @@ from nexus_ai_harness.protocols.loop import Loop
 from nexus_ai_harness.protocols.model import Model
 from nexus_ai_harness.protocols.router import Router
 from nexus_ai_harness.protocols.tool import Tool
+
+logger = logging.getLogger(__name__)
 
 
 class ChatLoop(Loop):
@@ -25,8 +34,18 @@ class ChatLoop(Loop):
         )
         if model is None:
             raise LookupError("no model registered")
-        ctx.emit(ModelCallStarted(list(history)))
+        started = ModelCallStarted(list(history))
+        ctx.emit(started)
+        start = time.perf_counter()
         response = await ctx.invoke(model.complete, history, list(ctx.all(Tool)), ctx)
+        duration = time.perf_counter() - start
+        logger.debug(
+            "model call completed in %.3fs (call_id=%s, usage=%s)",
+            duration,
+            started.call_id,
+            response.usage,
+        )
+        ctx.emit(ModelCallCompleted(started.call_id, response, duration))
         ctx.emit(ResponseReceived(response))
         ctx.add_message(Message(role="assistant", content=response.text))
         ctx.state(RunState).stop_reason = "completed"

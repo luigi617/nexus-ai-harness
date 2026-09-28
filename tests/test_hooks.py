@@ -31,6 +31,24 @@ def test_cost_counter_accumulates():
     assert abs(ctx.state(CostState).total - 0.35) < 1e-9
 
 
+def test_cost_counter_accumulates_token_usage():
+    ctx = make_ctx()
+    h = CostCounter()
+    h.on(
+        ResponseReceived(Response(usage={"input_tokens": 10, "output_tokens": 3})), ctx
+    )
+    h.on(ResponseReceived(Response(usage={"input_tokens": 5, "output_tokens": 2})), ctx)
+    h.on(ResponseReceived(Response()), ctx)  # a backend that reports no usage
+    state = ctx.state(CostState)
+    assert (state.input_tokens, state.output_tokens) == (15, 5)
+
+
+def test_cost_state_is_reexported_from_core():
+    from nexus_ai_harness.core.run import CostState as CoreCostState
+
+    assert CostState is CoreCostState
+
+
 def test_cost_counter_ignores_other_events():
     ctx = make_ctx()
     CostCounter().on(IterationStarted(0), ctx)
