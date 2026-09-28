@@ -1,10 +1,10 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=68", "setuptools-scm>=8"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "nexus-ai-harness"
-version = "0.1.0"
+dynamic = ["version"]
 description = "An AI harness"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -40,6 +40,9 @@ benchmarks = [
     "docker>=7.0.0",
     "pyyaml>=6.0",
 ]
+
+# Version comes from the git tag (e.g. v0.2.0 -> 0.2.0).
+[tool.setuptools_scm]
 
 [tool.setuptools.packages.find]
 where = ["src"]
