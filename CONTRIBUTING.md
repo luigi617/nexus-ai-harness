@@ -3,7 +3,7 @@
 Install the project with its dev tools:
 
 ```bash
-pip install -e ".[dev]"
+pip install -e . --group dev
 ```
 
 Before opening a PR, make sure the checks pass:

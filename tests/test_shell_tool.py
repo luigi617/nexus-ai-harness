@@ -4,9 +4,9 @@ import sys
 
 import pytest
 
-from plugins.sandbox import WorkspaceSandbox
-from plugins.tools import Shell
-from plugins.tools.shell import _DEFAULT_TIMEOUT, _coerce_timeout
+from nexus_ai_harness.plugins.sandbox import WorkspaceSandbox
+from nexus_ai_harness.plugins.tools import Shell
+from nexus_ai_harness.plugins.tools.shell import _DEFAULT_TIMEOUT, _coerce_timeout
 from tests.conftest import make_ctx
 
 

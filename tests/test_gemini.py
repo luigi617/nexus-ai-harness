@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from core.message import Message
-from plugins.models.gemini import GeminiModel
+from nexus_ai_harness.core.message import Message
+from nexus_ai_harness.plugins.models.gemini import GeminiModel
 
 
 def _tool(name="calc", description="d", parameters=None):
@@ -19,7 +19,9 @@ def _patch_post_json(monkeypatch, response):
         captured.update(url=url, payload=payload, headers=headers, timeout=timeout)
         return response
 
-    monkeypatch.setattr("plugins.models.gemini.post_json", fake_post_json)
+    monkeypatch.setattr(
+        "nexus_ai_harness.plugins.models.gemini.post_json", fake_post_json
+    )
     return captured
 
 
@@ -138,7 +140,9 @@ def test_generate_builds_url_headers_and_wires_cost(monkeypatch):
 
 
 def test_generate_omits_api_key_system_and_tools_when_absent(monkeypatch):
-    monkeypatch.setattr("plugins.models.base.load_dotenv", lambda *a, **k: None)
+    monkeypatch.setattr(
+        "nexus_ai_harness.plugins.models.base.load_dotenv", lambda *a, **k: None
+    )
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     captured = _patch_post_json(
         monkeypatch,

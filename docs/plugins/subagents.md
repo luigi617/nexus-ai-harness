@@ -1,12 +1,19 @@
 # Subagents
 
-The `Subagent` tool delegates a task to a fresh agent run with an isolated
-context. It runs on a `Spawner` (protocol: `protocols/spawner.py`); the default
-is `InProcessSpawner`.
+The `Subagent` tool lets an agent hand off a task to a fresh, isolated agent and
+get back just the result. This keeps the main conversation focused while the
+subagent does the detailed work.
 
-<!-- TODO:
-- fork(): fresh Session, shared registry subset, depth + 1, inherited approver.
-- Depth limit (default 2) lives on the spawner.
-- plugins=None inherits all parent plugins; a list restricts the subset.
-- Concurrency / thread-safety notes.
--->
+```python
+from nexus_ai_harness.plugins.tools import Subagent
+from nexus_ai_harness.plugins.spawner import InProcessSpawner
+
+harness.use(Subagent()).use(InProcessSpawner())
+```
+
+The subagent inherits the parent's plugins (model, tools, permissions) but runs
+in its own session. To limit how deep subagents can nest — a subagent spawning
+another subagent — set `InProcessSpawner(max_depth=2)`. Use `max_concurrent` to
+cap how many run at once.
+
+The default harness already includes subagents.

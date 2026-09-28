@@ -1,10 +1,23 @@
 # Memory
 
-Long-term memory is a `MemoryStore` (protocol: `protocols/memory.py`) plus the
-tools that use it. Tools reach the store through the context, never via `__init__`.
+Memory lets an agent save notes and recall them in later sessions. Register a
+memory store plus the memory tools, and the agent can use them on its own.
 
-<!-- TODO:
-- MemoryStore protocol and FileMemoryStore / FileMemoryItem.
-- The tools: remember (upsert), recall (search), forget.
-- Where the store is registered (default_harness) and the memory_dir.
--->
+```python
+from nexus_ai_harness.plugins.memory import FileMemoryStore
+from nexus_ai_harness.plugins.tools import Remember, Recall, Forget
+
+harness.use(FileMemoryStore())          # defaults to ~/.nexus-ai-harness/memory
+harness.use(Remember()).use(Recall()).use(Forget())
+```
+
+Pass a path to store memories elsewhere: `FileMemoryStore("./my-memory")`.
+
+## The tools
+
+- **`remember`** — save a note.
+- **`recall`** — search saved notes.
+- **`forget`** — delete a note.
+
+The default harness includes memory already, so you only wire it up when
+building your own.

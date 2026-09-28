@@ -7,8 +7,8 @@ from benchmarks.suites.human_eval import (
     _extract_code,
     _run_check,
 )
-from harness.result import RunResult
-from harness.session import Session
+from nexus_ai_harness.harness.result import RunResult
+from nexus_ai_harness.harness.session import Session
 
 _ADD_PROMPT = 'def add(a, b):\n    """Add two numbers."""\n'
 _ADD_TEST = "def check(candidate):\n    assert candidate(1, 2) == 3\n"

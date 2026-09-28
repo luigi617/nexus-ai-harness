@@ -4,16 +4,16 @@ import tempfile
 from collections.abc import Callable
 from typing import ClassVar
 
-from harness import NexusAIHarness
-from plugins.guards import BudgetGuard, MaxIterations, Timeout
-from plugins.hooks import CostCounter, ElapsedTime, IterationCounter
-from plugins.loops import AgenticLoop
-from plugins.mcp import MCPClient, MCPServer
-from plugins.memory import FileMemoryStore
-from plugins.permissions import AutoApprove, DenyList
-from plugins.sandbox import WorkspaceSandbox
-from plugins.spawner import InProcessSpawner
-from plugins.tools import (
+from nexus_ai_harness.harness import NexusAIHarness
+from nexus_ai_harness.plugins.guards import BudgetGuard, MaxIterations, Timeout
+from nexus_ai_harness.plugins.hooks import CostCounter, ElapsedTime, IterationCounter
+from nexus_ai_harness.plugins.loops import AgenticLoop
+from nexus_ai_harness.plugins.mcp import MCPClient, MCPServer
+from nexus_ai_harness.plugins.memory import FileMemoryStore
+from nexus_ai_harness.plugins.permissions import AutoApprove, DenyList
+from nexus_ai_harness.plugins.sandbox import WorkspaceSandbox
+from nexus_ai_harness.plugins.spawner import InProcessSpawner
+from nexus_ai_harness.plugins.tools import (
     Forget,
     ListDir,
     ReadFile,
@@ -23,10 +23,10 @@ from plugins.tools import (
     Subagent,
     WriteFile,
 )
-from protocols.context import Context
-from protocols.model import Model
-from protocols.skill import Skill
-from protocols.tool import Tool
+from nexus_ai_harness.protocols.context import Context
+from nexus_ai_harness.protocols.model import Model
+from nexus_ai_harness.protocols.skill import Skill
+from nexus_ai_harness.protocols.tool import Tool
 
 HarnessBuilder = Callable[[Model], NexusAIHarness]  # model under test -> harness
 

@@ -24,7 +24,7 @@ _spec.loader.exec_module(ump)
 
 def _spec_classes():
     for spec in ump.SPECS:
-        module = importlib.import_module(f"plugins.models.{spec.key}")
+        module = importlib.import_module(f"nexus_ai_harness.plugins.models.{spec.key}")
         yield spec, getattr(module, spec.class_name)
 
 

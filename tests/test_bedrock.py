@@ -4,9 +4,9 @@ import os
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
-from core.message import Message
-from plugins.models import bedrock
-from plugins.models.bedrock import DEFAULT_REGION, BedrockModel
+from nexus_ai_harness.core.message import Message
+from nexus_ai_harness.plugins.models import bedrock
+from nexus_ai_harness.plugins.models.bedrock import DEFAULT_REGION, BedrockModel
 
 
 def _tool(name="calc", description="d", parameters=None):

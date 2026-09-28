@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import asyncio
 
-from core.events import Event, SessionEnded, SessionStarted
-from core.response import Response
-from harness import NexusAIHarness
-from plugins.loops import AgenticLoop
-from protocols.hook import Hook
-from protocols.lifecycle import Lifecycle
-from protocols.plugin import Plugin
+from nexus_ai_harness.core.events import Event, SessionEnded, SessionStarted
+from nexus_ai_harness.core.response import Response
+from nexus_ai_harness.harness import NexusAIHarness
+from nexus_ai_harness.plugins.loops import AgenticLoop
+from nexus_ai_harness.protocols.hook import Hook
+from nexus_ai_harness.protocols.lifecycle import Lifecycle
+from nexus_ai_harness.protocols.plugin import Plugin
 from tests.conftest import ScriptedModel
 
 
@@ -64,17 +64,17 @@ def test_session_lifecycle_events():
 
 
 def test_default_harness_runs(tmp_path):
-    from plugins import default_harness
+    from nexus_ai_harness.plugins import default_harness
 
     h = default_harness(ScriptedModel(Response(text="hi")), memory_dir=str(tmp_path))
     assert h.run_sync("q").output == "hi"
 
 
 def test_default_harness_workspace_registers_sandbox_and_fs_tools(tmp_path):
-    from plugins import default_harness
-    from plugins.sandbox import WorkspaceSandbox
-    from protocols.sandbox import Sandbox
-    from protocols.tool import Tool
+    from nexus_ai_harness.plugins import default_harness
+    from nexus_ai_harness.plugins.sandbox import WorkspaceSandbox
+    from nexus_ai_harness.protocols.sandbox import Sandbox
+    from nexus_ai_harness.protocols.tool import Tool
 
     ws = tmp_path / "ws"
     h = default_harness(
@@ -90,9 +90,9 @@ def test_default_harness_workspace_registers_sandbox_and_fs_tools(tmp_path):
 def test_default_harness_write_file_and_shell_are_not_auto_trusted(tmp_path):
     # Only the read-only tools bypass the approver; write_file and shell mutate
     # state and must resolve to ASK (regression for the trusted-list contract).
-    from core.permission import PermissionVerdict
-    from plugins import default_harness
-    from protocols.permission import Permission
+    from nexus_ai_harness.core.permission import PermissionVerdict
+    from nexus_ai_harness.plugins import default_harness
+    from nexus_ai_harness.protocols.permission import Permission
 
     h = default_harness(
         ScriptedModel(Response(text="hi")),
@@ -113,10 +113,10 @@ def test_default_harness_write_file_and_shell_are_not_auto_trusted(tmp_path):
 
 
 def test_default_harness_session_store_registers_autosave(tmp_path):
-    from plugins import FileSessionStore, default_harness
-    from plugins.persistence.autosave import AutoSave
-    from protocols.hook import Hook
-    from protocols.session_store import SessionStore
+    from nexus_ai_harness.plugins import FileSessionStore, default_harness
+    from nexus_ai_harness.plugins.persistence.autosave import AutoSave
+    from nexus_ai_harness.protocols.hook import Hook
+    from nexus_ai_harness.protocols.session_store import SessionStore
 
     store = FileSessionStore(tmp_path / "sessions")
     h = default_harness(
@@ -129,8 +129,8 @@ def test_default_harness_session_store_registers_autosave(tmp_path):
 
 
 def test_default_harness_mcp_servers_registers_provider(tmp_path):
-    from plugins import MCPServer, default_harness
-    from protocols.tool_provider import ToolProvider
+    from nexus_ai_harness.plugins import MCPServer, default_harness
+    from nexus_ai_harness.protocols.tool_provider import ToolProvider
 
     h = default_harness(
         ScriptedModel(Response(text="hi")),
@@ -141,7 +141,7 @@ def test_default_harness_mcp_servers_registers_provider(tmp_path):
 
 
 def test_default_harness_bounds_a_runaway_loop(tmp_path):
-    from plugins import default_harness
+    from nexus_ai_harness.plugins import default_harness
 
     # MaxIterations must halt a runaway tool loop; `recall` is trusted so no prompt.
     model = ScriptedModel(
@@ -203,8 +203,8 @@ def test_concurrent_double_stop_tears_down_exactly_once():
 
 
 def test_result_exposes_run_state(tmp_path):
-    from plugins import default_harness
-    from plugins.hooks import CostState
+    from nexus_ai_harness.plugins import default_harness
+    from nexus_ai_harness.plugins.hooks import CostState
 
     h = default_harness(ScriptedModel(Response(text="done")), memory_dir=str(tmp_path))
     result = h.run_sync("q")

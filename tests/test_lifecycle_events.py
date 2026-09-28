@@ -1,12 +1,17 @@
 from __future__ import annotations
 
-from core.events import Event, IterationCompleted, ModelCallStarted, ResponseReceived
-from core.response import Response
-from harness.harness import NexusAIHarness
-from plugins.loops import AgenticLoop
-from plugins.permissions import AllowList, AutoApprove
-from protocols.context import Context
-from protocols.hook import Hook
+from nexus_ai_harness.core.events import (
+    Event,
+    IterationCompleted,
+    ModelCallStarted,
+    ResponseReceived,
+)
+from nexus_ai_harness.core.response import Response
+from nexus_ai_harness.harness.harness import NexusAIHarness
+from nexus_ai_harness.plugins.loops import AgenticLoop
+from nexus_ai_harness.plugins.permissions import AllowList, AutoApprove
+from nexus_ai_harness.protocols.context import Context
+from nexus_ai_harness.protocols.hook import Hook
 from tests.conftest import RecordingTool, ScriptedModel
 
 

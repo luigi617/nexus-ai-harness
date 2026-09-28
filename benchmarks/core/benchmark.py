@@ -7,10 +7,10 @@ from typing import ClassVar
 
 from benchmarks.core.config import BenchmarkConfig
 from benchmarks.core.task import Score, Task
-from harness import NexusAIHarness
-from harness.result import RunResult
-from harness.session import Session
-from protocols.model import Model
+from nexus_ai_harness.harness import NexusAIHarness
+from nexus_ai_harness.harness.result import RunResult
+from nexus_ai_harness.harness.session import Session
+from nexus_ai_harness.protocols.model import Model
 
 
 @dataclass

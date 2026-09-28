@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from plugins.sandbox import WorkspaceSandbox
-from plugins.tools import ListDir, ReadFile, WriteFile
+from nexus_ai_harness.plugins.sandbox import WorkspaceSandbox
+from nexus_ai_harness.plugins.tools import ListDir, ReadFile, WriteFile
 from tests.conftest import make_ctx
 
 

@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import asyncio
 
-from core.events import Event
-from plugins.permissions import AllowList, DenyList
-from protocols.hook import Hook
-from protocols.tool import Tool
-from services.tool_runner import ToolRunner
+from nexus_ai_harness.core.events import Event
+from nexus_ai_harness.plugins.permissions import AllowList, DenyList
+from nexus_ai_harness.protocols.hook import Hook
+from nexus_ai_harness.protocols.tool import Tool
+from nexus_ai_harness.services.tool_runner import ToolRunner
 from tests.conftest import RecordingTool, make_ctx
 
 

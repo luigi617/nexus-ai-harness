@@ -1,21 +1,27 @@
 from __future__ import annotations
 
-import importlib.util
+import importlib
 
 import pytest
 
-from core.response import Response
-from harness.context import RunContext
-from harness.registry import Registry
-from harness.session import Session
-from protocols.model import Model
-from protocols.tool import Tool
+from nexus_ai_harness.core.response import Response
+from nexus_ai_harness.harness.context import RunContext
+from nexus_ai_harness.harness.registry import Registry
+from nexus_ai_harness.harness.session import Session
+from nexus_ai_harness.protocols.model import Model
+from nexus_ai_harness.protocols.tool import Tool
 
-# Only the tau2-bench suite requires tau2, which pins requires-python <3.14 and
-# can't install on 3.14. Its test module imports tau2 at top, so skip collecting
-# just that one when tau2 is absent; every other benchmark test runs everywhere
-# (import benchmarks tolerates a missing tau2 — see benchmarks/__init__.py).
-if importlib.util.find_spec("tau2") is None:
+
+def tau2_importable() -> bool:
+    """Whether tau2 can actually be imported, not merely located."""
+    try:
+        importlib.import_module("tau2")
+    except ImportError:
+        return False
+    return True
+
+
+if not tau2_importable():
     collect_ignore_glob = ["test_bench_tau2.py"]
 
 

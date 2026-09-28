@@ -2,26 +2,26 @@ from __future__ import annotations
 
 from typing import ClassVar
 
-from core.response import Response
-from harness import (
+from nexus_ai_harness.core.response import Response
+from nexus_ai_harness.harness import (
     Capability,
     HarnessInspection,
     NexusAIHarness,
     PluginInfo,
     PluginStatus,
 )
-from harness.introspection import inspect_registry
-from harness.registry import Registry
-from plugins.loops import AgenticLoop, ChatLoop
-from protocols.context_manager import ContextManager
-from protocols.interceptor import Interceptor
-from protocols.lifecycle import Lifecycle
-from protocols.loop import Loop
-from protocols.memory import MemoryStore
-from protocols.model import Model
-from protocols.plugin import Plugin
-from protocols.router import Router
-from protocols.tool import Tool
+from nexus_ai_harness.harness.introspection import inspect_registry
+from nexus_ai_harness.harness.registry import Registry
+from nexus_ai_harness.plugins.loops import AgenticLoop, ChatLoop
+from nexus_ai_harness.protocols.context_manager import ContextManager
+from nexus_ai_harness.protocols.interceptor import Interceptor
+from nexus_ai_harness.protocols.lifecycle import Lifecycle
+from nexus_ai_harness.protocols.loop import Loop
+from nexus_ai_harness.protocols.memory import MemoryStore
+from nexus_ai_harness.protocols.model import Model
+from nexus_ai_harness.protocols.plugin import Plugin
+from nexus_ai_harness.protocols.router import Router
+from nexus_ai_harness.protocols.tool import Tool
 from tests.conftest import RecordingTool, ScriptedModel
 
 
@@ -69,7 +69,9 @@ def test_plugins_listed_in_registration_order_with_facts():
     assert loop_info.provides == ("Loop",)
     # AgenticLoop declares requires=(Model,).
     assert loop_info.requires == ("Model",)
-    assert loop_info.qualified_name == "plugins.loops.agentic.AgenticLoop"
+    assert (
+        loop_info.qualified_name == "nexus_ai_harness.plugins.loops.agentic.AgenticLoop"
+    )
     assert loop_info.target is None  # not an interceptor
 
 
@@ -117,7 +119,7 @@ def test_multi_select_capability_has_no_single_selection():
 
 
 def test_context_manager_is_a_multi_provider_capability():
-    from plugins.context_manager import SummarizingContextManager
+    from nexus_ai_harness.plugins.context_manager import SummarizingContextManager
 
     snapshot = inspect_registry(_registry(SummarizingContextManager()))
     cm = snapshot.capability(ContextManager)
@@ -236,7 +238,7 @@ def test_empty_harness_renders_just_its_name():
 
 
 def test_default_harness_inspection_covers_its_composition(tmp_path):
-    from plugins import default_harness
+    from nexus_ai_harness.plugins import default_harness
 
     h = default_harness(ScriptedModel(Response(text="x")), memory_dir=str(tmp_path))
     snapshot = h.graph().inspection()
@@ -258,8 +260,8 @@ def test_chat_loop_also_provides_the_loop_capability():
 
 
 def test_requires_reports_concrete_plugin_dependencies_by_name():
-    from plugins.guards import BudgetGuard
-    from plugins.hooks import CostCounter
+    from nexus_ai_harness.plugins.guards import BudgetGuard
+    from nexus_ai_harness.plugins.hooks import CostCounter
 
     snapshot = inspect_registry(_registry(BudgetGuard(5.0), CostCounter()))
     guard = snapshot.plugin("BudgetGuard")

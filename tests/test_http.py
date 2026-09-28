@@ -7,7 +7,7 @@ import urllib.request
 
 import pytest
 
-from plugins.models._http import post_json
+from nexus_ai_harness.plugins.models._http import post_json
 
 
 class _FakeResponse:

@@ -11,16 +11,16 @@ from benchmarks.core.benchmark import Benchmark, Episode
 from benchmarks.core.config import BenchmarkConfig
 from benchmarks.core.registry import register
 from benchmarks.core.task import Score, Task
-from harness import NexusAIHarness
-from harness.result import RunResult
-from harness.session import Session
-from plugins.guards import MaxIterations, Timeout
-from plugins.hooks import ElapsedTime, IterationCounter
-from plugins.loops import AgenticLoop
-from plugins.permissions import AutoApprove
-from protocols.context import Context
-from protocols.model import Model
-from protocols.tool import Tool
+from nexus_ai_harness.harness import NexusAIHarness
+from nexus_ai_harness.harness.result import RunResult
+from nexus_ai_harness.harness.session import Session
+from nexus_ai_harness.plugins.guards import MaxIterations, Timeout
+from nexus_ai_harness.plugins.hooks import ElapsedTime, IterationCounter
+from nexus_ai_harness.plugins.loops import AgenticLoop
+from nexus_ai_harness.plugins.permissions import AutoApprove
+from nexus_ai_harness.protocols.context import Context
+from nexus_ai_harness.protocols.model import Model
+from nexus_ai_harness.protocols.tool import Tool
 
 
 @dataclass

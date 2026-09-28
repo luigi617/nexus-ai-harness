@@ -5,7 +5,7 @@ Run benchmarks against agents built on `nexus-ai-harness`.
 ## Install
 
 ```bash
-pip install -e '.[benchmarks]'
+pip install -e . --group benchmarks
 ```
 
 This installs every benchmark's dependencies. Some suites need more at run time: GPQA and GAIA use gated Hugging
@@ -147,7 +147,7 @@ Agentic: the repo is cloned at its base commit into a sandboxed workspace, the
 agent edits it with the filesystem/shell tools, and the model's `git diff` is
 graded by the project's `FAIL_TO_PASS`/`PASS_TO_PASS` tests via the official
 `swebench` Docker harness. Needs `datasets` + `swebench` + a running Docker
-daemon (`pip install -e '.[swe-bench]'`).
+daemon (`pip install -e . --group benchmarks`).
 
 ```bash
 python -m benchmarks run swe-bench --model <provider:model-id> --limit 5 \

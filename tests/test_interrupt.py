@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from core.events import Event, LoopStopped
-from core.response import Response
-from harness import NexusAIHarness, Session
-from plugins.loops import AgenticLoop
-from protocols.hook import Hook
-from protocols.model import Model
-from protocols.tool import Tool
+from nexus_ai_harness.core.events import Event, LoopStopped
+from nexus_ai_harness.core.response import Response
+from nexus_ai_harness.harness import NexusAIHarness, Session
+from nexus_ai_harness.plugins.loops import AgenticLoop
+from nexus_ai_harness.protocols.hook import Hook
+from nexus_ai_harness.protocols.model import Model
+from nexus_ai_harness.protocols.tool import Tool
 from tests.conftest import ScriptedModel
 
 

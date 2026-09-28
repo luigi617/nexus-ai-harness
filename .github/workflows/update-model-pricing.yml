@@ -32,14 +32,14 @@ jobs:
 
       - name: Normalize formatting
         run: |
-          ruff check --fix src/plugins/models/
-          ruff format src/plugins/models/
+          ruff check --fix src/nexus_ai_harness/plugins/models/
+          ruff format src/nexus_ai_harness/plugins/models/
 
       - name: Sanity-check backends still lint, type-check, and import
         run: |
-          ruff check src/plugins/models/
-          mypy src/plugins/models/
-          python -c "import importlib; [importlib.import_module(f'plugins.models.{m}') for m in ['openai','anthropic','gemini','bedrock','groq','deepseek','xai','minimax','qwen','glm']]"
+          ruff check src/nexus_ai_harness/plugins/models/
+          mypy src/nexus_ai_harness/plugins/models/
+          python -c "import importlib; [importlib.import_module(f'nexus_ai_harness.plugins.models.{m}') for m in ['openai','anthropic','gemini','bedrock','groq','deepseek','xai','minimax','qwen','glm']]"
         env:
           PYTHONPATH: src
 
@@ -54,4 +54,4 @@ jobs:
           body-path: pricing-summary.md
           labels: dependencies, automated
           add-paths: |
-            src/plugins/models/*.py
+            src/nexus_ai_harness/plugins/models/*.py

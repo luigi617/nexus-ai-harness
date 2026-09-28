@@ -1,72 +1,43 @@
 # Architecture
 
-How the harness is put together.
+The harness is a small core that composes plugins. This page covers the ideas
+you need to use it and to write your own plugin.
 
 ## Everything is a plugin
 
-An agent is composed by registering plugins on a harness with `.use(...)`. Each
-plugin subclasses an **abstract base** in `protocols/` and is resolved by that
-type, not by name.
-
-<!-- TODO:
-- type-based registry: how `.use()` stores plugins and `ctx.get(P)` / `ctx.all(P)`
-  resolve them via `isinstance(plugin, P)`.
-- type-keyed resolution and the bounded TypeVar `P = TypeVar("P", bound=Plugin)`.
--->
-
-## Forking for subagents
-
-A subagent runs on a **forked** context: `ctx.fork()` builds a child on a fresh
-session that inherits the parent's plugins. Two arguments shape what it sees,
-which is how a fleet of agents shares infrastructure while differing where it
-matters (the issue that motivated this: shared model/permissions/telemetry,
-per-agent memory):
+You build an agent by registering plugins on a harness with `.use(...)`:
 
 ```python
-child = ctx.fork()                                    # inherit everything
-child = ctx.fork(plugins=[search_tool])               # restrict to exactly these
-child = ctx.fork(overrides={MemoryStore: AgentMemory()})  # swap every memory store
-child = ctx.fork(overrides={FileMemoryStore: AgentMemory()})  # swap just that one
+harness = NexusAIHarness().use(AgenticLoop()).use(AnthropicModel(model="..."))
 ```
 
-`overrides` is a `target -> replacement` mapping. Each target is matched by
-`isinstance`, so a protocol base (`MemoryStore`) swaps out every implementer
-while a concrete class (`FileMemoryStore`) swaps only that one; fork drops the
-matches and registers the replacement in their place — a swap, not an append.
-Matching by type (rather than trusting `get()` to pick the last-registered one)
-is what makes it correct for protocols a harness holds several of, like tools or
-hooks. The child's session is isolated; only the interrupt signal is shared, so
-interrupting the root stops its subagents.
+Each plugin implements a **protocol** (an interface such as `Model`, `Tool`, or
+`Memory`). Plugins are resolved by that protocol, not by name, so you can swap
+one implementation for another without changing the code that uses it.
 
-## Layering
+## Subagents run in their own context
 
-Dependencies flow one way: `core ← protocols ← {services, plugins, harness}`.
+A subagent runs on a **forked** context: a fresh, isolated session that inherits
+the parent's plugins. You choose what it inherits:
 
-<!-- TODO:
-- `core/`      — plain data types (Message, Response, RunState, ...).
-- `protocols/` — abstract base classes (the interfaces consumers import), plus
-  `MemoryItem`, the base `@dataclass` a store's item type extends.
-- `plugins/`   — concrete implementations of the protocols.
-- `services/`  — shared logic reused across plugins/harness (runner, guard chain).
-- `harness/`   — Session, RunContext (the Context), Registry, the harness itself.
-- Why harness does NOT depend on plugins.
--->
+```python
+child = ctx.fork()                                     # inherit everything
+child = ctx.fork(plugins=[search_tool])                # only these plugins
+child = ctx.fork(overrides={Memory: AgentMemory()})    # swap one plugin
+```
 
-## Sync or async, one method
+This lets a fleet of agents share the same model, permissions, and telemetry
+while keeping their own memory or tools. Subagent work stays isolated from the
+parent, but stopping the parent also stops its subagents.
 
-Plugin methods may be written `def` or `async def`; the harness adapts. Call
-one through `ctx.invoke(fn, *args)`, which runs any interceptors bound to the
-plugin `fn` belongs to (inferred from `fn`, so binding to a concrete class wraps
-only that class) around the call. It builds on `call(fn, *args)` in
-`core/invoke.py`, the raw sync/async adapter (await if a coroutine, else
-`asyncio.to_thread`).
+## Sync or async — your choice
 
-<!-- TODO: explain interceptor dispatch. -->
-
+Any plugin method may be written as `def` or `async def`; the harness runs it
+correctly either way. Use `harness.run(...)` from async code or
+`harness.run_sync(...)` from sync code.
 
 ## Per-session state
 
-`ctx.state(cls)` returns a lazily-created, type-keyed dataclass scoped to the
-session — how plugins keep counters/settings without an untyped bag.
-
-<!-- TODO: example. -->
+A plugin can keep state that lives for one session with `ctx.state(cls)` — for
+example a token counter or a per-run setting. State is scoped to the session, so
+it never leaks between runs.

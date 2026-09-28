@@ -4,8 +4,8 @@ import asyncio
 
 import pytest
 
-from plugins.mcp import MCPClient, MCPServer
-from protocols.tool import Tool
+from nexus_ai_harness.plugins.mcp import MCPClient, MCPServer
+from nexus_ai_harness.protocols.tool import Tool
 from tests.conftest import make_ctx
 
 READ_SPEC = {

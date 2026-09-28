@@ -5,8 +5,8 @@ from pathlib import Path
 
 import pytest
 
-from plugins.sandbox import WorkspaceSandbox
-from protocols.sandbox import Sandbox, SandboxResult, SandboxViolation
+from nexus_ai_harness.plugins.sandbox import WorkspaceSandbox
+from nexus_ai_harness.protocols.sandbox import Sandbox, SandboxResult, SandboxViolation
 
 
 def test_satisfies_protocol(tmp_path):
@@ -179,7 +179,7 @@ def test_env_tmpdir_is_real_and_not_inside_root(tmp_path):
 def test_scratch_dir_does_not_pollute_workspace_listing(tmp_path, monkeypatch):
     # Running a command must not create a scratch dir inside the root (regression
     # for a prior <root>/.tmp that showed up in list_dir).
-    from plugins.tools import ListDir
+    from nexus_ai_harness.plugins.tools import ListDir
     from tests.conftest import make_ctx
 
     sandbox = WorkspaceSandbox(tmp_path)
@@ -197,7 +197,7 @@ def test_profile_allows_writes_to_tmpdir(tmp_path):
 def test_lifecycle_stop_removes_scratch_dir(tmp_path):
     import asyncio
 
-    from protocols.lifecycle import Lifecycle
+    from nexus_ai_harness.protocols.lifecycle import Lifecycle
 
     sandbox = WorkspaceSandbox(tmp_path)
     assert isinstance(sandbox, Lifecycle)

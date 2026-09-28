@@ -2,14 +2,19 @@ from __future__ import annotations
 
 import asyncio
 
-from core.events import ApprovalRequested, Event
-from core.message import Message
-from core.permission import ApprovalRequest, PermissionVerdict
-from core.spawn import SpawnState
-from plugins.permissions import AllowList, AskUnless, AutoApprove, DenyList
-from protocols.approver import Approver
-from protocols.hook import Hook
-from services.permission_gate import PermissionGate
+from nexus_ai_harness.core.events import ApprovalRequested, Event
+from nexus_ai_harness.core.message import Message
+from nexus_ai_harness.core.permission import ApprovalRequest, PermissionVerdict
+from nexus_ai_harness.core.spawn import SpawnState
+from nexus_ai_harness.plugins.permissions import (
+    AllowList,
+    AskUnless,
+    AutoApprove,
+    DenyList,
+)
+from nexus_ai_harness.protocols.approver import Approver
+from nexus_ai_harness.protocols.hook import Hook
+from nexus_ai_harness.services.permission_gate import PermissionGate
 from tests.conftest import make_ctx
 
 

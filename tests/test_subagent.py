@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import asyncio
 
-from core.spawn import SpawnState
-from plugins.loops import AgenticLoop
-from plugins.permissions import AutoApprove
-from plugins.spawner import InProcessSpawner
-from plugins.tools import Recall, Remember
-from protocols.approver import Approver
-from protocols.tool import Tool
+from nexus_ai_harness.core.spawn import SpawnState
+from nexus_ai_harness.plugins.loops import AgenticLoop
+from nexus_ai_harness.plugins.permissions import AutoApprove
+from nexus_ai_harness.plugins.spawner import InProcessSpawner
+from nexus_ai_harness.plugins.tools import Recall, Remember
+from nexus_ai_harness.protocols.approver import Approver
+from nexus_ai_harness.protocols.tool import Tool
 from tests.conftest import make_ctx
 
 
@@ -27,7 +27,7 @@ def test_fork_restricts_to_given_plugins():
 
 
 def test_fork_override_shadows_inherited_plugin_of_the_same_protocol():
-    from protocols.memory import MemoryItem, MemoryStore
+    from nexus_ai_harness.protocols.memory import MemoryItem, MemoryStore
 
     class Store(MemoryStore):
         def __init__(self, tag):
@@ -108,8 +108,8 @@ def test_spawner_refuses_beyond_max_depth():
 
 
 def test_spawner_runs_child_within_depth():
-    from core.response import Response
-    from protocols.model import Model
+    from nexus_ai_harness.core.response import Response
+    from nexus_ai_harness.protocols.model import Model
 
     class P(Model):
         async def complete(self, history, tools, ctx):
@@ -125,9 +125,9 @@ def test_spawner_runs_child_within_depth():
 
 
 def test_subagent_tool_delegates_and_returns_distilled_result():
-    from core.response import Response
-    from plugins.tools import Subagent
-    from protocols.model import Model
+    from nexus_ai_harness.core.response import Response
+    from nexus_ai_harness.plugins.tools import Subagent
+    from nexus_ai_harness.protocols.model import Model
 
     class P(Model):
         async def complete(self, history, tools, ctx):
@@ -140,9 +140,9 @@ def test_subagent_tool_delegates_and_returns_distilled_result():
 
 
 def test_subagent_tool_overrides_a_capability_for_the_child():
-    from core.response import Response
-    from plugins.tools import Subagent
-    from protocols.model import Model
+    from nexus_ai_harness.core.response import Response
+    from nexus_ai_harness.plugins.tools import Subagent
+    from nexus_ai_harness.protocols.model import Model
 
     class Parent(Model):
         async def complete(self, history, tools, ctx):
@@ -160,22 +160,22 @@ def test_subagent_tool_overrides_a_capability_for_the_child():
 
 
 def test_subagent_tool_errors_without_spawner():
-    from plugins.tools import Subagent
+    from nexus_ai_harness.plugins.tools import Subagent
 
     out = asyncio.run(Subagent().run({"task": "x"}, make_ctx()))
     assert "no spawner" in out
 
 
 def test_subagent_tool_rejects_empty_task():
-    from plugins.tools import Subagent
+    from nexus_ai_harness.plugins.tools import Subagent
 
     out = asyncio.run(Subagent().run({"task": "  "}, make_ctx(InProcessSpawner())))
     assert "no task" in out
 
 
 def test_subagent_declares_its_spawner_requirement():
-    from plugins.tools import Subagent
-    from protocols.spawner import Spawner
+    from nexus_ai_harness.plugins.tools import Subagent
+    from nexus_ai_harness.protocols.spawner import Spawner
 
     # The hard runtime dependency on a Spawner must be declared so validation
     # and the dependency graph reflect it.
@@ -183,9 +183,9 @@ def test_subagent_declares_its_spawner_requirement():
 
 
 def test_validate_flags_a_subagent_without_a_spawner():
-    from harness.graph import build_graph
-    from harness.registry import Registry
-    from plugins.tools import Subagent
+    from nexus_ai_harness.harness.graph import build_graph
+    from nexus_ai_harness.harness.registry import Registry
+    from nexus_ai_harness.plugins.tools import Subagent
 
     reg = Registry()
     reg.add(Subagent())

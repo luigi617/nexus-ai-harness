@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import importlib.util
 import json
 import re
 import threading
@@ -23,14 +22,14 @@ from benchmarks.suites.bfcl import (
     _params_match,
 )
 from benchmarks.suites.tau_bench import TauState, _respond
-from core.response import Response
-from harness import NexusAIHarness
-from harness.result import RunResult
-from harness.session import Session
-from plugins.loops import ChatLoop
-from protocols.lifecycle import Lifecycle
-from protocols.plugin import Plugin
-from tests.conftest import ScriptedModel
+from nexus_ai_harness.core.response import Response
+from nexus_ai_harness.harness import NexusAIHarness
+from nexus_ai_harness.harness.result import RunResult
+from nexus_ai_harness.harness.session import Session
+from nexus_ai_harness.plugins.loops import ChatLoop
+from nexus_ai_harness.protocols.lifecycle import Lifecycle
+from nexus_ai_harness.protocols.plugin import Plugin
+from tests.conftest import ScriptedModel, tau2_importable
 
 
 def _attempt(task_id, run_index, passed, *, cost=0.0, error=None) -> Attempt:
@@ -476,9 +475,8 @@ def test_build_model_unknown_provider_raises():
 def test_suites_are_registered():
     names = registered_benchmarks()
     expected = {"bfcl", "tau-bench", "humaneval", "gpqa", "gaia", "swe-bench"}
-    # tau2-bench registers only when tau2 is importable (it can't install on
-    # 3.14); benchmarks/__init__ skips it otherwise, so require it conditionally.
-    if importlib.util.find_spec("tau2") is not None:
+    # tau2-bench registers only when tau2 actually imports
+    if tau2_importable():
         expected.add("tau2-bench")
     assert expected <= set(names)
     assert get_benchmark("bfcl").name == "bfcl"

@@ -2,19 +2,19 @@ from __future__ import annotations
 
 import asyncio
 
-from core.events import (
+from nexus_ai_harness.core.events import (
     Event,
     IterationStarted,
     LoopStopped,
 )
-from core.message import Message
-from core.response import Response
-from core.run import RunState
-from plugins.loops import ChatLoop
-from protocols.context_manager import ContextManager
-from protocols.hook import Hook
-from protocols.model import Model
-from protocols.router import Router
+from nexus_ai_harness.core.message import Message
+from nexus_ai_harness.core.response import Response
+from nexus_ai_harness.core.run import RunState
+from nexus_ai_harness.plugins.loops import ChatLoop
+from nexus_ai_harness.protocols.context_manager import ContextManager
+from nexus_ai_harness.protocols.hook import Hook
+from nexus_ai_harness.protocols.model import Model
+from nexus_ai_harness.protocols.router import Router
 from tests.conftest import ScriptedModel, make_ctx
 
 

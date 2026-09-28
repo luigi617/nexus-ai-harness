@@ -1,8 +1,12 @@
 from __future__ import annotations
 
-from core.events import IterationStarted, MessageAdded, ResponseReceived
-from core.response import Response
-from plugins.hooks import (
+from nexus_ai_harness.core.events import (
+    IterationStarted,
+    MessageAdded,
+    ResponseReceived,
+)
+from nexus_ai_harness.core.response import Response
+from nexus_ai_harness.plugins.hooks import (
     CostCounter,
     CostState,
     ElapsedState,
@@ -35,7 +39,7 @@ def test_cost_counter_ignores_other_events():
 
 def test_elapsed_time_pins_start_to_first_event_and_accumulates(monkeypatch):
     # Controlled clock: the first read pins started_at, later reads only grow elapsed.
-    import plugins.hooks.elapsed as elapsed_mod
+    import nexus_ai_harness.plugins.hooks.elapsed as elapsed_mod
 
     ticks = iter([100.0, 103.5])
 

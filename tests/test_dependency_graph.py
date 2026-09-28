@@ -4,23 +4,23 @@ from typing import ClassVar
 
 import pytest
 
-from core.response import Response
-from harness import (
+from nexus_ai_harness.core.response import Response
+from nexus_ai_harness.harness import (
     DependencyCycleError,
     GraphDiff,
     HarnessGraph,
     NexusAIHarness,
     PluginStatus,
 )
-from harness.graph import build_graph
-from harness.registry import Registry
-from plugins.guards import BudgetGuard
-from plugins.hooks import CostCounter
-from plugins.loops import AgenticLoop
-from protocols.lifecycle import Lifecycle
-from protocols.model import Model
-from protocols.plugin import Plugin
-from protocols.tool import Tool
+from nexus_ai_harness.harness.graph import build_graph
+from nexus_ai_harness.harness.registry import Registry
+from nexus_ai_harness.plugins.guards import BudgetGuard
+from nexus_ai_harness.plugins.hooks import CostCounter
+from nexus_ai_harness.plugins.loops import AgenticLoop
+from nexus_ai_harness.protocols.lifecycle import Lifecycle
+from nexus_ai_harness.protocols.model import Model
+from nexus_ai_harness.protocols.plugin import Plugin
+from nexus_ai_harness.protocols.tool import Tool
 from tests.conftest import RecordingTool, ScriptedModel
 
 
@@ -79,7 +79,10 @@ def test_plugins_and_capabilities_delegate_to_the_inspection():
 
 
 def test_inspection_returns_the_backing_snapshot():
-    from harness.introspection import HarnessInspection, inspect_registry
+    from nexus_ai_harness.harness.introspection import (
+        HarnessInspection,
+        inspect_registry,
+    )
 
     inspection = inspect_registry(_registry(AgenticLoop()))
     assert HarnessGraph(inspection).inspection() is inspection

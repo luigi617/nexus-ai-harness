@@ -5,18 +5,18 @@ from typing import ClassVar
 
 import pytest
 
-from core.events import Event, SkillInvoked
-from core.response import Response
-from harness import NexusAIHarness
-from harness.session import Session
-from plugins.loops import AgenticLoop
-from plugins.permissions import AutoApprove
-from plugins.skills import MarkdownSkill, load_skills
-from plugins.skills.markdown import _parse_frontmatter
-from protocols.interceptor import Interceptor
-from protocols.skill import Skill
-from protocols.tool import Tool
-from services.tool_runner import ToolRunner
+from nexus_ai_harness.core.events import Event, SkillInvoked
+from nexus_ai_harness.core.response import Response
+from nexus_ai_harness.harness import NexusAIHarness
+from nexus_ai_harness.harness.session import Session
+from nexus_ai_harness.plugins.loops import AgenticLoop
+from nexus_ai_harness.plugins.permissions import AutoApprove
+from nexus_ai_harness.plugins.skills import MarkdownSkill, load_skills
+from nexus_ai_harness.plugins.skills.markdown import _parse_frontmatter
+from nexus_ai_harness.protocols.interceptor import Interceptor
+from nexus_ai_harness.protocols.skill import Skill
+from nexus_ai_harness.protocols.tool import Tool
+from nexus_ai_harness.services.tool_runner import ToolRunner
 from tests.conftest import ScriptedModel, make_ctx
 
 # --- code-authored skills for the in-memory tests --------------------------

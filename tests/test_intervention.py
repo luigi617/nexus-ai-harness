@@ -2,17 +2,17 @@ from __future__ import annotations
 
 import asyncio
 
-from core.message import Message
-from core.response import Response
-from core.spawn import SpawnState
-from harness import NexusAIHarness, Session
-from harness.context import RunContext
-from harness.registry import Registry
-from plugins.interventions import InjectMessage
-from plugins.loops import AgenticLoop
-from plugins.permissions import AllowList, AutoApprove
-from protocols.intervention import Intervention
-from protocols.model import Model
+from nexus_ai_harness.core.message import Message
+from nexus_ai_harness.core.response import Response
+from nexus_ai_harness.core.spawn import SpawnState
+from nexus_ai_harness.harness import NexusAIHarness, Session
+from nexus_ai_harness.harness.context import RunContext
+from nexus_ai_harness.harness.registry import Registry
+from nexus_ai_harness.plugins.interventions import InjectMessage
+from nexus_ai_harness.plugins.loops import AgenticLoop
+from nexus_ai_harness.plugins.permissions import AllowList, AutoApprove
+from nexus_ai_harness.protocols.intervention import Intervention
+from nexus_ai_harness.protocols.model import Model
 from tests.conftest import RecordingTool, ScriptedModel, make_ctx
 
 

@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
-MODELS_DIR = REPO / "src" / "plugins" / "models"
+MODELS_DIR = REPO / "src" / "nexus_ai_harness" / "plugins" / "models"
 SOURCE_URL = "https://models.dev/api.json"
 LINE_LIMIT = 88  # ruff line-length; rewritten dict lines must fit
 

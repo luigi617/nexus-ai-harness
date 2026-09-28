@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from harness.context import RunContext
-from harness.registry import Registry
-from harness.session import Session
+from nexus_ai_harness.harness.context import RunContext
+from nexus_ai_harness.harness.registry import Registry
+from nexus_ai_harness.harness.session import Session
 
 
 @dataclass

@@ -3,8 +3,8 @@ from __future__ import annotations
 import json
 from types import SimpleNamespace
 
-from core.message import Message
-from plugins.models import (
+from nexus_ai_harness.core.message import Message
+from nexus_ai_harness.plugins.models import (
     DeepSeekModel,
     GLMModel,
     GroqModel,
@@ -13,7 +13,7 @@ from plugins.models import (
     QwenModel,
     XAIModel,
 )
-from plugins.models.openai_compatible import OpenAICompatibleModel
+from nexus_ai_harness.plugins.models.openai_compatible import OpenAICompatibleModel
 
 
 def _tool(name="calc", description="d", parameters=None):
@@ -29,7 +29,9 @@ def _patch_post_json(monkeypatch, response):
         captured.update(url=url, payload=payload, headers=headers, timeout=timeout)
         return response
 
-    monkeypatch.setattr("plugins.models.openai_compatible.post_json", fake_post_json)
+    monkeypatch.setattr(
+        "nexus_ai_harness.plugins.models.openai_compatible.post_json", fake_post_json
+    )
     return captured
 
 
@@ -221,7 +223,9 @@ def test_generate_subclass_routes_to_its_base_url(monkeypatch):
 
 
 def test_generate_omits_authorization_when_no_api_key(monkeypatch):
-    monkeypatch.setattr("plugins.models.base.load_dotenv", lambda *a, **k: None)
+    monkeypatch.setattr(
+        "nexus_ai_harness.plugins.models.base.load_dotenv", lambda *a, **k: None
+    )
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     captured = _patch_post_json(monkeypatch, _CANNED)
 

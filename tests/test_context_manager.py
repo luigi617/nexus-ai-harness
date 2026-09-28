@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import asyncio
 
-from core.message import Message
-from core.response import Response
-from plugins.context_manager import SummarizingContextManager
-from protocols.model import Model
+from nexus_ai_harness.core.message import Message
+from nexus_ai_harness.core.response import Response
+from nexus_ai_harness.plugins.context_manager import SummarizingContextManager
+from nexus_ai_harness.protocols.model import Model
 from tests.conftest import make_ctx
 
 
@@ -143,7 +143,7 @@ def test_summarize_failure_leaves_history_and_state_untouched():
     assert [(m.role, m.content) for m in out] == [(m.role, m.content) for m in hist]
     assert not any("summary" in (m.content or "").lower() for m in out)
     # No partial corruption of the cached summary state.
-    from plugins.context_manager.summarizing import SummaryState
+    from nexus_ai_harness.plugins.context_manager.summarizing import SummaryState
 
     state = ctx.state(SummaryState)
     assert state.upto == 0

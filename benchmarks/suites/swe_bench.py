@@ -16,18 +16,18 @@ from benchmarks.core.benchmark import Benchmark, Episode
 from benchmarks.core.config import BenchmarkConfig
 from benchmarks.core.registry import register
 from benchmarks.core.task import Score, Task
-from harness import NexusAIHarness
-from harness.result import RunResult
-from harness.session import Session
-from plugins.guards import MaxIterations, Timeout
-from plugins.hooks import ElapsedTime, IterationCounter
-from plugins.loops import AgenticLoop
-from plugins.permissions import AutoApprove
-from plugins.sandbox import WorkspaceSandbox
-from plugins.tools import ListDir, ReadFile, Shell, WriteFile
-from protocols.lifecycle import Lifecycle
-from protocols.model import Model
-from protocols.plugin import Plugin
+from nexus_ai_harness.harness import NexusAIHarness
+from nexus_ai_harness.harness.result import RunResult
+from nexus_ai_harness.harness.session import Session
+from nexus_ai_harness.plugins.guards import MaxIterations, Timeout
+from nexus_ai_harness.plugins.hooks import ElapsedTime, IterationCounter
+from nexus_ai_harness.plugins.loops import AgenticLoop
+from nexus_ai_harness.plugins.permissions import AutoApprove
+from nexus_ai_harness.plugins.sandbox import WorkspaceSandbox
+from nexus_ai_harness.plugins.tools import ListDir, ReadFile, Shell, WriteFile
+from nexus_ai_harness.protocols.lifecycle import Lifecycle
+from nexus_ai_harness.protocols.model import Model
+from nexus_ai_harness.protocols.plugin import Plugin
 
 _MODEL_NAME = "nexus-ai-harness"
 

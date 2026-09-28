@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import pytest
 
-from harness.registry import PluginStatus, Registry
-from plugins.guards import MaxIterations
-from plugins.loops import AgenticLoop
-from protocols.lifecycle import Lifecycle
-from protocols.loop import Loop
-from protocols.plugin import Plugin
-from protocols.tool import Tool
+from nexus_ai_harness.harness.registry import PluginStatus, Registry
+from nexus_ai_harness.plugins.guards import MaxIterations
+from nexus_ai_harness.plugins.loops import AgenticLoop
+from nexus_ai_harness.protocols.lifecycle import Lifecycle
+from nexus_ai_harness.protocols.loop import Loop
+from nexus_ai_harness.protocols.plugin import Plugin
+from nexus_ai_harness.protocols.tool import Tool
 from tests.conftest import RecordingTool
 
 
