@@ -21,6 +21,7 @@ CHANGELOG = REPO / "CHANGELOG.md"
 UNRELEASED = REPO / ".changes" / "unreleased"
 PR_URL = "https://github.com/luigi617/nexus-ai-harness/pull/{id}"
 VERSION_RE = re.compile(r"^\d+\.\d+\.\d+((a|b|rc)\d+)?$")
+NO_CHANGES = "- No user-facing changes."
 
 
 class ChangelogError(Exception):
@@ -81,7 +82,8 @@ def load_fragments(directory: Path = UNRELEASED) -> list[Fragment]:
 
 def render_section(version: str, date: str, fragments: list[Fragment]) -> str:
     """Returns the CHANGELOG.md section for a release."""
-    lines = [f"## [{version}] - {date}", "", *(f.render() for f in fragments)]
+    entries = [f.render() for f in fragments] or [NO_CHANGES]
+    lines = [f"## [{version}] - {date}", "", *entries]
     return "\n".join(lines) + "\n"
 
 
@@ -105,16 +107,24 @@ def release(
     date: str,
     changelog_path: Path = CHANGELOG,
     directory: Path = UNRELEASED,
+    allow_empty: bool = False,
 ) -> list[Fragment]:
-    """Moves all fragments into a new CHANGELOG.md section and deletes them."""
+    """Moves all fragments into a new CHANGELOG.md section and deletes them.
+
+    With no fragments this fails unless ``allow_empty`` is set, in which case
+    the section records that there were no user-facing changes.
+    """
     if not VERSION_RE.match(version):
         raise ChangelogError(f"invalid version {version!r} (expected X.Y.Z)")
     changelog = changelog_path.read_text()
     if re.search(rf"^## \[{re.escape(version)}\]", changelog, flags=re.M):
         raise ChangelogError(f"CHANGELOG.md already has a section for {version}")
     fragments = load_fragments(directory)
-    if not fragments:
-        raise ChangelogError(f"no changelog fragments in {directory}")
+    if not fragments and not allow_empty:
+        raise ChangelogError(
+            f"no changelog fragments in {directory} "
+            "(pass --allow-empty to release without any)"
+        )
     section = render_section(version, date, fragments)
     changelog_path.write_text(insert_section(changelog, section))
     for fragment in fragments:
@@ -129,6 +139,11 @@ def main(argv: list[str] | None = None) -> int:
     rel = sub.add_parser("release", help="write a release section from fragments")
     rel.add_argument("version", help="release version, e.g. 0.2.0")
     rel.add_argument("--date", default=datetime.date.today().isoformat())
+    rel.add_argument(
+        "--allow-empty",
+        action="store_true",
+        help="release even with no fragments",
+    )
     notes = sub.add_parser("notes", help="print a release's CHANGELOG.md section")
     notes.add_argument("version")
     args = parser.parse_args(argv)
@@ -137,7 +152,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "check":
             print(f"{len(load_fragments())} valid changelog fragment(s)")
         elif args.command == "release":
-            fragments = release(args.version, args.date)
+            fragments = release(args.version, args.date, allow_empty=args.allow_empty)
             print(f"Added {len(fragments)} entries to CHANGELOG.md for {args.version}")
         else:
             body = extract_section(CHANGELOG.read_text(), args.version)

@@ -125,6 +125,20 @@ def test_release_rejects_bad_version_duplicate_and_empty(tmp_path):
         changelog.release("0.2.0", "d", log, frags)
 
 
+def test_release_allow_empty_records_no_changes(tmp_path):
+    log = tmp_path / "CHANGELOG.md"
+    log.write_text(HEADER)
+
+    fragments = changelog.release(
+        "0.1.1", "2026-09-28", log, tmp_path / "unreleased", allow_empty=True
+    )
+
+    assert fragments == []
+    assert changelog.extract_section(log.read_text(), "0.1.1") == (
+        "- No user-facing changes."
+    )
+
+
 def test_release_leaves_everything_untouched_on_invalid_fragment(tmp_path):
     log = tmp_path / "CHANGELOG.md"
     log.write_text(HEADER)

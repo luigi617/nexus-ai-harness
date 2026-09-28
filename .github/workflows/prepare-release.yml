@@ -6,6 +6,14 @@ on:
       version:
         description: Version to release, e.g. 0.2.0
         required: true
+      allow_empty:
+        description: Release even if there are no changelog fragments
+        type: boolean
+        default: false
+
+# One run at a time, so two runs can't race on the same release branch.
+concurrency:
+  group: prepare-release
 
 jobs:
   prepare:
@@ -20,6 +28,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          # Always build from main, whichever ref the run was started from.
+          ref: main
           fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
@@ -30,16 +40,31 @@ jobs:
             echo "::error::Tag v$VERSION already exists"
             exit 1
           fi
-      - run: python scripts/changelog.py release "$VERSION"
+      - run: |
+          python scripts/changelog.py release "$VERSION" \
+            ${{ inputs.allow_empty && '--allow-empty' || '' }}
       - name: Commit and open PR
+        env:
+          BRANCH: release/v${{ inputs.version }}
         run: |
-          branch="release/v$VERSION"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git switch -c "$branch"
+          git switch -c "$BRANCH"
           git add -A CHANGELOG.md .changes
           git commit -m "Release v$VERSION"
-          git push origin "$branch"
+          # Rebuilt from main on every run, so replace whatever a previous run
+          # left on this branch.
+          git push --force origin "$BRANCH"
+
+          # Only one release may be pending: close release PRs for other versions.
+          gh pr list --base main --state open --json number,headRefName \
+            --jq '.[] | select(.headRefName | startswith("release/v"))
+                      | select(.headRefName != env.BRANCH) | .number' |
+            while read -r number; do
+              gh pr close "$number" --delete-branch \
+                --comment "Superseded by the release PR for v$VERSION."
+            done
+
           python scripts/changelog.py notes "$VERSION" > notes.md
           {
             echo "Merging this PR publishes v$VERSION to PyPI and creates the GitHub release."
@@ -48,5 +73,12 @@ jobs:
             echo
             cat notes.md
           } > body.md
-          gh pr create --base main --head "$branch" \
-            --title "Release v$VERSION" --body-file body.md
+          existing=$(gh pr list --head "$BRANCH" --state open \
+            --json number --jq '.[0].number // empty')
+          if [ -n "$existing" ]; then
+            gh pr edit "$existing" --body-file body.md
+            echo "Updated release PR #$existing"
+          else
+            gh pr create --base main --head "$BRANCH" \
+              --title "Release v$VERSION" --body-file body.md
+          fi
