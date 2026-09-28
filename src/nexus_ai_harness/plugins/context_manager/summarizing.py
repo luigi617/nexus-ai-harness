@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 
 from nexus_ai_harness.core.events import (
     ContextCompacted,
@@ -21,24 +21,29 @@ from nexus_ai_harness.protocols.token_estimator import TokenEstimator
 
 @dataclass
 class SummaryState:
-    """Per-session compaction bookkeeping of a :class:`SummarizingContextManager`.
+    """Compaction bookkeeping of one :class:`SummarizingContextManager` in a session.
 
     Attributes:
         upto: History index up to which messages are folded into ``text``.
         text: The cached rolling summary, or ``""`` before the first fold.
         dropped_upto: History index up to which messages are omitted by the
             drop fallback without being summarized.
+        head_chars: Character limit applied to the head user message once the
+            head alone outgrew half the token budget, or ``0`` if never.
         summaries: How many folds into the summary succeeded.
-        fallbacks: How many times a fallback (drop or truncate) ran.
+        fallbacks: How many times a fallback (drop, truncate, or overflow) ran.
         last_fallback: ``"<strategy>: <reason>"`` of the latest fallback.
     """
 
     upto: int = 0
     text: str = ""
     dropped_upto: int = 0
+    head_chars: int = 0
     summaries: int = 0
     fallbacks: int = 0
     last_fallback: str = ""
+    # Set while the prompt stays over budget, so the overflow is reported once.
+    overflowed: bool = field(default=False, repr=False)
 
 
 @dataclass
@@ -46,6 +51,19 @@ class _UsageState:
     pending_estimate: int = 0
     sent_estimate: int = 0
     input_tokens: int = 0
+
+
+@dataclass
+class _Slot:
+    summary: SummaryState = field(default_factory=SummaryState)
+    usage: _UsageState = field(default_factory=_UsageState)
+
+
+@dataclass
+class _Slots:
+    """Session state keyed by manager, so chained instances don't share cuts."""
+
+    by_manager: dict[object, _Slot] = field(default_factory=dict)
 
 
 _SUMMARY_HEADER = "[Conversation summary so far]"
@@ -60,8 +78,11 @@ _INPUT_USAGE_KEYS = (
 )
 _RENDER_CHARS = 4000  # per message, so one huge tool result can't flood the recap
 _DEFAULT_CHUNK_CHARS = 128_000
-_TAIL_SHARE = 0.5  # of max_tokens, leaving room for head, summary, and growth
+_HEAD_SHARE = 0.5  # of max_tokens the head may keep once the prompt overflows
+_SUMMARY_SHARE = 0.25  # of max_tokens the summary may take at most
 _MIN_TRUNCATED_CHARS = 200
+_MESSAGE_BUDGET = "message budget exceeded"
+_TOKEN_BUDGET = "token budget exceeded"
 
 
 def _summary_prompt(max_tokens: int) -> str:
@@ -101,8 +122,8 @@ class _Layout:
     @classmethod
     def of(
         cls,
+        head: list[Message],
         history: list[Message],
-        head_end: int,
         cutoff: int,
         start: int,
         summary: str,
@@ -112,7 +133,7 @@ class _Layout:
             notes.append(f"{_SUMMARY_HEADER}\n{summary}")
         if start > cutoff:
             notes.append(_OMITTED_NOTE.format(n=start - cutoff))
-        return cls(history[:head_end], notes, history[start:])
+        return cls(head, notes, history[start:])
 
     def view(self) -> list[Message]:
         """Join the pieces so that no two user turns are ever adjacent.
@@ -139,23 +160,29 @@ class SummarizingContextManager(ContextManager, Lifecycle):
     """Keeps the history sent to the model within a message and token budget.
 
     The stable head (leading system messages plus the first user message) is
-    always kept. Once the live history outgrows a budget, the oldest turns after
-    the head are folded into a cached, length-capped model summary, and only the
+    kept. Once the live history outgrows a budget, the oldest turns after the
+    head are folded into a cached, length-capped model summary, and only the
     most recent turns stay verbatim. The summary is merged into the head user
     message, so user and assistant turns keep strictly alternating.
 
     When no model is available or summarization fails, those turns are dropped
     instead and a note marks the gap. If the result still exceeds the token
-    budget, oversized tool results and then the largest remaining messages are
-    truncated. Every compaction emits a :class:`ContextCompacted` event and is
-    counted in :class:`SummaryState`. No cut ever separates a tool result from
-    the assistant tool call it answers.
+    budget, oversized tool results and then the largest remaining messages
+    (content and tool-call arguments) are truncated. If the head alone takes
+    more than half the token budget once the prompt overflows, the first user
+    message is truncated to fit that half, keeping its start and end. Every
+    compaction emits a :class:`ContextCompacted` event and is counted in
+    :meth:`state`; a prompt that stays over budget after all of this is
+    reported once as an ``"overflow"``. No cut ever separates a tool result
+    from the assistant tool call it answers.
 
     Token counts come from ``estimator``, else a registered
     :class:`TokenEstimator`, else :class:`CharTokenEstimator`. Once the harness
     has started this plugin, estimates are anchored to the ``input_tokens`` the
     provider reported for the previous model call, which also accounts for tool
     schemas the history alone cannot show.
+
+    Each instance keeps its own per-session state, so several can be chained.
 
     Args:
         max_messages: Compact once more than this many messages follow the
@@ -165,8 +192,9 @@ class SummarizingContextManager(ContextManager, Lifecycle):
         max_tokens: Compact once the estimated prompt exceeds this many tokens;
             ``None`` disables the token budget. Set it below the model's
             context window to leave room for tool schemas and the output.
-        max_summary_tokens: Upper bound on the summary's length. The summarizer
-            is asked to stay under it, and longer summaries are truncated.
+        max_summary_tokens: Upper bound on the summary's length, further capped
+            at a quarter of ``max_tokens``. The summarizer is asked to stay
+            under it, and longer summaries are truncated.
         estimator: The token estimator to use instead of resolving one.
 
     Raises:
@@ -204,22 +232,69 @@ class SummarizingContextManager(ContextManager, Lifecycle):
         ctx.on(ModelCallStarted, self._on_model_call)
         ctx.on(ResponseReceived, self._on_response)
 
+    def state(self, ctx: Context) -> SummaryState:
+        """Return this manager's compaction bookkeeping for ``ctx``'s session.
+
+        Args:
+            ctx: The run context whose session the state belongs to.
+
+        Returns:
+            The live, mutable state; created on first access.
+        """
+        return self._slot(ctx).summary
+
+    def _slot(self, ctx: Context) -> _Slot:
+        slots = ctx.state(_Slots).by_manager
+        slot = slots.get(self)
+        if slot is None:
+            slot = slots[self] = _Slot()
+        return slot
+
     async def process(self, history: list[Message], ctx: Context) -> list[Message]:
-        state = ctx.state(SummaryState)
+        state = self.state(ctx)
         if state.upto > len(history) or state.dropped_upto > len(history):
             # The history was rewound or replaced, so the cached cuts are stale.
             state.upto, state.text, state.dropped_upto = 0, "", 0
+            state.head_chars, state.overflowed = 0, False
         head_end = self._prefix_end(history)
         cutoff = max(state.upto, head_end)
         start = max(cutoff, state.dropped_upto)
-        layout = _Layout.of(history, head_end, cutoff, start, state.text)
-        view = layout.view() if layout.notes else history
+        head = self._cut_head(history[:head_end], state.head_chars)
+        layout = _Layout.of(head, history, cutoff, start, state.text)
+        view = layout.view() if layout.notes or state.head_chars else history
 
         reason = self._over_budget(history, start, view, ctx)
         if reason is None:
+            state.overflowed = False
             return view
 
-        target = self._choose_cutoff(history, start, view, ctx)
+        if not state.head_chars and self._over_tokens(view, ctx):
+            # Folding the tail can't make room for a head that fills the budget.
+            limit = self._head_limit(layout, ctx)
+            if limit:
+                state.head_chars = limit
+                layout = replace(layout, head=self._cut_head(layout.head, limit))
+                compacted = layout.view()
+                self._record(
+                    ctx,
+                    state,
+                    "truncate",
+                    "head exceeds half the token budget",
+                    view,
+                    compacted,
+                )
+                view = compacted
+                reason = self._over_budget(history, start, view, ctx)
+                if reason is None:
+                    state.overflowed = False
+                    return view
+
+        fixed = self._estimate(replace(layout, tail=[]).view(), ctx)
+        # Under a token overrun alone, folding only helps if the head fits.
+        foldable = reason == _MESSAGE_BUDGET or (
+            self._max_tokens is not None and fixed < self._max_tokens
+        )
+        target = self._choose_cutoff(history, start, fixed, ctx) if foldable else start
         if target > start:
             folded = await self._summarize(state.text, history[cutoff:target], ctx)
             if folded is not None:
@@ -231,7 +306,7 @@ class SummarizingContextManager(ContextManager, Lifecycle):
                 state.dropped_upto = target
                 strategy, reason = "drop", f"{reason}; summarization unavailable"
             start = target
-            layout = _Layout.of(history, head_end, cutoff, start, state.text)
+            layout = _Layout.of(layout.head, history, cutoff, start, state.text)
             compacted = layout.view()
             self._record(ctx, state, strategy, reason, view, compacted)
             view = compacted
@@ -240,10 +315,15 @@ class SummarizingContextManager(ContextManager, Lifecycle):
             shrunk = self._truncate(layout, self._max_tokens, ctx)
             if shrunk.tail != layout.tail:
                 truncated = shrunk.view()
-                self._record(
-                    ctx, state, "truncate", "token budget exceeded", view, truncated
-                )
+                self._record(ctx, state, "truncate", _TOKEN_BUDGET, view, truncated)
                 view = truncated
+        if self._over_tokens(view, ctx):
+            if not state.overflowed:
+                state.overflowed = True
+                reason = "no fallback brings the prompt under the token budget"
+                self._record(ctx, state, "overflow", reason, view, view)
+        else:
+            state.overflowed = False
         return view
 
     def _estimator(self, ctx: Context) -> TokenEstimator:
@@ -256,7 +336,7 @@ class SummarizingContextManager(ContextManager, Lifecycle):
     def _estimate(self, messages: list[Message], ctx: Context) -> int:
         """Estimate the prompt tokens of ``messages``, anchored to reported usage."""
         estimate = self._estimator(ctx).estimate(messages)
-        usage = ctx.state(_UsageState)
+        usage = self._slot(ctx).usage
         if usage.input_tokens:
             # Shift by the known error on the last sent prompt, not a ratio, so a
             # large fixed overhead like tool schemas isn't scaled with history.
@@ -266,7 +346,7 @@ class SummarizingContextManager(ContextManager, Lifecycle):
     def _on_model_call(self, event: Event, ctx: Context) -> None:
         if isinstance(event, ModelCallStarted):
             estimate = self._estimator(ctx).estimate(event.history)
-            ctx.state(_UsageState).pending_estimate = estimate
+            self._slot(ctx).usage.pending_estimate = estimate
 
     def _on_response(self, event: Event, ctx: Context) -> None:
         if not isinstance(event, ResponseReceived):
@@ -278,7 +358,7 @@ class SummarizingContextManager(ContextManager, Lifecycle):
             if isinstance(value, int | float)
         )
         if tokens > 0:
-            state = ctx.state(_UsageState)
+            state = self._slot(ctx).usage
             state.input_tokens = tokens
             state.sent_estimate = state.pending_estimate
 
@@ -288,9 +368,9 @@ class SummarizingContextManager(ContextManager, Lifecycle):
         """Name the budget ``view`` exceeds, or None if it fits."""
         live = len(history) - start
         if self._max_messages is not None and live > self._max_messages:
-            return "message budget exceeded"
+            return _MESSAGE_BUDGET
         if self._over_tokens(view, ctx):
-            return "token budget exceeded"
+            return _TOKEN_BUDGET
         return None
 
     def _over_tokens(self, view: list[Message], ctx: Context) -> bool:
@@ -298,14 +378,40 @@ class SummarizingContextManager(ContextManager, Lifecycle):
             return False
         return self._estimate(view, ctx) > self._max_tokens
 
+    def _head_limit(self, layout: _Layout, ctx: Context) -> int:
+        """A char limit fitting the head user message into half the token budget.
+
+        Returns ``0`` when the head already fits or has no user message to cut.
+        """
+        head = layout.head
+        if self._max_tokens is None or not head or head[-1].role != "user":
+            return 0
+        excess = self._estimate(head, ctx) - int(self._max_tokens * _HEAD_SHARE)
+        if excess <= 0:
+            return 0
+        message = head[-1]
+        tokens = self._estimator(ctx).estimate([message])
+        keep = int(len(message.content) * max(tokens - excess, 0) / max(tokens, 1))
+        keep = max(keep, _MIN_TRUNCATED_CHARS)
+        return keep if keep < len(message.content) else 0
+
+    @staticmethod
+    def _cut_head(head: list[Message], limit: int) -> list[Message]:
+        if not limit or not head or head[-1].role != "user":
+            return head
+        last = head[-1]
+        return [*head[:-1], replace(last, content=_truncate_text(last.content, limit))]
+
     def _choose_cutoff(
-        self, history: list[Message], start: int, view: list[Message], ctx: Context
+        self, history: list[Message], start: int, fixed: int, ctx: Context
     ) -> int:
         """Pick where the verbatim tail begins, at or after ``start``.
 
         Keeps at most ``keep_recent`` messages and, under a token budget, only as
-        many as fit its tail share, but always the newest message. The index is
-        moved to the nearest cut that orphans no tool result.
+        many as fit half the room left beside the ``fixed`` head and notes, but
+        always the newest message. The other half is room to grow before the
+        next compaction. The index is moved to the nearest cut that orphans no
+        tool result.
         """
         last = len(history) - 1
         if last <= start:
@@ -313,10 +419,7 @@ class SummarizingContextManager(ContextManager, Lifecycle):
         target = min(max(start, len(history) - self._keep_recent), last)
         if self._max_tokens is not None:
             estimator = self._estimator(ctx)
-            # Reported usage may reveal overhead (e.g. tool schemas) the tail
-            # must make room for.
-            overhead = max(0, self._estimate(view, ctx) - estimator.estimate(view))
-            tail_budget = int(self._max_tokens * _TAIL_SHARE) - overhead
+            tail_budget = (self._max_tokens - fixed) // 2
             sizes = [estimator.estimate([m]) for m in history[target:]]
             tail = sum(sizes)
             while target < last and tail > tail_budget:
@@ -360,11 +463,11 @@ class SummarizingContextManager(ContextManager, Lifecycle):
         return blocked
 
     def _truncate(self, layout: _Layout, budget: int, ctx: Context) -> _Layout:
-        """Cut tail message contents until the layout's view fits ``budget``.
+        """Cut tail messages until the layout's view fits ``budget``.
 
         Oversized tool results are capped first, then the largest remaining
-        messages are shortened; each keeps its start and end. The head and the
-        notes are never cut.
+        messages are shortened, content and string tool-call arguments alike;
+        each keeps its start and end. The head and the notes are not cut here.
         """
         estimator = self._estimator(ctx)
         tail = list(layout.tail)
@@ -377,28 +480,64 @@ class SummarizingContextManager(ContextManager, Lifecycle):
 
         out = replace(layout, tail=tail)
         overflow = self._estimate(out.view(), ctx) - budget
+        stuck: set[int] = set()
         while overflow > 0:
             candidates = [
                 (estimator.estimate([m]), i)
                 for i, m in enumerate(tail)
-                if len(m.content) > _MIN_TRUNCATED_CHARS
+                if i not in stuck and self._shrinkable(m)
             ]
             if not candidates:
                 break
             tokens, i = max(candidates)
             shrunk = self._shrink(tail[i], tokens - overflow, tokens)
-            if len(shrunk.content) >= len(tail[i].content):
-                break
+            if estimator.estimate([shrunk]) >= tokens:
+                stuck.add(i)
+                continue
             tail[i] = shrunk
             out = replace(layout, tail=tail)
             overflow = self._estimate(out.view(), ctx) - budget
         return out
 
     @staticmethod
+    def _shrinkable(message: Message) -> bool:
+        if len(message.content) > _MIN_TRUNCATED_CHARS:
+            return True
+        return any(
+            isinstance(value, str) and len(value) > _MIN_TRUNCATED_CHARS
+            for call in message.tool_calls
+            if isinstance(arguments := call.get("arguments"), dict)
+            for value in arguments.values()
+        )
+
+    @staticmethod
     def _shrink(message: Message, target_tokens: int, tokens: int) -> Message:
-        keep = int(len(message.content) * max(target_tokens, 0) / max(tokens, 1))
-        keep = max(keep, _MIN_TRUNCATED_CHARS)
-        return replace(message, content=_truncate_text(message.content, keep))
+        """Scale the message's content and long string arguments by the ratio.
+
+        Tool-call arguments stay a dict with the same keys, so the call remains
+        well-formed; only this view changes, never the stored history.
+        """
+        ratio = max(target_tokens, 0) / max(tokens, 1)
+
+        def cut(text: str) -> str:
+            if len(text) <= _MIN_TRUNCATED_CHARS:
+                return text
+            keep = max(int(len(text) * ratio), _MIN_TRUNCATED_CHARS)
+            return _truncate_text(text, keep)
+
+        calls = [
+            {
+                **call,
+                "arguments": {
+                    key: cut(value) if isinstance(value, str) else value
+                    for key, value in arguments.items()
+                },
+            }
+            if isinstance(arguments := call.get("arguments"), dict)
+            else call
+            for call in message.tool_calls
+        ]
+        return replace(message, content=cut(message.content), tool_calls=calls)
 
     def _record(
         self,
@@ -504,7 +643,7 @@ class SummarizingContextManager(ContextManager, Lifecycle):
             else f"Existing recap:\n{prior}\n\nNew messages:\n{transcript}"
         )
         request = [
-            Message(role="system", content=_summary_prompt(self._max_summary_tokens)),
+            Message(role="system", content=_summary_prompt(self._summary_limit())),
             Message(role="user", content=body),
         ]
         try:
@@ -515,14 +654,22 @@ class SummarizingContextManager(ContextManager, Lifecycle):
         text = (response.text or "").strip()
         return self._cap_summary(text, ctx) if text else None
 
+    def _summary_limit(self) -> int:
+        if self._max_tokens is None:
+            return self._max_summary_tokens
+        # A recap that fills the budget would leave no room for the tail.
+        cap = max(int(self._max_tokens * _SUMMARY_SHARE), 1)
+        return min(self._max_summary_tokens, cap)
+
     def _cap_summary(self, text: str, ctx: Context) -> str:
         """Enforce ``max_summary_tokens`` so re-summarizing can't grow unbounded."""
         tokens = self._estimator(ctx).estimate(
             [Message(role="assistant", content=text)]
         )
-        if tokens <= self._max_summary_tokens:
+        limit = self._summary_limit()
+        if tokens <= limit:
             return text
-        keep = int(len(text) * self._max_summary_tokens / tokens)
+        keep = int(len(text) * limit / tokens)
         cut = text[:keep]
         newline = cut.rfind("\n")
         if newline > keep // 2:  # end on a whole line when that loses little

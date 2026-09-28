@@ -131,7 +131,7 @@ def test_drop_fallback_when_no_provider():
     assert [e.strategy for e in events] == ["drop"]
     assert events[0].fallback
     assert "summarization unavailable" in events[0].reason
-    state = ctx.state(SummaryState)
+    state = cm.state(ctx)
     assert state.fallbacks == 1 and state.last_fallback.startswith("drop")
 
 
@@ -177,7 +177,7 @@ class RaisingModel(Model):
         raise RuntimeError("backend exploded")
 
 
-def test_summarize_failure_leaves_history_and_state_untouched():
+def test_summarize_failure_drops_turns_without_caching_a_summary():
     model = RaisingModel()
     ctx = make_ctx(model)
     cm = SummarizingContextManager(max_messages=6, keep_recent=3)
@@ -190,7 +190,7 @@ def test_summarize_failure_leaves_history_and_state_untouched():
     assert len(out) < len(hist)
     assert "omitted to fit the context window" in out[1].content
     # No partial corruption of the cached summary state.
-    state = ctx.state(SummaryState)
+    state = cm.state(ctx)
     assert state.upto == 0
     assert state.text == ""
     assert state.fallbacks == 1
@@ -323,13 +323,31 @@ def test_reported_input_tokens_anchor_the_estimate():
     assert process(cm, hist, ctx) is hist  # heuristic alone: well under budget
 
     ctx.emit(ModelCallStarted(list(hist)))
-    ctx.emit(ResponseReceived(Response(text="ok", usage={"input_tokens": 5000})))
+    ctx.emit(ResponseReceived(Response(text="ok", usage={"input_tokens": 900})))
     hist.append(Message(role="assistant", content="m6"))
+    hist.append(Message(role="user", content="q" * 400))
     out = process(cm, hist, ctx)
     assert model.calls == 1  # the reported usage pushed it over budget
     assert len(out) < len(hist)
-    # Nothing left is long enough to cut, so no truncate is reported.
-    assert [e.strategy for e in events] == ["summarize"]
+    assert events[0].strategy == "summarize"
+    assert cm._estimate(out, ctx) <= 1000
+
+
+def test_overhead_alone_over_budget_reports_overflow_without_summarizing():
+    # Tool schemas alone exceed the budget: folding history can't help.
+    model = SummarizerModel()
+    ctx = make_ctx(model)
+    events = capture(ctx)
+    cm = SummarizingContextManager(max_messages=None, max_tokens=1000)
+    asyncio.run(cm.start(ctx))
+    hist = history(6)
+    ctx.emit(ModelCallStarted(list(hist)))
+    ctx.emit(ResponseReceived(Response(text="ok", usage={"input_tokens": 5000})))
+    for i in range(6):
+        hist.append(Message(role="assistant" if i % 2 == 0 else "user", content="m"))
+        process(cm, list(hist), ctx)
+    assert model.calls == 0
+    assert [e.strategy for e in events] == ["overflow"]
 
 
 def test_small_reported_usage_keeps_noop():
@@ -460,10 +478,10 @@ def test_truncate_shrinks_largest_non_tool_message_last():
     assert cm._estimate(out, ctx) <= 1000
     assert out[1].content.startswith("task")
     assert "truncated" in out[-1].content
-    assert ctx.state(SummaryState).last_fallback.startswith("truncate")
+    assert cm.state(ctx).last_fallback.startswith("truncate")
 
 
-def test_head_is_never_dropped_or_truncated():
+def test_small_head_is_never_dropped_or_truncated():
     hist = huge_history()
     ctx = make_ctx()
     cm = SummarizingContextManager(max_messages=None, max_tokens=500)
@@ -553,9 +571,10 @@ def test_parallel_tool_results_are_kept_together():
 def test_randomized_histories_keep_tool_pairs_and_head():
     rng = random.Random(7)
     for trial in range(60):
+        head = "t" * rng.choice([1, 1, rng.randint(1, 12_000)])
         hist = [
             Message(role="system", content="sys"),
-            Message(role="user", content="t"),
+            Message(role="user", content=head),
         ]
         call = 0
         length = rng.randint(8, 40)
@@ -563,11 +582,15 @@ def test_randomized_histories_keep_tool_pairs_and_head():
             if rng.random() < 0.5:
                 ids = [f"c{call + k}" for k in range(rng.randint(1, 3))]
                 call += len(ids)
+                body = "w" * rng.choice([0, 0, 6000])
                 hist.append(
                     Message(
                         role="assistant",
                         content="",
-                        tool_calls=[{"id": i, "name": "t"} for i in ids],
+                        tool_calls=[
+                            {"id": i, "name": "t", "arguments": {"body": body}}
+                            for i in ids
+                        ],
                     )
                 )
                 for i in ids:
@@ -578,21 +601,35 @@ def test_randomized_histories_keep_tool_pairs_and_head():
                     Message(role="assistant", content="a" * rng.randint(1, 900))
                 )
                 hist.append(Message(role="user", content="u" * rng.randint(1, 900)))
-        ctx = make_ctx(SummarizerModel()) if trial % 2 else make_ctx()
+        model = SummarizerModel()
+        ctx = make_ctx(model) if trial % 2 else make_ctx()
+        events = capture(ctx)
         cm = SummarizingContextManager(
             max_messages=rng.choice([None, 8]), keep_recent=4, max_tokens=1500
         )
+        asyncio.run(cm.start(ctx))
+        # Fixed provider-side overhead (e.g. tool schemas) the history can't show.
+        overhead = rng.choice([0, 150, 400])
         grown: list[Message] = []
         for m in hist:  # replay turn by turn, like the loop does
             grown.append(m)
             out = process(cm, list(grown), ctx)
             assert_tool_pairs_intact(out)
+            assert_alternates(out)
             assert out[0].content == "sys"
             if len(grown) > 1:
                 assert out[1].content.startswith("t")
             assert cm._estimate(out, ctx) <= 1500
             newest = grown[-1]  # kept as is, or merged into the seam user turn
             assert out[-1].id == newest.id or newest.content[:100] in out[-1].content
+            ctx.emit(ModelCallStarted(list(out)))
+            sent = CharTokenEstimator().estimate(out) + overhead
+            ctx.emit(ResponseReceived(Response(usage={"input_tokens": sent})))
+        assert "overflow" not in [e.strategy for e in events]
+        # Each fold leaves room to grow, so summarizing is not a per-turn cost.
+        assert cm.state(ctx).summaries <= len(hist) // 2
+        folds = [e for e in events if e.strategy == "summarize"]
+        assert all(e.tokens_after < e.tokens_before for e in folds)
 
 
 # --- summary length and drift ------------------------------------------------------
@@ -617,7 +654,7 @@ def test_summary_length_is_instructed_and_enforced():
     process(cm, history(30), ctx)  # a re-fold must not grow the recap either
     assert len(model.prompts) == 2
     assert all("under 200 tokens" in p for p in model.prompts)
-    text = ctx.state(SummaryState).text
+    text = cm.state(ctx).text
     assert CharTokenEstimator().estimate([Message(role="user", content=text)]) <= 220
     assert text.endswith("[recap truncated to its length limit]")
 
@@ -656,7 +693,7 @@ def test_rewound_history_resets_cached_cuts():
     short = history(2)
     out = process(cm, short, ctx)
     assert out is short  # stale summary state is not applied to a new history
-    assert ctx.state(SummaryState).text == ""
+    assert cm.state(ctx).text == ""
 
 
 @pytest.mark.parametrize(
@@ -690,3 +727,113 @@ def test_default_harness_budgets_tokens_without_changing_small_runs(tmp_path):
     off_cm = off._registry.get(ContextManager)
     assert isinstance(off_cm, SummarizingContextManager)
     assert off_cm._max_tokens is None
+
+
+# --- review regressions -------------------------------------------------------------
+
+
+def turn(i: int, n_tokens: int) -> Message:
+    return Message(role="assistant" if i % 2 == 0 else "user", content=big(n_tokens))
+
+
+def test_large_head_does_not_resummarize_every_turn():
+    model = SummarizerModel()
+    ctx = make_ctx(model)
+    cm = SummarizingContextManager(max_messages=None, max_tokens=10_000)
+    hist = [
+        Message(role="system", content="sys"),
+        Message(role="user", content=big(6000)),
+    ]
+    summarized_turns = 0
+    for i in range(30):
+        hist.append(turn(i, 500))
+        before = model.calls
+        out = process(cm, list(hist), ctx)
+        summarized_turns += model.calls > before
+        assert cm._estimate(out, ctx) <= 10_000
+        assert_alternates(out)
+    # Each fold leaves room for several turns of growth before the next one.
+    assert summarized_turns <= 30 // 3
+
+
+def test_head_over_budget_is_truncated_and_recorded():
+    model = SummarizerModel()
+    ctx = make_ctx(model)
+    events = capture(ctx)
+    cm = SummarizingContextManager(max_messages=None, max_tokens=1000)
+    doc = "START" + "x" * 20_000 + "END"
+    hist = [Message(role="system", content="sys"), Message(role="user", content=doc)]
+    out = process(cm, list(hist), ctx)
+    # The head alone is over budget: cut it rather than send it silently.
+    assert [e.strategy for e in events] == ["truncate"]
+    assert "head" in events[0].reason
+    assert cm._estimate(out, ctx) <= 1000
+    assert out[0].content == "sys"
+    assert out[1].content.startswith("START") and out[1].content.endswith("END")
+    assert cm.state(ctx).fallbacks == 1
+    for i in range(16):
+        hist.append(turn(i, 20))
+        out = process(cm, list(hist), ctx)
+        assert cm._estimate(out, ctx) <= 1000
+        assert out[1].content.startswith("START")
+    assert model.calls <= 4  # not one summarizer call per turn
+    assert hist[1].content == doc  # the session history is not mutated
+
+
+def test_unfixable_overflow_is_recorded_once():
+    # Only a huge system prompt remains: nothing may be cut, so say so once.
+    ctx = make_ctx(SummarizerModel())
+    events = capture(ctx)
+    cm = SummarizingContextManager(max_messages=None, max_tokens=1000)
+    hist = [
+        Message(role="system", content=big(5000)),
+        Message(role="user", content="task"),
+    ]
+    for i in range(5):
+        process(cm, list(hist), ctx)
+        hist.append(turn(i, 10))
+    assert [e.strategy for e in events] == ["overflow"]
+    assert events[0].fallback
+    assert cm.state(ctx).last_fallback.startswith("overflow")
+
+
+def test_chained_managers_keep_separate_state():
+    model = SummarizerModel()
+    ctx = make_ctx(model)
+    a = SummarizingContextManager(max_messages=10, keep_recent=4)
+    b = SummarizingContextManager(max_messages=None, max_tokens=100_000)
+    hist = history(2)
+    for i in range(30):
+        hist.append(Message(role="assistant" if i % 2 == 0 else "user", content="t"))
+        out = list(hist)
+        for cm in (a, b):
+            out = process(cm, out, ctx)
+    # Only ``a`` compacts, once per ~6 new messages, not once per turn.
+    assert model.calls <= 5
+    assert isinstance(a.state(ctx), SummaryState)
+    assert a.state(ctx) is not b.state(ctx)
+    assert a.state(ctx).summaries == model.calls
+    assert b.state(ctx).summaries == 0
+
+
+def test_truncate_shrinks_huge_tool_call_arguments():
+    body = "B" * 40_000
+    call = {
+        "id": "c",
+        "name": "write_file",
+        "arguments": {"path": "a.py", "body": body},
+    }
+    hist = [
+        Message(role="system", content="sys"),
+        Message(role="user", content="task"),
+        Message(role="assistant", content="", tool_calls=[call]),
+        Message(role="tool", content="ok", tool_use_id="c", name="write_file"),
+    ]
+    ctx = make_ctx()
+    cm = SummarizingContextManager(max_messages=None, max_tokens=2000)
+    out = process(cm, hist, ctx)
+    assert cm._estimate(out, ctx) <= 2000
+    shrunk = out[-2].tool_calls[0]
+    assert shrunk["id"] == "c" and shrunk["arguments"]["path"] == "a.py"
+    assert "characters truncated" in shrunk["arguments"]["body"]
+    assert hist[2].tool_calls[0]["arguments"]["body"] == body  # not mutated

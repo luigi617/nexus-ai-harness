@@ -97,12 +97,13 @@ class LoopStopped(Event):
 
 @dataclass
 class ContextCompacted(Event):
-    """A context manager shrank the history sent to the model.
+    """A context manager shrank, or failed to shrink, the history sent to the model.
 
     ``strategy`` is ``"summarize"`` when older turns were folded into a model
     summary. Any other value is a deterministic fallback: ``"drop"`` omitted the
-    oldest middle turns and ``"truncate"`` cut oversized message contents.
-    Token counts are estimates.
+    oldest middle turns, ``"truncate"`` cut oversized message contents, and
+    ``"overflow"`` means no step could bring the prompt under budget, so it is
+    sent over budget. Token counts are estimates.
     """
 
     strategy: str
