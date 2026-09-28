@@ -1,31 +1,44 @@
 name: Release
 
+# Runs when a release PR (branch release/vX.Y.Z, opened by the Prepare release
+# workflow) is merged.
 on:
-  push:
-    tags: ["v*"]
+  pull_request:
+    types: [closed]
+    branches: [main]
 
 jobs:
   build:
     name: Build
+    if: >-
+      github.event.pull_request.merged
+      && github.event.pull_request.head.repo.full_name == github.repository
+      && startsWith(github.event.pull_request.head.ref, 'release/v')
     runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+      sha: ${{ steps.version.outputs.sha }}
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ github.event.pull_request.merge_commit_sha }}
           fetch-depth: 0
-      - name: Extract release notes from CHANGELOG.md
+      - id: version
+        env:
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          SHA: ${{ github.event.pull_request.merge_commit_sha }}
         run: |
-          version="${GITHUB_REF_NAME#v}"
-          awk -v v="$version" '
-            /^## \[/ { p = index($0, "## [" v "]") == 1; next }
-            p
-          ' CHANGELOG.md > release-notes.md
-          if ! grep -q '[^[:space:]]' release-notes.md; then
-            echo "::error::CHANGELOG.md has no entry for $version"
-            exit 1
-          fi
+          tag="${HEAD_REF#release/}"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          # Tag locally so setuptools-scm builds this exact version.
+          git tag "$tag"
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
+      - run: python scripts/changelog.py notes "${TAG#v}" > release-notes.md
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
       - run: pip install build twine
       - run: python -m build
       - run: twine check --strict dist/*
@@ -56,7 +69,7 @@ jobs:
 
   github-release:
     name: Create GitHub release
-    needs: publish
+    needs: [build, publish]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -70,8 +83,11 @@ jobs:
           name: release-notes
       - env:
           GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.build.outputs.tag }}
+          SHA: ${{ needs.build.outputs.sha }}
         run: >
-          gh release create "$GITHUB_REF_NAME" dist/*
+          gh release create "$TAG" dist/*
           --repo "$GITHUB_REPOSITORY"
-          --title "$GITHUB_REF_NAME"
+          --target "$SHA"
+          --title "$TAG"
           --notes-file release-notes.md

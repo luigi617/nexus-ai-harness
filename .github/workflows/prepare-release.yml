@@ -1,0 +1,52 @@
+name: Prepare release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version to release, e.g. 0.2.0
+        required: true
+
+jobs:
+  prepare:
+    name: Open release PR
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    env:
+      VERSION: ${{ inputs.version }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Check the tag is new
+        run: |
+          if git rev-parse -q --verify "refs/tags/v$VERSION" >/dev/null; then
+            echo "::error::Tag v$VERSION already exists"
+            exit 1
+          fi
+      - run: python scripts/changelog.py release "$VERSION"
+      - name: Commit and open PR
+        run: |
+          branch="release/v$VERSION"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$branch"
+          git add -A CHANGELOG.md .changes
+          git commit -m "Release v$VERSION"
+          git push origin "$branch"
+          python scripts/changelog.py notes "$VERSION" > notes.md
+          {
+            echo "Merging this PR publishes v$VERSION to PyPI and creates the GitHub release."
+            echo
+            echo "## Changelog"
+            echo
+            cat notes.md
+          } > body.md
+          gh pr create --base main --head "$branch" \
+            --title "Release v$VERSION" --body-file body.md
