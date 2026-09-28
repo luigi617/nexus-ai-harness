@@ -187,3 +187,145 @@ def test_run_process_closes_stdin_and_can_merge_stderr(tmp_path):
     )
     assert result.stdout.split() == ["''", "e"]
     assert result.stderr == ""
+
+
+# --- review regressions: constructs that must not slip past an allowlist ----
+
+
+@pytest.mark.parametrize(
+    ("command", "variable"),
+    [
+        ("for PATH in /tmp/evil; do ls; done", "PATH"),
+        ("select GIT_EXTERNAL_DIFF in ./x; do vcs diff; done", "GIT_EXTERNAL_DIFF"),
+        ("ls; for x; do echo; done", "x"),
+        ("exec {PATH}>/dev/null; ls", "PATH"),
+    ],
+)
+def test_loop_and_fd_variables_are_assignments(command, variable):
+    assert variable in scan_command(command).assignments
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        'env -S"touch pwned"',
+        "env -u X -S 'rm -rf .'",
+        "env -iS'rm x'",
+        "env --split-string='rm x'",
+        "env --split='rm x'",
+        "set -a; for GIT_EXTERNAL_DIFF in ./x; do vcs diff; done",
+        "set -o allexport",
+        "set -ea",
+    ],
+)
+def test_opaque_env_split_and_allexport(command):
+    assert scan_command(command).opaque
+
+
+def test_env_split_check_stops_at_the_program():
+    # ``-S`` after the program belongs to the program, not to env.
+    scan = scan_command("env A=1 ls -lS")
+    assert scan.opaque == []
+    assert scan.programs == ["env", "ls"]
+    assert scan_command("set -euo pipefail; ls").opaque == []
+
+
+@pytest.mark.parametrize(
+    ("command", "redirects"),
+    [
+        ("echo evil > /home/u/.bashrc", [(">", "/home/u/.bashrc")]),
+        ("ls 2>&1 >> out.txt", [(">>", "out.txt")]),
+        ("cmd &> all.log", [("&>", "all.log")]),
+        ("echo x >&2; cat <&0", []),
+        ("cat < /dev/tcp/1.2.3.4/80", [("<", "/dev/tcp/1.2.3.4/80")]),
+        ("cat <<EOF > out\nhi\nEOF", [(">", "out")]),
+        ("grep x <<< data", []),
+    ],
+)
+def test_redirect_targets_are_recorded(command, redirects):
+    assert scan_command(command).redirects == redirects
+
+
+@pytest.mark.parametrize("command", ['ls > "$f"', "ls > ~/x", "ls > *.txt"])
+def test_unknowable_redirect_targets_are_opaque(command):
+    assert scan_command(command).opaque
+
+
+def test_directories_and_repeats():
+    scan = scan_command("cd src && cd pkg; ls")
+    assert scan.directories == ["src", "pkg"]
+    assert not scan.repeats
+    assert scan_command("cd; cd -; popd; cd $d").directories == [None] * 4
+    assert scan_command("while true; do ls; done").repeats
+    assert scan_command("f() { ls; }; f").repeats
+    assert scan_command("function f { ls; }").repeats
+
+
+# --- review regressions: the state trailer and process capture ------------
+
+
+def test_invocation_survives_a_deleted_cwd(tmp_path):
+    root = tmp_path.resolve()
+    invocation = ShellInvocation.build(
+        "mkdir -p d && cd d && rmdir ../d; echo x", cwd=str(root)
+    )
+    result = invocation.parse(_run(invocation, root), confine=_confine(root), root=root)
+    assert (result.returncode, result.stdout) == (0, "x\n")
+    # pwd fails on a deleted cwd, so it is unknown and the session keeps its own.
+    assert result.cwd is None or not Path(result.cwd).exists()
+
+
+def test_invocation_does_not_persist_its_own_variables(tmp_path):
+    root = tmp_path.resolve()
+    invocation = ShellInvocation.build("set -a; X=1; true", cwd=str(root))
+    result = invocation.parse(_run(invocation, root), confine=_confine(root), root=root)
+    assert result.env == {"X": "1"}
+
+
+@pytest.mark.parametrize("command", ["unset PATH", "export PATH=./nowhere"])
+def test_invocation_env_snapshot_survives_a_broken_path(tmp_path, command):
+    root = tmp_path.resolve()
+    invocation = ShellInvocation.build(command, cwd=str(root), env={"KEEP": "1"})
+    result = invocation.parse(_run(invocation, root), confine=_confine(root), root=root)
+    assert set(result.env) == {"PATH"}
+
+
+def test_run_process_background_job_is_not_a_timeout(tmp_path):
+    started = time.monotonic()
+    result = run_process(
+        ["/bin/sh", "-c", "sleep 30 & echo started"],
+        cwd=tmp_path,
+        env={"PATH": "/usr/bin:/bin"},
+        timeout=20,
+    )
+    assert time.monotonic() - started < 10
+    assert not result.timed_out
+    assert result.returncode == 0
+    assert result.stdout == "started\n"
+    assert "redirect" in result.stderr
+
+
+def test_run_process_redirected_background_job_keeps_running(tmp_path):
+    marker = tmp_path / "done"
+    result = run_process(
+        ["/bin/sh", "-c", f"(sleep 1.5; touch {marker}) > /dev/null 2>&1 & echo ok"],
+        cwd=tmp_path,
+        env={"PATH": "/usr/bin:/bin"},
+        timeout=10,
+    )
+    assert (result.returncode, result.stdout, result.stderr) == (0, "ok\n", "")
+    deadline = time.monotonic() + 10
+    while not marker.exists() and time.monotonic() < deadline:
+        time.sleep(0.1)
+    assert marker.exists()
+
+
+def test_run_process_feeds_input_and_translates_newlines(tmp_path):
+    result = run_process(
+        ["/bin/sh", "-c", "cat; printf 'a\\r\\nb\\n' >&2"],
+        cwd=tmp_path,
+        env={"PATH": "/usr/bin:/bin"},
+        timeout=10,
+        input="hello",
+    )
+    assert (result.stdout, result.stderr) == ("hello", "a\nb\n")

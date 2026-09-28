@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -279,6 +280,47 @@ def test_sandbox_without_shell_support_falls_back_to_argv(tmp_path):
     assert result == "exit=0\nout\n[stderr]\nwarn"
     assert Shell().run({"command": "forbidden"}, ctx) == "error: nope"
     assert Shell().run({"command": "echo 'x"}, ctx).startswith("error:")
+
+
+class _NoShellWorkspace(WorkspaceSandbox):
+    """A real sandbox that opts out of shell strings, to exercise the fallback."""
+
+    def run_shell(self, command, *, timeout, cwd=None, env=None):
+        raise NotImplementedError
+
+
+def test_shell_timeout_result_shape_fallback(tmp_path):
+    ctx = make_ctx(_NoShellWorkspace(tmp_path))
+    result = Shell().run({"command": "sleep 5", "timeout": 0.5}, ctx)
+    assert result == "exit=124 (timed out after 0.5s)\n"
+
+
+@pytest.mark.parametrize("sandboxed", [False, True])
+def test_shell_background_job_returns_promptly(tmp_path, monkeypatch, sandboxed):
+    monkeypatch.chdir(tmp_path)
+    ctx = make_ctx(WorkspaceSandbox(tmp_path)) if sandboxed else make_ctx()
+    started = time.monotonic()
+    result = Shell().run({"command": "sleep 30 & echo started", "timeout": 20}, ctx)
+    assert time.monotonic() - started < 10
+    assert result.startswith("exit=0\nstarted\n")
+    assert "redirect" in result
+
+
+def test_shell_parallel_call_does_not_clobber_cwd(tmp_path, monkeypatch):
+    # The loop runs one response's tool calls concurrently; a call that never
+    # changed directory must not reset the cwd another call moved to.
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "sub").mkdir()
+    ctx = make_ctx()
+    shell = Shell()
+    slow = threading.Thread(
+        target=shell.run, args=({"command": "sleep 1"}, ctx), daemon=True
+    )
+    slow.start()
+    time.sleep(0.2)
+    shell.run({"command": "cd sub"}, ctx)
+    slow.join(10)
+    assert ctx.state(ShellState).cwd == str((tmp_path / "sub").resolve())
 
 
 @pytest.mark.parametrize(

@@ -56,7 +56,16 @@ _END_KEYWORDS = frozenset({"fi", "done", "}"})
 """Reserved words that close a compound command and run nothing themselves."""
 
 _LOOP_KEYWORDS = frozenset({"for", "select"})
-"""Reserved words whose remaining words (up to a separator) are not commands."""
+"""Reserved words that assign their next word and list data up to a separator."""
+
+WRITE_REDIRECTS = frozenset({">", ">>", ">|", "<>", "&>", "&>>", ">&"})
+"""Redirection operators that open their target for writing."""
+
+_DATA_REDIRECTS = frozenset({"<<", "<<-", "<<<"})
+"""Redirections whose following word is data (a heredoc delimiter or string)."""
+
+_DIR_CHANGERS = frozenset({"cd", "pushd", "popd"})
+"""Commands that change the directory relative redirection targets resolve in."""
 
 _INERT_BUILTINS = frozenset(
     {
@@ -117,6 +126,8 @@ _FIND_EXEC = frozenset({"-exec", "-execdir", "-ok", "-okdir"})
 """``find`` actions whose next word is a program to run."""
 
 _NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+_PLAIN_PATH = re.compile(r"[A-Za-z0-9_./+-]+")
+_FD_VARIABLE = re.compile(r"\{([A-Za-z_][A-Za-z0-9_]*)\}")
 _ASSIGNMENT = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\+?=")
 _SIMPLE_BRACED = re.compile(r"[A-Za-z_][A-Za-z0-9_]*|[0-9]|[@*#?$!-]")
 _SPECIAL_PARAMS = "@*#?$!-0123456789"
@@ -133,14 +144,29 @@ class CommandScan:
             as a command substitution or a computed program name. Empty when
             ``programs`` is the complete set of programs the string runs.
         assignments: Variables the string sets (``NAME=value`` prefixes and
-            statements, ``export``, ``env NAME=value``). A variable such as
-            ``PATH`` or ``GIT_EXTERNAL_DIFF`` can change what a permitted
-            program executes, so an allowlist may refuse these too.
+            statements, ``export``, ``env NAME=value``, ``for NAME in``,
+            ``{NAME}>file``). A variable such as ``PATH`` or
+            ``GIT_EXTERNAL_DIFF`` can change what a permitted program executes,
+            so an allowlist may refuse these too.
+        redirects: ``(operator, target)`` for each file redirection whose
+            target is literal text, e.g. ``(">", "out.txt")``. Heredoc and
+            here-string data and ``2>&1``-style descriptor copies are omitted;
+            a computed target is reported in :attr:`opaque` instead.
+        directories: The target of each ``cd``/``pushd``/``popd``, in order,
+            or ``None`` where it is not a single literal directory (``cd``
+            alone, ``cd -``, ``popd``, a computed path). After any of these a
+            relative redirection target no longer resolves against the
+            starting directory.
+        repeats: Whether the string has a ``while``/``until`` loop or defines a
+            function, so its commands may run more times than they appear.
     """
 
     programs: list[str] = field(default_factory=list)
     opaque: list[str] = field(default_factory=list)
     assignments: list[str] = field(default_factory=list)
+    redirects: list[tuple[str, str]] = field(default_factory=list)
+    directories: list[str | None] = field(default_factory=list)
+    repeats: bool = False
 
 
 @dataclass
@@ -183,22 +209,44 @@ def scan_command(command: str) -> CommandScan:
     """
     scan = CommandScan()
     words: list[_Word] = []
-    skip_target = False
+    redirect: str | None = None
+    previous: _Token | None = None
     for token in _tokenize(command, scan):
+        if token.op == ")" and previous is not None and previous.op == "(":
+            scan.repeats = True  # ``name() { ...; }`` defines a function
+        previous = token
         if token.word is not None:
-            if skip_target:
-                skip_target = False
+            if redirect is not None:
+                _redirection(redirect, token.word, scan)
+                redirect = None
             else:
                 words.append(token.word)
             continue
         op = token.op or ""
-        skip_target = op in _REDIRECTS
-        if skip_target:
+        if op in _REDIRECTS:
+            redirect = op
             continue
         _analyze(words, scan)
         words = []
     _analyze(words, scan)
     return scan
+
+
+def _redirection(op: str, target: _Word, scan: CommandScan) -> None:
+    """Record a redirection's target, or why it cannot be known statically."""
+    if op in _DATA_REDIRECTS:
+        return
+    text = target.text
+    if op in ("<&", ">&") and not target.dynamic and (text.isdigit() or text == "-"):
+        return  # a descriptor copy or close such as 2>&1, not a file
+    if op == "<&":
+        return
+    if target.dynamic:
+        scan.opaque.append("redirection target is computed at run time")
+    elif text.startswith("~") and not target.quoted:
+        scan.opaque.append("redirection target uses '~' expansion")
+    else:
+        scan.redirects.append((op, text))
 
 
 def _tokenize(command: str, scan: CommandScan) -> list[_Token]:
@@ -287,8 +335,13 @@ class _Lexer:
 
     def _operator(self, c: str) -> None:
         s, i = self._s, self._i
-        if c in "<>" and self._word is not None and self._word.text.isdigit():
-            self._word = None  # an fd number such as the 2 in 2>&1
+        word = self._word
+        if c in "<>" and word is not None and not word.quoted:
+            if word.text.isdigit():
+                self._word = None  # an fd number such as the 2 in 2>&1
+            elif match := _FD_VARIABLE.fullmatch(word.text):
+                self._scan.assignments.append(match.group(1))  # {fd}>file
+                self._word = None
         self._flush()
         if s.startswith("((", i):
             self._scan.opaque.append("arithmetic command '(('")
@@ -403,10 +456,20 @@ def _analyze(words: list[_Word], scan: CommandScan) -> None:
         word = words[i]
         bare = not word.quoted and not word.dynamic
         if bare and word.text in _LOOP_KEYWORDS:
+            # The loop variable is assigned (and exported under ``set -a`` or if
+            # already exported, e.g. ``for PATH in ...``); the rest is data.
+            if i + 1 < len(words):
+                variable = words[i + 1]
+                if variable.dynamic or not _NAME.fullmatch(variable.text):
+                    scan.opaque.append(f"'{word.text}' over a computed variable")
+                scan.assignments.append(variable.text)
             return
         if bare and word.text == "function":
+            scan.repeats = True
             i += 2
             continue
+        if bare and word.text in ("while", "until"):
+            scan.repeats = True
         if bare and (word.text in _PREFIX_KEYWORDS or word.text in _END_KEYWORDS):
             i += 1
             if word.text == "time" and i < len(words) and words[i].text == "-p":
@@ -441,6 +504,8 @@ def _command(words: list[_Word], scan: CommandScan) -> None:
         if name in _EXEC_BUILTINS:
             words = _skip_options(words[1:], _EXEC_BUILTINS[name], 0, scan)
             continue
+        if name in _DIR_CHANGERS:
+            scan.directories.append(_directory(name, words[1:]))
         if name in _INERT_BUILTINS:
             _check_inert(name, words[1:], scan)
             return
@@ -459,6 +524,19 @@ def _command(words: list[_Word], scan: CommandScan) -> None:
         )
 
 
+def _directory(name: str, args: list[_Word]) -> str | None:
+    """Return the literal directory a ``cd``/``pushd`` enters, if knowable."""
+    if name == "popd":
+        return None
+    operands = [a for a in args if a.text not in ("-L", "-P", "-e", "-@")]
+    if len(operands) != 1 or operands[0].dynamic:
+        return None
+    text = operands[0].text
+    if not text or text[0] in "-+" or (text.startswith("~") and not operands[0].quoted):
+        return None
+    return text
+
+
 def _check_inert(name: str, args: list[_Word], scan: CommandScan) -> None:
     """Flag the few inert-builtin forms that assign to a computed variable name."""
     texts = [a.text for a in args]
@@ -466,6 +544,11 @@ def _check_inert(name: str, args: list[_Word], scan: CommandScan) -> None:
         scan.opaque.append("'printf -v' assigns to a computed variable")
     elif name in ("test", "[") and ("-v" in texts or "-R" in texts):
         scan.opaque.append(f"'{name} -v' evaluates a variable subscript")
+    elif name == "set" and any(
+        a == "allexport" or (a.startswith("-") and not a.startswith("--") and "a" in a)
+        for a in texts
+    ):
+        scan.opaque.append("'set -a' exports every later assignment")
     elif name == "export":
         for arg in args:
             variable = arg.text.split("=", 1)[0]
@@ -474,6 +557,14 @@ def _check_inert(name: str, args: list[_Word], scan: CommandScan) -> None:
             if not _NAME.fullmatch(variable):
                 scan.opaque.append("'export' of a computed variable name")
             scan.assignments.append(variable)
+
+
+def _env_split_string(text: str) -> bool:
+    """Whether an ``env`` argument is ``-S``/``--split-string`` (or bundles it)."""
+    if text.startswith("--"):
+        name = text[2:].split("=", 1)[0]
+        return len(name) >= 1 and "split-string".startswith(name)
+    return text.startswith("-") and "S" in text
 
 
 def _skip_options(
@@ -491,6 +582,10 @@ def _skip_options(
         if text == "--":
             i += 1
             break
+        if assignments and _env_split_string(text):
+            # ``env -S "cmd args"`` runs a program named inside an option value.
+            scan.opaque.append("'env -S' runs a command the policy cannot inspect")
+            return []
         if text in valued:
             i += 2
         elif text.startswith("-") and len(text) > 1:
@@ -505,8 +600,11 @@ def _skip_options(
 
 # --- running a command string with persistent cwd/env ----------------------
 
-_IGNORED_ENV = frozenset({"PWD", "OLDPWD", "SHLVL", "_"})
+_IGNORED_ENV = frozenset({"PWD", "OLDPWD", "SHLVL", "_", "BASH_TRAPSIG"})
 """Variables the shell itself maintains, never carried between calls."""
+
+_WRAPPER_PREFIX = "__nexus_"
+"""Prefix of the driver's own variables, which ``set -a`` could export."""
 
 _MAX_ENV_VALUE = 32_768
 """Largest variable value carried between calls, to keep argv bounded."""
@@ -524,19 +622,31 @@ done
 unset __nexus_kv
 set --
 printf '%s\\n' '{tag}:ENV0'
-env -0
+{env} -0
 printf '\\n%s\\n' '{tag}:BEGIN'
 cd -- "$__nexus_dir" || printf '%s\\n' "note: could not enter $__nexus_dir"
 unset __nexus_dir
-trap '__nexus_rc=$?; printf "\\n%s\\n" "{tag}:STATE"; pwd -P 2>/dev/null; env -0; \
-exit "$__nexus_rc"' EXIT
+trap '__nexus_rc=$?; printf "\\n%s\\n" "{tag}:STATE"; pwd -P 2>/dev/null; \
+printf "\\n%s\\n" "{tag}:ENV"; {env} -0; exit "$__nexus_rc"' EXIT
 eval "$__nexus_cmd"
 """
 """POSIX ``sh`` driver: restore state, run the command, then report the new state.
 
 The command is passed as an argument and run with ``eval`` so a syntax error in
-it is reported like any other failure (and the state trailer still runs).
+it is reported like any other failure (and the state trailer still runs). The
+trailer marks where ``pwd`` ends so a failed ``pwd`` (a deleted cwd) is not
+mistaken for the env dump, and ``{env}`` is an absolute path so a command that
+breaks ``PATH`` cannot blank the snapshot.
 """
+
+
+def _env_program() -> str:
+    """Return the ``env`` invocation for the driver, immune to ``PATH`` changes."""
+    found = shutil.which("env")
+    # Embedded in a single-quoted trap, so only plain path characters are safe.
+    if found and _PLAIN_PATH.fullmatch(found):
+        return found
+    return "command -p env"
 
 
 def default_interpreter() -> str:
@@ -586,7 +696,7 @@ class ShellInvocation:
             for name, value in (env or {}).items()
             if _NAME.fullmatch(name)
         ]
-        script = _WRAPPER.replace("{tag}", tag)
+        script = _WRAPPER.replace("{tag}", tag).replace("{env}", _env_program())
         shell = interpreter or default_interpreter()
         return cls(
             argv=[shell, "-c", script, "nexus-shell", command, cwd, *pairs], tag=tag
@@ -624,9 +734,15 @@ class ShellInvocation:
             )
         trailer = body[state + len(marker) :]
         body = out[:start] + body[:state]
-        cwd_line, _, env_blob = trailer.partition("\n")
+        cwd_line, found, env_blob = trailer.partition(f"\n{self.tag}:ENV\n")
+        if not found:  # the trailer was cut short; trust none of it
+            cwd_line, env_blob = "", ""
+        cwd_line = cwd_line.strip("\n")
         try:
-            cwd = str(confine(cwd_line)) if cwd_line else None
+            # An empty or malformed line means ``pwd`` failed: the cwd is unknown.
+            cwd = str(confine(cwd_line)) if cwd_line and "\0" not in cwd_line else None
+        except ValueError:
+            cwd = None
         except SandboxViolation:
             cwd = str(root)
             note = f"note: {cwd_line} is outside the workspace; cwd reset to {root}"
@@ -654,11 +770,18 @@ def _parse_env(blob: str) -> dict[str, str]:
 def _env_changes(
     before: dict[str, str], after: dict[str, str]
 ) -> dict[str, str | None]:
-    """Diff two environments into sets (a value) and unsets (``None``)."""
+    """Diff two environments into sets (a value) and unsets (``None``).
+
+    An empty ``after`` means the snapshot failed rather than that the command
+    unset everything, so it yields no changes.
+    """
+    if not after:
+        return {}
     changes: dict[str, str | None] = {
         name: value
         for name, value in after.items()
         if name not in _IGNORED_ENV
+        and not name.startswith(_WRAPPER_PREFIX)
         and before.get(name) != value
         and len(value) <= _MAX_ENV_VALUE
     }
@@ -666,7 +789,9 @@ def _env_changes(
         {
             name: None
             for name in before
-            if name not in after and name not in _IGNORED_ENV
+            if name not in after
+            and name not in _IGNORED_ENV
+            and not name.startswith(_WRAPPER_PREFIX)
         }
     )
     return changes

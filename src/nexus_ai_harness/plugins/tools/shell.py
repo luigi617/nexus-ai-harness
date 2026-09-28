@@ -16,7 +16,7 @@ from nexus_ai_harness.protocols.sandbox import (
     ShellResult,
 )
 from nexus_ai_harness.protocols.tool import Tool
-from nexus_ai_harness.services.process import run_process
+from nexus_ai_harness.services.process import TIMEOUT_NOTE, run_process
 from nexus_ai_harness.services.shell import ShellInvocation
 
 _DEFAULT_TIMEOUT = 30.0
@@ -121,7 +121,10 @@ class Shell(Tool):
         "over; the directory stays within the workspace root. Each call has a "
         "timeout (default 30 s; pass `timeout` for longer runs such as test "
         "suites). Commands must not wait for interactive input (stdin is "
-        "closed). Very long output keeps its beginning and end."
+        "closed). To leave a process running in the background, redirect its "
+        "output (`cmd > log.txt 2>&1 &`); a background job still attached to "
+        "the output is stopped when the command finishes. Very long output "
+        "keeps its beginning and end."
     )
     parameters: ClassVar[dict] = {
         "type": "object",
@@ -173,16 +176,17 @@ class Shell(Tool):
             arguments.get("timeout"), self.default_timeout, self.max_timeout
         )
         state = ctx.state(ShellState)
-        env = state.env if self.persist_env else None
+        started = state.cwd
+        env = dict(state.env) if self.persist_env else None
         sandbox: Sandbox | None = ctx.get(Sandbox)
         result: SandboxResult
         try:
             if sandbox is None:
                 base = Path(os.getcwd()).resolve()
-                result = self._run_local(command, timeout, state.cwd, env, base)
+                result = self._run_local(command, timeout, started, env, base)
             else:
                 base = sandbox.resolve_path(".")
-                result = self._run_sandboxed(sandbox, command, timeout, state, env)
+                result = self._run_sandboxed(sandbox, command, timeout, started, env)
         except SandboxViolation as exc:
             return f"error: {exc}"
         except (OSError, ValueError) as exc:  # ValueError e.g. embedded NUL
@@ -190,9 +194,10 @@ class Shell(Tool):
 
         moved = ""
         if isinstance(result, ShellResult):
-            if result.cwd is not None and result.cwd != (state.cwd or str(base)):
+            # Update only on a change, so a parallel call that stayed put can't
+            # overwrite the cwd another call moved to; env is already a diff.
+            if result.cwd is not None and result.cwd != (started or str(base)):
                 moved = f"\n(cwd is now {display(Path(result.cwd), base)})"
-            if result.cwd is not None:
                 state.cwd = None if result.cwd == str(base) else result.cwd
             if self.persist_env:
                 state.env.update(result.env)
@@ -203,17 +208,26 @@ class Shell(Tool):
         sandbox: Sandbox,
         command: str,
         timeout: float,
-        state: ShellState,
+        cwd: str | None,
         env: dict[str, str | None] | None,
     ) -> SandboxResult:
         """Run via the sandbox's shell support, or as argv if it has none."""
         try:
-            return sandbox.run_shell(command, timeout=timeout, cwd=state.cwd, env=env)
+            return sandbox.run_shell(command, timeout=timeout, cwd=cwd, env=env)
         except NotImplementedError:
             argv = shlex.split(command)
             if not argv:
                 raise ValueError("empty command") from None
-            return sandbox.run_command(argv, timeout=timeout)
+            result = sandbox.run_command(argv, timeout=timeout)
+            if result.timed_out:
+                # The header already reports the timeout; drop the duplicate note
+                # so every path shows the same shape.
+                result.stderr = "\n".join(
+                    line
+                    for line in result.stderr.splitlines()
+                    if not line.startswith(TIMEOUT_NOTE)
+                )
+            return result
 
     @staticmethod
     def _run_local(

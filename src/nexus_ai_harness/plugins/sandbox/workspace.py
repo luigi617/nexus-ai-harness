@@ -15,8 +15,14 @@ from nexus_ai_harness.protocols.sandbox import (
     SandboxViolation,
     ShellResult,
 )
-from nexus_ai_harness.services.process import TIMEOUT_RETURNCODE, run_process
+from nexus_ai_harness.services.process import (
+    TIMEOUT_NOTE,
+    TIMEOUT_RETURNCODE,
+    run_process,
+)
 from nexus_ai_harness.services.shell import (
+    WRITE_REDIRECTS,
+    CommandScan,
     ShellInvocation,
     default_interpreter,
     scan_command,
@@ -28,6 +34,12 @@ _TIMEOUT_RETURNCODE = TIMEOUT_RETURNCODE
 
 _SHELL_NAMES = frozenset({"sh", "bash"})
 """Interpreter names whose denial also disables :meth:`run_shell`."""
+
+_MAX_TRACKED_CDS = 4
+"""Most ``cd`` commands a string may hold and still have redirects verified."""
+
+_SAFE_DEVICES = frozenset({"/dev/null", "/dev/stdout", "/dev/stderr"})
+"""Write targets outside the root that reach no file."""
 
 
 class WorkspaceSandbox(Sandbox, Lifecycle):
@@ -57,10 +69,14 @@ class WorkspaceSandbox(Sandbox, Lifecycle):
       ``xargs``/``exec``/``command``/``find -exec``. Constructs whose programs
       the scan cannot see (command or process substitution, ``eval``/``source``,
       unquoted heredocs with expansions, arithmetic, a program name held in a
-      variable) are refused when an allowlist is set, as are variable
-      assignments (``PATH=...``, ``export``), and allowed otherwise, so a
-      denylist is a best-effort guard for shell strings. Policy matches names
-      only; it cannot tell what a name (or ``./name``) resolves to.
+      variable, ``env -S``, ``set -a``) are refused when an allowlist is set,
+      as are variable assignments (``PATH=...``, ``export``, ``for`` loop
+      variables) and output redirections that could land outside the root or
+      on ``/dev/tcp``; all are allowed otherwise, so a denylist is a
+      best-effort guard for shell strings. Policy matches names only; it
+      cannot tell what a name (or ``./name``) resolves to, nor what an allowed
+      program does with its own arguments (``cp x /etc`` is the program's
+      write, not the shell's).
     * Subprocesses are confined via :meth:`run_command`; the ``resolve_path``
       check applies to the filesystem tools, not to arbitrary shell argv.
     * A timeout kills the command's whole process group, so a shell's
@@ -186,21 +202,25 @@ class WorkspaceSandbox(Sandbox, Lifecycle):
         self.check_command(argv)
         result = self._execute(argv, timeout=timeout, input=input)
         if result.timed_out:
-            note = f"sandbox: command timed out after {timeout}s"
+            note = f"{TIMEOUT_NOTE} after {timeout}s"
             result.stderr = f"{result.stderr}\n{note}".strip()
         return result
 
-    def check_shell(self, command: str) -> None:
+    def check_shell(self, command: str, *, cwd: str | None = None) -> None:
         """Validate a shell command string against the allowlist and denylist.
 
         Every program the string runs that a static scan can identify is passed
         to :meth:`check_command`. When an allowlist is configured, the string is
         also refused if it can run code the scan cannot see (see the class
-        docs) or sets environment variables, since either could make an allowed
-        program run something else.
+        docs), sets a variable (``NAME=``, ``export``, a ``for`` loop variable),
+        or redirects output to a file outside the root or to ``/dev/tcp``,
+        since each could make an allowed program, or the shell itself, do what
+        the allowlist was meant to prevent.
 
         Args:
             command: The shell command string.
+            cwd: The directory the command starts in, for resolving relative
+                redirection targets (default: the root).
 
         Raises:
             SandboxViolation: If any identified program is not permitted, or an
@@ -220,9 +240,62 @@ class WorkspaceSandbox(Sandbox, Lifecycle):
             # PATH, LD_PRELOAD, GIT_EXTERNAL_DIFF... can make a permitted program
             # run arbitrary code, which would hollow out the allowlist.
             raise SandboxViolation(
-                "setting environment variables is not permitted with a command "
-                f"allowlist: {scan.assignments[0]!r}"
+                "setting environment variables (or a loop variable) is not "
+                f"permitted with a command allowlist: {scan.assignments[0]!r}"
             )
+        start = self.resolve_path(cwd) if cwd else self._root
+        for op, target in scan.redirects:
+            self._check_redirect(op, target, self._possible_cwds(start, scan))
+
+    def _possible_cwds(self, start: Path, scan: CommandScan) -> list[Path] | None:
+        """Every directory a redirection in ``scan`` might resolve against.
+
+        Each ``cd`` may succeed or fail (``cd a || true``) or be undone by a
+        subshell, so the cwd is ``start`` plus any in-order subset of the
+        ``cd`` targets. That is only tractable when each target is literal,
+        relative, and free of ``..``, nothing repeats, and there are few of
+        them; otherwise ``None`` (unknown).
+        """
+        dirs = scan.directories
+        if not dirs:
+            return [start]
+        if scan.repeats or len(dirs) > _MAX_TRACKED_CDS:
+            return None
+        parts: list[Path] = []
+        for d in dirs:
+            if d is None or os.path.isabs(d) or ".." in Path(d).parts:
+                return None
+            parts.append(Path(d))
+        cwds = []
+        for mask in range(1 << len(parts)):
+            chosen = [p for i, p in enumerate(parts) if mask >> i & 1]
+            cwds.append(self.resolve_path(str(start.joinpath(*chosen))))
+        return cwds
+
+    def _check_redirect(self, op: str, target: str, cwds: list[Path] | None) -> None:
+        """Refuse a redirection that writes outside the root or opens a socket.
+
+        Only called under an allowlist: the argv-only policy this replaces never
+        let a permitted program write arbitrary files or connect out, and off
+        macOS nothing else enforces that for the shell's own redirections.
+        """
+        if target.startswith(("/dev/tcp/", "/dev/udp/")) and not self.allow_network:
+            raise SandboxViolation(f"network redirection is not permitted: {target!r}")
+        if op not in WRITE_REDIRECTS or target in _SAFE_DEVICES:
+            return
+        if target.startswith("/dev/fd/"):
+            return
+        if os.path.isabs(target):
+            self.resolve_path(target)
+            return
+        if cwds is None:
+            raise SandboxViolation(
+                "cannot verify a relative redirection target after this 'cd' "
+                f"with a command allowlist: {target!r}; cd to a plain relative "
+                "directory or use a path from the start directory"
+            )
+        for cwd in cwds:
+            self.resolve_path(str(cwd / target))
 
     def run_shell(
         self,
@@ -258,8 +331,8 @@ class WorkspaceSandbox(Sandbox, Lifecycle):
         names = {interpreter, os.path.basename(interpreter)} | _SHELL_NAMES
         if names & self._denied:
             raise SandboxViolation("shell commands are not permitted")
-        self.check_shell(command)
         start = self.resolve_path(cwd) if cwd else self._root
+        self.check_shell(command, cwd=str(start))
         invocation = ShellInvocation.build(
             command, cwd=str(start), env=env, interpreter=interpreter
         )

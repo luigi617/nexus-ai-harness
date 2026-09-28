@@ -5,10 +5,12 @@ import math
 import os
 import stat
 import tempfile
+import threading
 from pathlib import Path
 from typing import ClassVar
 
 from nexus_ai_harness.plugins.tools._paths import confine, display, resolve, root
+from nexus_ai_harness.plugins.tools._text import count_breaks, iter_lines, split_lines
 from nexus_ai_harness.protocols.context import Context
 from nexus_ai_harness.protocols.sandbox import SandboxViolation
 from nexus_ai_harness.protocols.tool import Tool
@@ -29,8 +31,33 @@ _MAX_READ_CHARS = 50_000
 _MAX_LIST_CHARS = 10_000
 """Cap on one ``list_dir`` result."""
 
+_MAX_COUNT_BYTES = 20_000_000
+"""Largest file ``read_file`` scans to the end to report its line count.
+
+Larger files stop reading once the requested window is filled.
+"""
+
 _SNIPPET_CONTEXT = 3
 """Lines of surrounding context ``edit_file`` echoes around a change."""
+
+_WRITE_LOCKS = tuple(threading.Lock() for _ in range(64))
+"""Striped locks serializing writes to one path within this process.
+
+The loop runs a response's tool calls concurrently, so two ``edit_file`` calls on
+one file would otherwise both read the original and the later replace would
+silently drop the other's edit. A fixed stripe keeps memory bounded.
+"""
+
+
+def _write_lock(path: Path) -> threading.Lock:
+    """Return the lock guarding read-modify-write cycles on ``path``."""
+    return _WRITE_LOCKS[hash(str(path)) % len(_WRITE_LOCKS)]
+
+
+def _require_regular(path: Path) -> None:
+    """Refuse FIFOs, devices, and sockets, which could block or never end."""
+    if path.exists() and not path.is_file() and not path.is_dir():
+        raise OSError(f"not a regular file: {path}")
 
 
 def _positive_int(value: object, default: int) -> int:
@@ -114,20 +141,31 @@ class ReadFile(Tool):
     @staticmethod
     def _read(resolved: Path, offset: int, limit: int, numbered: bool) -> str:
         """Stream the file, keeping only the requested window of lines."""
+        _require_regular(resolved)
+        # Counting every line of a huge file just for the footer costs a full
+        # scan, so past this size the read stops once the window is filled.
+        count_all = resolved.stat().st_size <= _MAX_COUNT_BYTES
         shown: list[str] = []
         size = 0
         total = 0
         last = offset - 1
         clipped = False
-        # Streamed and leniently decoded: a huge file never loads whole, and a
-        # non-UTF-8 byte becomes a replacement char instead of raising.
+        stopped = False
+        # Streamed in chunks and leniently decoded: neither a huge file nor one
+        # huge line loads whole, and a bad byte becomes a replacement char.
         with resolved.open(encoding="utf-8", errors="replace", newline="") as f:
-            for total, raw in enumerate(f, start=1):
-                if total < offset or clipped or total >= offset + limit:
+            for total, (text, cut) in enumerate(
+                iter_lines(f, _MAX_LINE_CHARS), start=1
+            ):
+                if total < offset:
                     continue
-                text = raw.rstrip("\r\n")
-                if len(text) > _MAX_LINE_CHARS:
-                    text = text[:_MAX_LINE_CHARS] + "... (line truncated)"
+                if clipped or total >= offset + limit:
+                    if not count_all:
+                        stopped = True
+                        break
+                    continue
+                if cut:
+                    text += "... (line truncated)"
                 line = _number(total, text) if numbered else text
                 if shown and size + len(line) + 1 > _MAX_READ_CHARS:
                     clipped = True
@@ -141,8 +179,9 @@ class ReadFile(Tool):
             return f"error: offset {offset} is past the end of the file ({total} lines)"
         body = "\n".join(shown)
         if last < total:
+            extent = "; the file has more" if stopped else f" of {total}"
             body += (
-                f"\n... (showing lines {offset}-{last} of {total}; call read_file "
+                f"\n... (showing lines {offset}-{last}{extent}; call read_file "
                 f"with offset={last + 1} to read more)"
             )
         return body
@@ -179,7 +218,8 @@ class WriteFile(Tool):
             resolved = resolve(path, ctx)
             resolved.parent.mkdir(parents=True, exist_ok=True)
             data = content.encode("utf-8")
-            resolved.write_bytes(data)
+            with _write_lock(resolved):
+                resolved.write_bytes(data)
         except SandboxViolation as exc:
             return f"error: {exc}"
         except OSError as exc:
@@ -255,13 +295,16 @@ class EditFile(Tool):
         try:
             edits = self._edits(arguments)
             resolved = resolve(path, ctx)
-            original = resolved.read_bytes()
-            try:
-                text = original.decode("utf-8")
-            except UnicodeDecodeError:
-                raise _EditError(f"{path} is not valid UTF-8 text") from None
-            updated, count, first = self._apply(text, edits, path)
-            _atomic_write(resolved, updated.encode("utf-8"))
+            _require_regular(resolved)
+            # Held across read and replace so concurrent edits compose.
+            with _write_lock(resolved):
+                original = resolved.read_bytes()
+                try:
+                    text = original.decode("utf-8")
+                except UnicodeDecodeError:
+                    raise _EditError(f"{path} is not valid UTF-8 text") from None
+                updated, count, first = self._apply(text, edits, path)
+                _atomic_write(resolved, updated.encode("utf-8"))
         except _EditError as exc:
             return f"error: {exc}"
         except SandboxViolation as exc:
@@ -344,9 +387,9 @@ def _to_crlf(text: str) -> str:
 
 def _snippet(text: str, offset: int, new: str) -> str:
     """Show the numbered lines around a change so the model can check it."""
-    lines = text.splitlines()
-    start = text.count("\n", 0, max(offset, 0))
-    end = start + new.count("\n")
+    lines = split_lines(text)
+    start = count_breaks(text[: max(offset, 0)])
+    end = start + count_breaks(new)
     low = max(start - _SNIPPET_CONTEXT, 0)
     high = min(end + _SNIPPET_CONTEXT + 1, len(lines))
     numbered = [_number(n + 1, lines[n][:_MAX_LINE_CHARS]) for n in range(low, high)]

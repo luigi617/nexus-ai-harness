@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import os
 import re
+import stat
 from collections.abc import Iterator
 from pathlib import Path
 from typing import ClassVar
 
 from nexus_ai_harness.plugins.tools._paths import display, resolve, root
+from nexus_ai_harness.plugins.tools._text import split_lines
 from nexus_ai_harness.protocols.context import Context
 from nexus_ai_harness.protocols.sandbox import SandboxViolation
 from nexus_ai_harness.protocols.tool import Tool
@@ -140,6 +142,14 @@ def _translate(pattern: str) -> str:
     return "".join(out)
 
 
+def _normalize_glob(pattern: str) -> str:
+    """Strip a leading ``/`` or ``./`` so the glob is relative to the base."""
+    pattern = pattern.strip().lstrip("/")
+    while pattern.startswith("./"):
+        pattern = pattern[2:].lstrip("/")
+    return pattern
+
+
 def compile_glob(pattern: str) -> re.Pattern[str]:
     """Compile a glob into a regex over POSIX paths relative to the search base.
 
@@ -152,8 +162,11 @@ def compile_glob(pattern: str) -> re.Pattern[str]:
 
     Returns:
         A compiled regex to ``fullmatch`` against relative paths.
+
+    Raises:
+        re.error: If a ``[...]`` class is invalid, e.g. ``[z-a]``.
     """
-    alternatives = _expand_braces(pattern.strip().lstrip("/") or "*")
+    alternatives = _expand_braces(_normalize_glob(pattern) or "*")
     return re.compile("|".join(f"(?:{_translate(a)})" for a in alternatives))
 
 
@@ -172,7 +185,17 @@ def _walk(base: Path, confine_root: Path, pattern: str) -> Iterator[Path]:
                 target = path.resolve()
                 if not target.is_relative_to(confine_root) or not target.is_file():
                     continue
+            elif not _is_regular(path):
+                continue  # a FIFO would block the read forever
             yield path
+
+
+def _is_regular(path: Path) -> bool:
+    """Whether ``path`` (not followed if a symlink) is a regular file."""
+    try:
+        return stat.S_ISREG(path.lstat().st_mode)
+    except OSError:
+        return False
 
 
 def _clip(lines: list[str], footer: str | None) -> str:
@@ -257,7 +280,11 @@ class Grep(Tool):
         except re.error as exc:
             return f"error: invalid regular expression: {exc}"
         name_glob = arguments.get("glob")
-        name_glob = str(name_glob) if name_glob else None
+        name_glob = _normalize_glob(str(name_glob)) if name_glob else None
+        try:
+            matcher = compile_glob(name_glob) if name_glob else None
+        except re.error as exc:
+            return f"error: invalid glob: {exc}"
         max_results = _count(
             arguments.get("max_results"), _DEFAULT_RESULTS, _MAX_RESULTS
         )
@@ -266,7 +293,7 @@ class Grep(Tool):
         try:
             base = root(ctx)
             target = resolve(str(arguments.get("path") or "."), ctx)
-            files = self._files(target, base, name_glob)
+            files = self._files(target, base, name_glob, matcher)
             return self._search(files, base, regex, context, files_only, max_results)
         except SandboxViolation as exc:
             return f"error: {exc}"
@@ -274,7 +301,12 @@ class Grep(Tool):
             return f"error: {exc}"
 
     @staticmethod
-    def _files(target: Path, base: Path, name_glob: str | None) -> Iterator[Path]:
+    def _files(
+        target: Path,
+        base: Path,
+        name_glob: str | None,
+        matcher: re.Pattern[str] | None,
+    ) -> Iterator[Path]:
         """The files to search: ``target`` itself, or those under it."""
         if not target.exists():
             raise FileNotFoundError(
@@ -282,7 +314,8 @@ class Grep(Tool):
             )
         if target.is_file():
             return iter([target])
-        matcher = compile_glob(name_glob) if name_glob else None
+        if not target.is_dir():
+            raise OSError(f"not a regular file: {display(target, base)}")
         by_name = name_glob is not None and "/" not in name_glob
 
         def wanted(path: Path) -> bool:
@@ -349,7 +382,7 @@ def _text_lines(path: Path) -> list[str] | None:
         return None
     if b"\0" in data[:_BINARY_SNIFF]:
         return None
-    return data.decode("utf-8", errors="replace").splitlines()
+    return split_lines(data.decode("utf-8", errors="replace"))
 
 
 def _render(
@@ -418,7 +451,10 @@ class Glob(Tool):
             target = resolve(str(arguments.get("path") or "."), ctx)
             if not target.is_dir():
                 return f"error: not a directory: {display(target, base)}"
-            matcher = compile_glob(pattern)
+            try:
+                matcher = compile_glob(pattern)
+            except re.error as exc:
+                return f"error: invalid glob: {exc}"
             found = [
                 display(p, base)
                 for p in _walk(target, base, pattern)

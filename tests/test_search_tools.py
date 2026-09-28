@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pytest
@@ -208,3 +209,30 @@ def test_glob_errors(repo):
 )
 def test_compile_glob(pattern, path, matches):
     assert (compile_glob(pattern).fullmatch(path) is not None) is matches
+
+
+# --- review regressions ------------------------------------------------------
+
+
+@pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="needs FIFOs")
+def test_grep_and_glob_skip_fifos(repo):
+    os.mkfifo(repo / "src" / "pipe")
+    ctx = sandboxed(repo)
+    assert "core.py" in Grep().run({"pattern": "add", "path": "src"}, ctx)
+    assert "pipe" not in Glob().run({"pattern": "src/*"}, ctx)
+    assert Grep().run({"pattern": "x", "path": "src/pipe"}, ctx).startswith("error:")
+
+
+@pytest.mark.parametrize("tool", [Grep, Glob])
+def test_invalid_glob_class_is_a_clean_error(repo, tool):
+    args = (
+        {"pattern": "[z-a].py"} if tool is Glob else {"pattern": "x", "glob": "[z-a]"}
+    )
+    assert tool().run(args, sandboxed(repo)).startswith("error: invalid glob")
+
+
+def test_leading_dot_slash_in_globs(repo):
+    ctx = sandboxed(repo)
+    assert Glob().run({"pattern": "./src/pkg/*.py"}, ctx) == "src/pkg/core.py"
+    result = Grep().run({"pattern": "import", "glob": "./tests/*.py"}, ctx)
+    assert result == "tests/test_core.py:1:from pkg.core import add"

@@ -38,8 +38,15 @@ every call to a mutating one. Keep it that way unless you have a reason not to.
 
 Long files are read a range at a time. When more lines remain, the result ends
 with a note telling the model which `offset` to pass next. Very long lines are
-clipped, and a result never cuts a line or a character in half. Pass
-`line_numbers: false` to get the raw text.
+clipped, and a result never cuts a line or a character in half. Memory stays
+bounded even for a huge single-line file. For files over 20 MB, reading stops
+once the range is filled, so the note says more lines exist instead of giving
+the total. Pass `line_numbers: false` to get the raw text.
+
+Lines are counted at `\n`, `\r\n`, and a lone `\r`, the same way in
+`read_file`, `grep`, and `edit_file`, so a line number from one works in the
+others. Form feeds don't start a new line. FIFOs and device files are refused
+rather than read.
 
 ### `edit_file`
 
@@ -77,6 +84,16 @@ Shell(default_timeout=30, max_timeout=600, max_output=30_000, persist_env=True)
 On timeout, the whole process group is killed (children included) and the
 result starts with `exit=124 (timed out after Ns)`, with or without a sandbox.
 
+A background job that still writes to the output (`server &`) would otherwise
+keep the call open until the timeout. Instead, once the command itself exits,
+the tool waits a second for remaining output and then stops the job, saying so
+in the result. To leave a process running, redirect its output:
+`server > server.log 2>&1 &`.
+
+Parallel tool calls are safe. Edits to the same file are serialized, so both
+edits land. A shell call only updates the session's directory when it
+actually changed it.
+
 ## Command policy for shell strings
 
 `WorkspaceSandbox(allowed_commands=..., denied_commands=...)` checks programs by
@@ -92,18 +109,28 @@ checks each one it finds. The scan covers:
 
 Some constructs can run code the scan can't see: command or process
 substitution (`$(...)`, backticks, `<(...)`), `eval`/`source`, arithmetic,
-`[[ ]]`, `case`, unquoted heredocs that contain expansions, and a program name
-stored in a variable or produced by a glob. The policy handles them like this:
+`[[ ]]`, `case`, unquoted heredocs that contain expansions, `env -S`, `set -a`,
+and a program name stored in a variable or produced by a glob. The policy
+handles them like this:
 
 - **With an allowlist**, these constructs are refused. So is any command that
-  sets environment variables, because a variable like `PATH` can make an
-  allowed name run something else.
+  sets a variable, whether by `NAME=value`, `export`, a `for`/`select` loop
+  variable, or `{NAME}>file`, because a variable like `PATH` or
+  `GIT_EXTERNAL_DIFF` can make an allowed name run something else. Output
+  redirections are checked too, because off macOS nothing else stops the shell
+  itself from writing a file: a target must resolve inside the root, and
+  `/dev/tcp`/`/dev/udp` are refused unless `allow_network` is set. A relative
+  target after `cd` is checked against every directory the `cd` chain could
+  leave the shell in. That only works for plain relative `cd` targets without
+  `..`, and not inside `while` loops or functions; anything else is refused.
 - **With only a denylist**, these constructs are allowed. A denylist is a
   best-effort guard for shell strings, not a boundary.
 
 The policy matches names, not what they resolve to. `./ls` passes an allowlist
 that contains `ls`. It also can't limit what an allowed interpreter such as
-`python` or `bash` does with its own arguments. For hard isolation, rely on the
+`python` or `bash` does with its own arguments, or where an allowed program such
+as `cp` writes. Redirect targets are checked when the command is checked, so a
+symlink the command itself creates is not seen. For hard isolation, rely on the
 sandbox's write confinement and network denial, and on the approver.
 
 The interpreter itself needs no allowlist entry. If you put `sh` or `bash` in

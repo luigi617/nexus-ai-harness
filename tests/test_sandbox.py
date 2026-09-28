@@ -283,6 +283,94 @@ def test_check_shell_denylist_allows_assignments(tmp_path):
     sandbox.check_shell("export MODE=test; FOO=1 python x.py")
 
 
+@pytest.mark.parametrize(
+    "command",
+    [
+        "for PATH in ./evil; do ls; done",
+        "set -a; for GIT_EXTERNAL_DIFF in ./x; do ls; done",
+        'env -S"touch pwned"',
+        "exec {PATH}>/dev/null; ls",
+    ],
+)
+def test_check_shell_allowlist_refuses_loop_and_split_bypasses(tmp_path, command):
+    sandbox = WorkspaceSandbox(tmp_path, allowed_commands=["ls", "env"])
+    with pytest.raises(SandboxViolation):
+        sandbox.check_shell(command)
+
+
+def test_run_shell_allowlist_blocks_env_split_string(tmp_path):
+    sandbox = WorkspaceSandbox(tmp_path, allowed_commands=["ls", "env"])
+    with pytest.raises(SandboxViolation):
+        sandbox.run_shell('env -S"touch pwned"', timeout=10)
+    assert not (tmp_path / "pwned").exists()
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "echo evil > /etc/nexus-test",
+        "ls >> ../outside",
+        "echo x > /dev/tcp/127.0.0.1/9",
+        "cat < /dev/udp/127.0.0.1/9",
+        "cd .. && ls > x",
+        "cd src && ls > ../out",
+        "cd $d; ls > x",
+        "while true; do cd src; ls > x; done",
+        "ls > ~/x",
+        'ls > "$f"',
+    ],
+)
+def test_check_shell_allowlist_refuses_unverifiable_redirects(tmp_path, command):
+    (tmp_path / "src").mkdir()
+    sandbox = WorkspaceSandbox(tmp_path, allowed_commands=["ls", "cat"])
+    with pytest.raises(SandboxViolation):
+        sandbox.check_shell(command)
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "ls > out.txt 2>&1",
+        "ls > /dev/null; echo hi >&2",
+        "ls > {root}/inside.txt",
+        "cd src && ls > log.txt",
+        "cd src; cd pkg; ls > log.txt",
+        "ls > src/../out",
+    ],
+)
+def test_check_shell_allowlist_permits_redirects_inside_root(tmp_path, command):
+    (tmp_path / "src" / "pkg").mkdir(parents=True)
+    sandbox = WorkspaceSandbox(tmp_path, allowed_commands=["ls"])
+    sandbox.check_shell(command.replace("{root}", str(sandbox.root)))
+
+
+def test_check_shell_resolves_relative_redirects_from_the_start_dir(tmp_path):
+    (tmp_path / "a").mkdir()
+    sandbox = WorkspaceSandbox(tmp_path, allowed_commands=["ls"])
+    sandbox.check_shell("ls > ../x", cwd="a")
+    with pytest.raises(SandboxViolation):
+        sandbox.check_shell("ls > ../x")
+
+
+def test_check_shell_network_redirect_allowed_with_network(tmp_path):
+    sandbox = WorkspaceSandbox(
+        tmp_path, allowed_commands=["ls", "cat"], allow_network=True
+    )
+    sandbox.check_shell("cat < /dev/tcp/127.0.0.1/9; ls")
+
+
+def test_denylist_still_permits_redirects(tmp_path):
+    sandbox = WorkspaceSandbox(tmp_path, denied_commands=["rm"])
+    sandbox.check_shell("echo x > ../outside; for x in a; do ls; done")
+
+
+def test_run_shell_deleted_cwd_keeps_output(tmp_path):
+    sandbox = WorkspaceSandbox(tmp_path)
+    result = sandbox.run_shell("mkdir -p d && cd d && rmdir ../d; echo x", timeout=10)
+    assert (result.returncode, result.stdout) == (0, "x\n")
+    assert result.cwd is None or not Path(result.cwd).exists()
+
+
 def test_check_shell_denylist(tmp_path):
     sandbox = WorkspaceSandbox(tmp_path, denied_commands=["rm"])
     sandbox.check_shell("ls | wc -l")
