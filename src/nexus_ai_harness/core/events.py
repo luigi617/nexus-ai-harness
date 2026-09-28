@@ -36,7 +36,11 @@ class ResponseReceived(Event):
 
 @dataclass
 class ModelCallFailed(Event):
-    """A model completion raised; ``attempts`` counts requests made, if known."""
+    """A model call raised; ``attempts`` counts requests made, if known.
+
+    The call may be a router's or context manager's, so this can arrive without
+    a preceding ``ModelCallStarted``.
+    """
 
     error: Exception
     attempts: int | None = None

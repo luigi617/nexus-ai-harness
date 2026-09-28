@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 
-from nexus_ai_harness.core.errors import ModelAPIError
+from nexus_ai_harness.core.errors import failure_attempts, is_model_failure
 from nexus_ai_harness.core.events import (
     IterationCompleted,
     IterationStarted,
@@ -29,9 +29,11 @@ class AgenticLoop(Loop):
 
     Every exit sets ``RunState.stop_reason``: ``"completed"``, ``"interrupted"``,
     ``"guard: <reason>"``, or ``"model_error"``. A model call that still fails
-    after the backend's own retries ends the run like a guard stop: it emits
+    after the backend's own retries, whether made by this loop, a ``Router``, or
+    a ``ContextManager``, ends the run like a guard stop: it emits
     ``ModelCallFailed`` and ``LoopStopped`` and returns a ``"stopped: ..."`` text,
-    so the caller gets a ``RunResult`` instead of an exception.
+    so the caller gets a ``RunResult`` instead of an exception. Errors that are
+    not model failures, such as a raising interceptor, still propagate.
     """
 
     requires = (Model,)
@@ -63,26 +65,37 @@ class AgenticLoop(Loop):
                 ctx.emit(LoopStopped(reason))
                 return f"stopped: {decision.reason}"
 
-            history = ctx.history
-            for cm in ctx.all(ContextManager):  # middleware chain
-                history = await ctx.invoke(cm.process, history, ctx)
-            model = (
-                await ctx.invoke(router.route, history, ctx)
-                if router
-                else ctx.get(Model)
-            )
-            if model is None:
-                raise LookupError("no model registered")
-            ctx.emit(ModelCallStarted(list(history)))
-            # Hand the model exactly the tools the runner can dispatch.
             try:
+                history = ctx.history
+                for cm in ctx.all(ContextManager):  # middleware chain
+                    history = await ctx.invoke(cm.process, history, ctx)
+                model = (
+                    await ctx.invoke(router.route, history, ctx)
+                    if router
+                    else ctx.get(Model)
+                )
+                if model is None:
+                    raise LookupError("no model registered")
+                ctx.emit(ModelCallStarted(list(history)))
+                # Hand the model exactly the tools the runner can dispatch.
                 response = await ctx.invoke(model.complete, history, available, ctx)
-            except Exception as exc:  # like a tool error, a model error must not crash
-                ctx.emit(ModelCallFailed(exc, _attempts(exc)))
-                ctx.state(RunState).stop_reason = "model_error"
+            except Exception as exc:
+                # Like a tool error, a failed model call (here, in a router, or in
+                # a context manager) must not crash the run; other errors do.
+                if not is_model_failure(exc):
+                    raise
+                ctx.emit(ModelCallFailed(exc, failure_attempts(exc)))
+                # A retry sequence cut short by an interrupt is an interrupt.
+                interrupted = ctx.interrupted
+                reason = "interrupted" if interrupted else "model_error"
+                ctx.state(RunState).stop_reason = reason
                 ctx.emit(IterationCompleted(i))
-                ctx.emit(LoopStopped("model_error"))
-                return f"stopped: model error: {exc}"
+                ctx.emit(LoopStopped(reason))
+                return (
+                    "stopped: interrupted"
+                    if interrupted
+                    else f"stopped: model error: {exc}"
+                )
             ctx.emit(ResponseReceived(response))
             ctx.add_message(
                 Message(
@@ -113,7 +126,3 @@ class AgenticLoop(Loop):
                 ctx.add_message(message)
             ctx.emit(IterationCompleted(i))
             i += 1
-
-
-def _attempts(exc: Exception) -> int | None:
-    return exc.attempts if isinstance(exc, ModelAPIError) else None

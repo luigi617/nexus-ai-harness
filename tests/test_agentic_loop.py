@@ -5,7 +5,7 @@ import time
 
 import pytest
 
-from nexus_ai_harness.core.errors import RateLimitError
+from nexus_ai_harness.core.errors import ModelAPIError, RateLimitError
 from nexus_ai_harness.core.events import Event, LoopStopped, ModelCallFailed
 from nexus_ai_harness.core.message import Message
 from nexus_ai_harness.core.response import Response
@@ -19,8 +19,10 @@ from nexus_ai_harness.plugins.hooks import (
 )
 from nexus_ai_harness.plugins.loops import AgenticLoop
 from nexus_ai_harness.plugins.permissions import AllowList, AutoApprove
+from nexus_ai_harness.plugins.routers import LLMRouter
 from nexus_ai_harness.protocols.context_manager import ContextManager
 from nexus_ai_harness.protocols.hook import Hook
+from nexus_ai_harness.protocols.interceptor import Interceptor
 from nexus_ai_harness.protocols.model import Model
 from nexus_ai_harness.protocols.router import Router
 from nexus_ai_harness.protocols.tool import Tool
@@ -556,3 +558,95 @@ def test_model_cancellation_is_not_swallowed():
     ctx = make_ctx(CancelledModel())
     with pytest.raises(asyncio.CancelledError):
         asyncio.run(AgenticLoop().run(ctx))
+
+
+# --- model failures outside model.complete ---------------------------------
+
+
+class _ModelCallingContextManager(ContextManager):
+    """Summarizes with a model, as SummarizingContextManager does."""
+
+    def __init__(self, model: Model) -> None:
+        self.model = model
+
+    async def process(self, history, ctx):
+        await ctx.invoke(self.model.complete, history, [], ctx)
+        return history
+
+
+def test_llm_router_decider_failure_ends_with_model_error():
+    error = RateLimitError("HTTP 429: slow down", status=429, attempts=4)
+    worker = ScriptedModel(Response(text="never"))
+    log = _EventLog()
+    ctx = make_ctx(worker, LLMRouter(decider=FailingModel(error)), log)
+    ctx.add_message(Message(role="user", content="hi"))
+    result = asyncio.run(AgenticLoop().run(ctx))
+    assert result == "stopped: model error: HTTP 429: slow down"
+    assert ctx.state(RunState).stop_reason == "model_error"
+    assert worker.calls == []
+    kinds = [type(e).__name__ for e in log.events]
+    assert "ModelCallStarted" not in kinds  # the failing call was the router's
+    assert kinds[-3:] == ["ModelCallFailed", "IterationCompleted", "LoopStopped"]
+    assert log.events[-3] == ModelCallFailed(error, 4)
+
+
+def test_context_manager_model_failure_ends_with_model_error():
+    summarizer = FailingModel(ValueError("summarizer down"))
+    worker = ScriptedModel(Response(text="never"))
+    ctx = make_ctx(worker, _ModelCallingContextManager(summarizer))
+    result = asyncio.run(AgenticLoop().run(ctx))
+    assert result == "stopped: model error: summarizer down"
+    assert ctx.state(RunState).stop_reason == "model_error"
+    assert worker.calls == []
+
+
+def test_non_model_router_error_still_propagates():
+    class BrokenRouter(Router):
+        def route(self, history, ctx):
+            raise ValueError("router bug")
+
+    ctx = make_ctx(ScriptedModel(Response(text="x")), BrokenRouter())
+    with pytest.raises(ValueError, match="router bug"):
+        asyncio.run(AgenticLoop().run(ctx))
+    assert ctx.state(RunState).stop_reason == ""
+
+
+def test_interceptor_error_is_not_reported_as_a_model_error():
+    class VetoAfter(Interceptor):
+        target = Model
+
+        def after(self, ctx) -> None:
+            raise PermissionError("veto")
+
+    log = _EventLog()
+    model = ScriptedModel(Response(text="billed"))
+    ctx = make_ctx(model, VetoAfter(), log)
+    with pytest.raises(PermissionError, match="veto"):
+        asyncio.run(AgenticLoop().run(ctx))
+    assert len(model.calls) == 1
+    assert not any(isinstance(e, ModelCallFailed) for e in log.events)
+    assert ctx.state(RunState).stop_reason == ""
+
+
+def test_model_failure_during_an_interrupt_stops_as_interrupted():
+    class InterruptThenFail(Model):
+        def complete(self, history, tools, ctx):
+            ctx._session.interrupt()  # e.g. the user hit stop mid-retry
+            raise ModelAPIError("HTTP 503", status=503)
+
+    rec = LoopStopRecorder()
+    ctx = make_ctx(InterruptThenFail(), rec)
+    result = asyncio.run(AgenticLoop().run(ctx))
+    assert result == "stopped: interrupted"
+    assert ctx.state(RunState).stop_reason == "interrupted"
+    assert rec.reasons == ["interrupted"]
+
+
+def test_transport_error_reports_the_attempts_it_records():
+    error = ConnectionResetError("reset")
+    error.attempts = 4  # type: ignore[attr-defined]  # as post_json tags it
+    log = _EventLog()
+    ctx = make_ctx(FailingModel(error), log)
+    asyncio.run(AgenticLoop().run(ctx))
+    failed = [e for e in log.events if isinstance(e, ModelCallFailed)]
+    assert [e.attempts for e in failed] == [4]

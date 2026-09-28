@@ -79,7 +79,10 @@ class Context(ABC):
         """Call plugin method ``fn`` with any interceptors wrapping it around it.
 
         ``fn`` may be sync or ``async def`` and is passed ``*args`` and
-        ``**kwargs``.
+        ``**kwargs``. An exception raised by a ``Model`` method itself (not by
+        its interceptors) is marked with
+        :func:`~core.errors.mark_model_failure`, so loops can end the run
+        cleanly on a failed model call wherever it was made.
         """
 
     @abstractmethod

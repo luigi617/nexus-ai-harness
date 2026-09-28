@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import asyncio
 
+import pytest
+
 from nexus_ai_harness.core.errors import ModelAPIError
 from nexus_ai_harness.core.events import (
     Event,
@@ -174,3 +176,32 @@ def test_chat_loop_model_error_ends_with_model_error_stop_reason():
     assert kinds == ["ModelCallStarted", "ModelCallFailed"]
     assert rec.events[-1] == ModelCallFailed(error, 2)
     assert ctx.history == []  # no assistant turn was recorded
+
+
+def test_chat_loop_router_model_failure_ends_with_model_error():
+    class FailingRouter(Router):
+        def __init__(self, decider: Model) -> None:
+            self.decider = decider
+
+        async def route(self, history, ctx):
+            await ctx.invoke(self.decider.complete, history, [], ctx)
+            return self.decider
+
+    error = ModelAPIError("HTTP 500", status=500, attempts=3)
+    rec = _EventRecorder()
+    ctx = make_ctx(ScriptedModel(), FailingRouter(FailingModel(error)), rec)
+    result = asyncio.run(ChatLoop().run(ctx))
+    assert result == "stopped: model error: HTTP 500"
+    assert ctx.state(RunState).stop_reason == "model_error"
+    assert rec.events == [ModelCallFailed(error, 3)]
+
+
+def test_chat_loop_non_model_error_propagates():
+    class BrokenContextManager(ContextManager):
+        def process(self, history, ctx):
+            raise KeyError("cm bug")
+
+    ctx = make_ctx(ScriptedModel(), BrokenContextManager())
+    with pytest.raises(KeyError):
+        asyncio.run(ChatLoop().run(ctx))
+    assert ctx.state(RunState).stop_reason == ""

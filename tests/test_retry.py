@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import io
+import urllib.error
+import urllib.request
 from email.message import Message as HTTPHeaders
+from types import SimpleNamespace
 
 import pytest
 
@@ -201,3 +205,22 @@ def test_backends_pass_their_policy_to_post_json(monkeypatch, cls, module):
     policy = RetryPolicy(max_retries=5)
     cls(model="m", api_key="k", retry=policy).complete([], [], None)
     assert captured["retry"] is policy
+
+
+def test_model_stops_retrying_once_the_run_is_interrupted(monkeypatch):
+    calls: list[int] = []
+
+    def fake_urlopen(request, timeout=None):
+        calls.append(1)
+        raise urllib.error.HTTPError(
+            request.full_url, 503, "busy", {}, io.BytesIO(b"busy")
+        )
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    sleeps: list[float] = []
+    policy = RetryPolicy(max_retries=3, sleep=sleeps.append)
+    model = OpenAICompatibleModel(model="m", api_key="k", retry=policy)
+    with pytest.raises(ModelAPIError):
+        model.complete([], [], SimpleNamespace(interrupted=True))
+    assert len(calls) == 1  # no billed retry for a run nobody is waiting on
+    assert sleeps == []

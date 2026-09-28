@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import asyncio
 import http.client
 import io
 import json
 import ssl
+import threading
 import urllib.error
 import urllib.request
 
@@ -14,8 +16,9 @@ from nexus_ai_harness.core.errors import (
     ModelAPIError,
     RateLimitError,
 )
+from nexus_ai_harness.core.invoke import call
 from nexus_ai_harness.plugins.models._http import post_json
-from nexus_ai_harness.plugins.models.retry import RetryPolicy
+from nexus_ai_harness.plugins.models.retry import RetryPolicy, abort_when
 
 
 class _FakeResponse:
@@ -286,3 +289,89 @@ def test_post_json_without_policy_makes_a_single_attempt(monkeypatch):
         post_json("https://api.test/x", {}, {})
     assert excinfo.value.attempts == 1
     assert len(calls) == 1
+
+
+def test_post_json_does_not_retry_invalid_urls(monkeypatch):
+    # InvalidURL fails identically every time, unlike a dropped connection.
+    calls = _script(monkeypatch, http.client.InvalidURL("space in path"))
+    sleeps: list[float] = []
+    with pytest.raises(http.client.InvalidURL):
+        post_json("https://api.test/x", {}, {}, retry=_policy(sleeps))
+    assert len(calls) == 1
+    assert sleeps == []
+
+
+def test_post_json_tags_transport_failures_with_attempts(monkeypatch):
+    _script(monkeypatch, *[urllib.error.URLError("down")] * 3)
+    with pytest.raises(urllib.error.URLError) as excinfo:
+        post_json("https://api.test/x", {}, {}, retry=_policy([], max_retries=2))
+    assert excinfo.value.attempts == 3  # type: ignore[attr-defined]
+
+
+# --- aborting retries --------------------------------------------------------
+
+
+def test_post_json_stops_retrying_once_aborted(monkeypatch):
+    calls = _script(monkeypatch, _http_error(503), _http_error(503), b"{}")
+    sleeps: list[float] = []
+    aborted = {"now": False}
+
+    def sleep(seconds: float) -> None:
+        sleeps.append(seconds)
+        aborted["now"] = True  # e.g. the run is interrupted during the backoff
+
+    policy = RetryPolicy(max_retries=3, jitter=0.0, sleep=sleep, clock=lambda: 0.0)
+    with abort_when(lambda: aborted["now"]), pytest.raises(ModelAPIError) as excinfo:
+        post_json("https://api.test/x", {}, {}, retry=policy)
+    assert len(calls) == 1  # no further billed request after the abort
+    assert sleeps == [0.25]  # the backoff was cut short at the first poll
+    assert excinfo.value.attempts == 1
+
+
+def test_post_json_makes_no_retry_when_already_aborted(monkeypatch):
+    calls = _script(monkeypatch, urllib.error.URLError("down"), b"{}")
+    sleeps: list[float] = []
+    with abort_when(lambda: True), pytest.raises(urllib.error.URLError):
+        post_json("https://api.test/x", {}, {}, retry=_policy(sleeps))
+    assert len(calls) == 1
+    assert sleeps == []
+
+
+def test_post_json_polls_the_abort_check_through_a_long_backoff(monkeypatch):
+    _script(monkeypatch, _http_error(429, headers={"Retry-After": "1"}), b"{}")
+    sleeps: list[float] = []
+    with abort_when(lambda: False):
+        assert post_json("https://api.test/x", {}, {}, retry=_policy(sleeps)) == {}
+    assert sleeps == [0.25, 0.25, 0.25, 0.25]  # the full wait, in abortable slices
+
+
+def test_post_json_stops_retrying_when_its_awaiting_task_is_cancelled(monkeypatch):
+    # A sync backend runs in a worker thread that outlives a cancelled await;
+    # it must not keep sending requests nobody will read.
+    calls = _script(monkeypatch, *[_http_error(503)] * 4)
+    sleeping, released = threading.Event(), threading.Event()
+
+    def sleep(seconds: float) -> None:
+        sleeping.set()
+        released.wait(5)
+
+    policy = RetryPolicy(max_retries=3, jitter=0.0, sleep=sleep, clock=lambda: 0.0)
+    outcome: list[BaseException] = []
+
+    def backend() -> None:
+        try:
+            post_json("https://api.test/x", {}, {}, retry=policy)
+        except ModelAPIError as exc:
+            outcome.append(exc)
+
+    async def main() -> None:
+        task = asyncio.ensure_future(call(backend))
+        await asyncio.to_thread(sleeping.wait, 5)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        released.set()  # the worker wakes to find its caller gone
+
+    asyncio.run(main())  # waits for the worker thread on shutdown
+    assert len(calls) == 1
+    assert len(outcome) == 1

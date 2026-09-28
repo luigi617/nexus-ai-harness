@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 
 from nexus_ai_harness.core.message import Message
 from nexus_ai_harness.core.response import Response
-from nexus_ai_harness.plugins.models.retry import RetryPolicy
+from nexus_ai_harness.plugins.models.retry import RetryPolicy, abort_when
 from nexus_ai_harness.protocols.context import Context
 from nexus_ai_harness.protocols.model import Model
 from nexus_ai_harness.protocols.tool import Tool
@@ -25,6 +25,7 @@ class BaseModel(Model):
     Transient request failures are retried with exponential backoff: pass
     ``max_retries`` to change only the retry count, or ``retry`` for full control
     (backoff, jitter, and injectable sleep/clock). ``max_retries=0`` disables it.
+    Retrying stops once the run is interrupted or the awaiting task is cancelled.
     """
 
     provider: str = ""
@@ -61,7 +62,9 @@ class BaseModel(Model):
     def complete(
         self, history: list[Message], tools: list[Tool], ctx: Context
     ) -> Response:
-        return self._generate(history, tools)
+        # Stop retrying once the run is interrupted: nobody will read the reply.
+        with abort_when(lambda: bool(getattr(ctx, "interrupted", False))):
+            return self._generate(history, tools)
 
     def _cost(self, usage: dict) -> float:
         input_price, output_price = self.pricing.get(self.name, (0.0, 0.0))

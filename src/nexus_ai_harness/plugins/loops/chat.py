@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from nexus_ai_harness.core.errors import ModelAPIError
+from nexus_ai_harness.core.errors import failure_attempts, is_model_failure
 from nexus_ai_harness.core.events import (
     ModelCallFailed,
     ModelCallStarted,
@@ -20,8 +20,9 @@ class ChatLoop(Loop):
     """Makes a single model call with no tool execution.
 
     Sets ``RunState.stop_reason`` to ``"completed"``, or to ``"model_error"``
-    when the call fails; a failure emits ``ModelCallFailed`` and returns a
-    ``"stopped: ..."`` text rather than raising.
+    when a model call fails (including one made by a ``Router`` or
+    ``ContextManager``); a failure emits ``ModelCallFailed`` and returns a
+    ``"stopped: ..."`` text rather than raising. Other errors propagate.
     """
 
     requires = (Model,)
@@ -29,22 +30,25 @@ class ChatLoop(Loop):
     async def run(self, ctx: Context) -> str:
         await ctx.apply_interventions()
         router = ctx.get(Router)
-        history = ctx.history
-        for cm in ctx.all(ContextManager):
-            history = await ctx.invoke(cm.process, history, ctx)
-        model = (
-            await ctx.invoke(router.route, history, ctx) if router else ctx.get(Model)
-        )
-        if model is None:
-            raise LookupError("no model registered")
-        ctx.emit(ModelCallStarted(list(history)))
         try:
+            history = ctx.history
+            for cm in ctx.all(ContextManager):
+                history = await ctx.invoke(cm.process, history, ctx)
+            model = (
+                await ctx.invoke(router.route, history, ctx)
+                if router
+                else ctx.get(Model)
+            )
+            if model is None:
+                raise LookupError("no model registered")
+            ctx.emit(ModelCallStarted(list(history)))
             response = await ctx.invoke(
                 model.complete, history, list(ctx.all(Tool)), ctx
             )
         except Exception as exc:  # end the run with a result, as AgenticLoop does
-            attempts = exc.attempts if isinstance(exc, ModelAPIError) else None
-            ctx.emit(ModelCallFailed(exc, attempts))
+            if not is_model_failure(exc):
+                raise
+            ctx.emit(ModelCallFailed(exc, failure_attempts(exc)))
             ctx.state(RunState).stop_reason = "model_error"
             return f"stopped: model error: {exc}"
         ctx.emit(ResponseReceived(response))

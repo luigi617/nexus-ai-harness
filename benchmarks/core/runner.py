@@ -86,19 +86,28 @@ class Runner:
                 episode.harness.use(MetricsCollector())
                 # NOTE: wait_for cancels only the awaiting coroutine. A model
                 # call offloaded to a worker thread (sync backends) keeps running
-                # until the backend's own HTTP timeout; keep backend timeouts
+                # until its in-flight request times out (backends stop retrying
+                # once cancelled); keep backend timeouts
                 # below task_timeout_s so a stuck attempt doesn't hold a slot.
                 result: RunResult = await asyncio.wait_for(
                     self._drive(episode, session),
                     timeout=self.task_timeout_s,
                 )
-                score = await _resolve(self.benchmark.grade(task, result))
+                error: str | None = None
+                if result.stop_reason == "model_error":
+                    # The loop ends a failed model call with a result, but an
+                    # outage is an errored attempt, not a wrong answer.
+                    score = Score(passed=False, detail={"error": "model_error"})
+                    error = result.output
+                else:
+                    score = await _resolve(self.benchmark.grade(task, result))
                 attempt = Attempt(
                     task_id=task.task_id,
                     run_index=run_index,
                     score=score,
                     output=result.output,
                     metrics=read_metrics(session, seconds=time.monotonic() - start),
+                    error=error,
                 )
             except Exception:  # one bad task must not sink the whole run
                 attempt = Attempt(
@@ -140,6 +149,8 @@ class Runner:
         if episode.on_user_turn is None:
             return result
         for _ in range(self.max_user_turns):
+            if result.stop_reason == "model_error":  # no reply to relay
+                break
             # Off the event loop: on_user_turn may call a (blocking) user model.
             reply = await asyncio.to_thread(episode.on_user_turn, result.output)
             if reply is None:  # episode over

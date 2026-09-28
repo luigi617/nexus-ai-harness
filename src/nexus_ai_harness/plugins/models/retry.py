@@ -3,7 +3,9 @@ from __future__ import annotations
 import random
 import re
 import time
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterator, Mapping
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass, field, replace
 from email.message import Message
 from email.utils import parsedate_to_datetime
@@ -13,6 +15,7 @@ from nexus_ai_harness.core.errors import (
     ModelAPIError,
     RateLimitError,
 )
+from nexus_ai_harness.core.invoke import offload_cancelled
 
 Headers = Mapping[str, str] | Message
 
@@ -27,6 +30,13 @@ _CONTEXT_LENGTH_PATTERN = re.compile(
     r"|exceeds? the (maximum|max) number of tokens"
     r"|exceed context limit",
     re.IGNORECASE,
+)
+
+# Longest single sleep while an abort check is active, so aborts land promptly.
+_ABORT_POLL_SECONDS = 0.25
+
+_abort_check: ContextVar[Callable[[], bool] | None] = ContextVar(
+    "_abort_check", default=None
 )
 
 
@@ -100,6 +110,53 @@ class RetryPolicy:
 
 
 NO_RETRY = RetryPolicy(max_retries=0)
+
+
+@contextmanager
+def abort_when(check: Callable[[], bool]) -> Iterator[None]:
+    """Stop retrying requests made inside this block once ``check`` is true.
+
+    ``BaseModel.complete`` wires this to ``ctx.interrupted``, so an interrupted
+    run stops sending (billed) retries. Cancellation of the task awaiting a
+    thread-offloaded call is honored without it.
+
+    Args:
+        check: Returns ``True`` once no further attempt should be made.
+    """
+    token = _abort_check.set(check)
+    try:
+        yield
+    finally:
+        _abort_check.reset(token)
+
+
+def wait_before_retry(policy: RetryPolicy, delay: float) -> bool:
+    """Sleep ``delay`` seconds before a retry unless the caller aborts first.
+
+    Args:
+        policy: Supplies the injectable ``sleep``.
+        delay: The wait in seconds.
+
+    Returns:
+        ``True`` to go ahead with the retry, ``False`` if it was aborted.
+    """
+    check = _abort_check.get()
+    cancelled = offload_cancelled()
+    if check is None and cancelled is None:  # nothing can abort; one plain sleep
+        policy.sleep(delay)
+        return True
+
+    def aborted() -> bool:
+        return bool(offload_cancelled()) or (check is not None and check())
+
+    remaining = delay
+    while not aborted():
+        if remaining <= 0:
+            return True
+        step = min(remaining, _ABORT_POLL_SECONDS)
+        policy.sleep(step)
+        remaining -= step
+    return False
 
 
 def parse_retry_after(
