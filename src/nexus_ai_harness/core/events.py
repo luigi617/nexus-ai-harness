@@ -93,3 +93,26 @@ class LoopStopped(Event):
     """The loop terminated; reason distinguishes how (completed, interrupted, guard)."""
 
     reason: str
+
+
+@dataclass
+class ContextCompacted(Event):
+    """A context manager shrank the history sent to the model.
+
+    ``strategy`` is ``"summarize"`` when older turns were folded into a model
+    summary. Any other value is a deterministic fallback: ``"drop"`` omitted the
+    oldest middle turns and ``"truncate"`` cut oversized message contents.
+    Token counts are estimates.
+    """
+
+    strategy: str
+    reason: str
+    messages_before: int
+    messages_after: int
+    tokens_before: int
+    tokens_after: int
+
+    @property
+    def fallback(self) -> bool:
+        """Whether this compaction was a fallback rather than a summary."""
+        return self.strategy != "summarize"

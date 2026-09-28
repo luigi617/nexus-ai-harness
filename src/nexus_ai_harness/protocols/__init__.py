@@ -14,6 +14,7 @@ from nexus_ai_harness.protocols.permission import Permission
 from nexus_ai_harness.protocols.sandbox import Sandbox, SandboxResult, SandboxViolation
 from nexus_ai_harness.protocols.session_store import SessionStore
 from nexus_ai_harness.protocols.skill import Skill
+from nexus_ai_harness.protocols.token_estimator import TokenEstimator
 from nexus_ai_harness.protocols.tool import Tool
 from nexus_ai_harness.protocols.tool_provider import ToolProvider
 
@@ -34,6 +35,7 @@ __all__ = [
     "SandboxViolation",
     "SessionStore",
     "Skill",
+    "TokenEstimator",
     "Tool",
     "ToolProvider",
 ]

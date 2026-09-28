@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from nexus_ai_harness.core.events import (
     ApprovalRequested,
+    ContextCompacted,
     Event,
     IterationCompleted,
     IterationStarted,
@@ -23,6 +24,7 @@ from nexus_ai_harness.core.response import Response
 
 __all__ = [
     "ApprovalRequested",
+    "ContextCompacted",
     "Event",
     "GuardDecision",
     "IterationCompleted",
