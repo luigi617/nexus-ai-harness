@@ -128,27 +128,46 @@ YAML file (see `benchmarks.example.yaml`):
     resource limits (CPU time, address space, file size, process count, no core
     dumps) and a scrubbed environment (no API keys or other host variables).
     Limits the OS can't enforce are skipped, for example `RLIMIT_AS` on macOS.
+    The macOS profile narrows only writes and network: it does not stop the
+    code from exec'ing another binary or asking launchd, for example through
+    `/usr/bin/open`, to start an app outside the sandbox. Use `docker` for
+    code you don't trust.
   - `docker` — a throwaway container (`--network none`, read-only root, a
     small `/tmp` tmpfs, all capabilities dropped, an unprivileged user, and
     memory, CPU, and pids limits). Pulls the image if it is missing. Falls
     back to `sandbox` with a warning if Docker is unusable.
   - `auto` — picks the safest backend that's ready: `docker` if the daemon is
     reachable and the image is already local (it never pulls), otherwise
-    `sandbox`.
+    `sandbox`. If that `sandbox` can't confine writes and network on this
+    platform, a warning says so and suggests `isolation=docker`.
   - `none` — the unconfined legacy subprocess. Use it only for debugging.
-- `memory_limit_mb` — memory cap in MiB (default 1024; `none` for unlimited).
-- `max_file_size_mb` — largest file the code may write, in MiB (default 16).
-- `max_processes` — extra processes the code may spawn (default 0). In
-  `sandbox` mode this is `RLIMIT_NPROC`. The kernel counts it per user (and per
-  thread on Linux), so the default forbids forking and threads. HumanEval
-  solutions never need either. In `docker` mode it bounds the container's pid
-  count.
+
+  The mode is resolved once per run, when the first harness is built and off
+  the event loop, so a Docker probe or pull doesn't stall other attempts.
+  Checks also run on a worker thread.
+- `memory_limit_mb` — memory cap in MiB (default 1024, minimum 6, which is
+  Docker's floor; `none` for unlimited).
+- `max_file_size_mb` — largest file the code may write, in MiB (default 16,
+  minimum 1; `none` for unlimited).
+- `max_processes` — extra processes the code may spawn (default 0, must not be
+  negative; `none` for unlimited). In `docker` mode it bounds the container's
+  pid count. In `sandbox` mode it becomes `RLIMIT_NPROC`, which the kernel
+  counts per user (and per thread on Linux). So the default `0` forbids forking
+  and threads, which HumanEval solutions never need. A positive value is added
+  to the number of tasks your user already runs when the check starts. That
+  count is shared, so the allowance is only approximate while other checks run
+  concurrently.
 - `docker_image` — the image for `docker` mode (default: the official
   `python:<major>.<minor>-slim` image matching the host interpreter).
 
 Scoring is the same in every mode: a completion passes if and only if its
 program exits 0 within the timeout. Each attempt's `detail.isolation` in the
-`--output` JSONL records which backend actually ran.
+`--output` JSONL records which backend actually ran. `detail.kernel_confined`
+records whether that backend confined file writes and network in the kernel:
+true for `docker` and for `sandbox` on macOS, false for `sandbox` elsewhere and
+for `none`. If the Docker backend itself fails (exit 125-127, for example a
+daemon error or an image without `timeout`), the attempt is recorded as an
+error rather than scored as a model failure.
 
 ## gpqa — graduate-level multiple-choice science QA
 

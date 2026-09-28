@@ -23,7 +23,7 @@ tau2-bench:
 humaneval:
   timeout_s: 15.0         # per-completion execution timeout
   isolation: auto         # auto | docker | sandbox | none (unconfined; debugging only)
-  memory_limit_mb: 1024   # null for unlimited
+  memory_limit_mb: 1024   # MiB, at least 6; null for unlimited
   max_file_size_mb: 16    # null for unlimited
   max_processes: 0        # extra processes the code may spawn; null for unlimited
   docker_image: null      # null matches the host Python, e.g. python:3.12-slim
