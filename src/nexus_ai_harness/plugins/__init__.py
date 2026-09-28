@@ -37,7 +37,10 @@ from nexus_ai_harness.plugins.sandbox import WorkspaceSandbox
 from nexus_ai_harness.plugins.skills import MarkdownSkill, load_skills
 from nexus_ai_harness.plugins.spawner import InProcessSpawner
 from nexus_ai_harness.plugins.tools import (
+    EditFile,
     Forget,
+    Glob,
+    Grep,
     ListDir,
     ReadFile,
     Recall,
@@ -64,13 +67,16 @@ __all__ = [
     "CostCounter",
     "DeepSeekModel",
     "DenyList",
+    "EditFile",
     "ElapsedTime",
     "FileMemoryStore",
     "FileSessionStore",
     "Forget",
     "GLMModel",
     "GeminiModel",
+    "Glob",
     "GraphTracer",
+    "Grep",
     "GroqModel",
     "InProcessSpawner",
     "InjectMessage",
@@ -128,10 +134,11 @@ def default_harness(
         max_cost: Spend budget for a run, in dollars.
         memory_dir: Directory backing the long-term memory store.
         workspace: When set, register a :class:`WorkspaceSandbox` rooted here
-            plus the real ``read_file``/``write_file``/``list_dir``/``shell``
-            tools confined to it. The read-only tools (``read_file``,
-            ``list_dir``) are trusted; ``write_file`` and ``shell`` mutate state
-            and still ask for approval.
+            plus the real coding tools confined to it: ``read_file``,
+            ``list_dir``, ``grep``, ``glob``, ``write_file``, ``edit_file``, and
+            ``shell``. The read-only tools (``read_file``, ``list_dir``,
+            ``grep``, ``glob``) are trusted; ``write_file``, ``edit_file``, and
+            ``shell`` mutate state and still ask for approval.
         session_store: When set, register it plus an :class:`AutoSave` hook so
             runs are persisted and can be resumed with :func:`resume`.
         mcp_servers: When set, register an :class:`MCPClient` that exposes the
@@ -142,9 +149,8 @@ def default_harness(
     """
     trusted = ["remember", "recall"]
     if workspace is not None:
-        # Only the read-only tools are auto-trusted; write_file mutates files and
-        # shell runs commands, so both stay gated behind the approver.
-        trusted += ["read_file", "list_dir"]
+        # Only read-only tools are auto-trusted; the mutating ones stay gated.
+        trusted += ["read_file", "list_dir", "grep", "glob"]
 
     harness = (
         NexusAIHarness()
@@ -165,7 +171,10 @@ def default_harness(
         harness.use(WorkspaceSandbox(workspace))
         harness.use(ReadFile())
         harness.use(WriteFile())
+        harness.use(EditFile())
         harness.use(ListDir())
+        harness.use(Grep())
+        harness.use(Glob())
         harness.use(Shell())
     # optional MCP client contributing remote tools to the loop
     if mcp_servers is not None:

@@ -1,13 +1,22 @@
 from __future__ import annotations
 
 import json
+import os
+import shutil
 import subprocess
 
+from benchmarks.core.task import Task
+from benchmarks.suites import swe_bench
 from benchmarks.suites.swe_bench import (
+    SWEBench,
+    SWEBenchConfig,
     _extract_test_ids,
     _git_diff,
     _score_from_report,
 )
+from nexus_ai_harness.harness.session import Session
+from nexus_ai_harness.protocols.tool import Tool
+from tests.conftest import ScriptedModel
 
 # --- _extract_test_ids ----------------------------------------------------
 
@@ -128,3 +137,35 @@ def test_git_diff_captures_new_file(tmp_path):
     diff = _git_diff(cwd)
     assert "new_module.py" in diff
     assert "+VALUE = 42" in diff
+
+
+# --- build_harness ----------------------------------------------------------
+
+
+def test_build_harness_gives_the_agent_coding_tools(monkeypatch):
+    monkeypatch.setattr(
+        swe_bench, "_clone_repo", lambda repo, commit, dest: os.makedirs(dest)
+    )
+    task = Task(
+        task_id="o__r-1",
+        prompt="fix it",
+        metadata={"repo": "o/r", "base_commit": "abc"},
+    )
+    bench = SWEBench(SWEBenchConfig(shell_max_timeout_s=900.0))
+    session = Session()
+    episode = bench.build_harness(task, ScriptedModel(), session)
+    checkout = session.state(swe_bench.SWEState).checkout
+    shutil.rmtree(os.path.dirname(checkout))
+
+    tools = {t.name: t for t in episode.harness._registry.all(Tool)}
+    assert set(tools) == {
+        "read_file",
+        "write_file",
+        "edit_file",
+        "list_dir",
+        "grep",
+        "glob",
+        "shell",
+    }
+    assert tools["shell"].max_timeout == 900.0
+    assert "edit_file" in episode.initial_input
