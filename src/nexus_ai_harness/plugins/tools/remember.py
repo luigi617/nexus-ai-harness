@@ -40,7 +40,9 @@ class Remember(Tool):
         text = str(arguments.get("text", "")).strip()
         if not text:
             return "error: nothing to remember (empty text)"
-        id = arguments.get("id") or None
+        raw_id = arguments.get("id")
+        # Model JSON may send a number; stores expect a string id, as in Forget.
+        id = None if raw_id is None or raw_id == "" else str(raw_id)
         try:
             updating = id is not None and store.get(id) is not None
             item = store.save(text, id)

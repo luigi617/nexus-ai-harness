@@ -27,9 +27,22 @@ _LOCK_NAME = ".lock"
 _HEADER_LINE = re.compile(r"([A-Za-z_][A-Za-z0-9_-]*)[ \t]*:(.*)")
 _CONTROL_CHARS = re.compile(r"[\x00-\x1f\x7f]")
 _TOKEN = re.compile(r"\w+")
+_TEMP_NAME = re.compile(r"\..+\.md\..+\.tmp")
 
 _BM25_K1 = 1.5
 _BM25_B = 0.75
+
+_STALE_TEMP_SECONDS = 3600.0
+"""Age after which a leftover temp file is assumed orphaned by a crashed writer."""
+
+_DIR_LOCKS: dict[Path, threading.RLock] = {}
+_DIR_LOCKS_GUARD = threading.Lock()
+
+
+def _dir_lock(root: Path) -> threading.RLock:
+    """Return the process-wide lock shared by every store on ``root``."""
+    with _DIR_LOCKS_GUARD:
+        return _DIR_LOCKS.setdefault(root, threading.RLock())
 
 
 def _load_fcntl() -> ModuleType | None:
@@ -94,8 +107,11 @@ class FileMemoryStore(MemoryStore):
     Writes go to a unique temp file that is fsynced and then atomically renamed
     over the target, so readers never see a partial file. Saves and deletes
     also take an exclusive ``fcntl.flock`` on ``<dir>/.lock`` where available,
-    serializing writers across processes; elsewhere only threads within one
-    process are serialized.
+    serializing writers across processes. Every store on the same directory in
+    one process also shares a thread lock, so where ``flock`` is unavailable
+    writers within one process are still serialized. Temp files orphaned by a
+    crashed writer are removed when a store is opened, once they are an hour
+    old.
 
     Parsed files are cached in-process and revalidated by inode, size, and
     modification time, so repeated searches only ``stat`` unchanged files and
@@ -108,6 +124,9 @@ class FileMemoryStore(MemoryStore):
         self._root = self._dir.resolve()
         self._cache: dict[str, _Entry] = {}
         self._mutex = threading.RLock()
+        # Shared per directory so separate instances in one process don't race.
+        self._write_lock = _dir_lock(self._root)
+        self._remove_stale_temps()
 
     def save(self, text: str, id: str | None = None) -> FileMemoryItem:
         """Create or overwrite a memory.
@@ -117,17 +136,22 @@ class FileMemoryStore(MemoryStore):
             id: The id of the memory to overwrite; omit it to create a new one.
 
         Returns:
-            The stored memory. An overwrite keeps the original ``created_at``.
+            The stored memory. An overwrite keeps the original ``created_at``,
+            and on a case-insensitive filesystem also the id's original casing.
 
         Raises:
-            ValueError: If ``id`` is blank, contains control characters, or
-                would resolve outside the store directory.
+            ValueError: If ``id`` is not a string, is blank, contains control
+                characters, or is not a plain file name (for example ``./x``).
         """
         item_id = new_id("mem") if id is None else id
         path = self._path(item_id)
-        with self._mutex, self._file_lock():
+        with self._write_lock, self._file_lock():
             existing = self._load(path)
             created = existing.item.created_at if existing is not None else time.time()
+            if existing is not None:
+                # Case-insensitive filesystems alias ids; keep the one on disk.
+                item_id = existing.item.id
+                path = path.with_name(f"{item_id}.md")
             item = FileMemoryItem(text=text, id=item_id, created_at=created, path=path)
             self._write_atomic(path, self._serialize(item))
             self._load(path)
@@ -166,8 +190,9 @@ class FileMemoryStore(MemoryStore):
 
     def delete(self, id: str) -> bool:
         path = self._path(id)
-        with self._mutex, self._file_lock():
-            self._cache.pop(path.name, None)
+        with self._write_lock, self._file_lock():
+            with self._mutex:
+                self._cache.pop(path.name, None)
             try:
                 path.unlink()
             except FileNotFoundError:
@@ -179,12 +204,27 @@ class FileMemoryStore(MemoryStore):
 
     def _path(self, id: str) -> Path:
         # The id is model-controlled; confine it to the store dir so it can't escape.
-        if not id or not id.strip() or _CONTROL_CHARS.search(id):
+        if not isinstance(id, str) or not id.strip() or _CONTROL_CHARS.search(id):
             raise ValueError(f"invalid memory id: {id!r}")
-        candidate = (self._dir / f"{id}.md").resolve()
-        if candidate.parent != self._root:
+        name = f"{id}.md"
+        candidate = (self._dir / name).resolve()
+        # Requiring an exact name keeps ids canonical: no "./x" aliasing "x".
+        if candidate.parent != self._root or candidate.name != name:
             raise ValueError(f"invalid memory id: {id!r}")
         return candidate
+
+    def _remove_stale_temps(self) -> None:
+        # Temps from a writer killed before its replace; age spares in-flight ones.
+        cutoff = time.time() - _STALE_TEMP_SECONDS
+        with contextlib.suppress(OSError), os.scandir(self._dir) as it:
+            for entry in it:
+                if not _TEMP_NAME.fullmatch(entry.name):
+                    continue
+                with contextlib.suppress(OSError):
+                    if entry.is_file(follow_symlinks=False) and (
+                        entry.stat(follow_symlinks=False).st_mtime < cutoff
+                    ):
+                        os.unlink(entry.path)
 
     def _entries(self) -> list[_Entry]:
         with os.scandir(self._dir) as it:
@@ -290,7 +330,29 @@ class FileMemoryStore(MemoryStore):
             created = float(header.get("created_at", "0") or 0)
         except ValueError:
             created = 0.0
-        return FileMemoryItem(text=body, id=path.stem, created_at=created, path=path)
+        return FileMemoryItem(
+            text=body,
+            id=_canonical_id(path, header.get("id")),
+            created_at=created,
+            path=path,
+        )
+
+
+def _canonical_id(path: Path, header_id: str | None) -> str:
+    """Return the id for ``path``: its stem, unless the header names a case alias.
+
+    On a case-insensitive filesystem ``Foo.md`` is also reachable as ``foo.md``;
+    the header records the spelling it was saved under, so every read reports
+    that one. The header only wins when it names this very file, so it cannot
+    inject an unrelated id.
+    """
+    stem = path.stem
+    if not header_id or header_id == stem or header_id.casefold() != stem.casefold():
+        return stem
+    try:
+        return header_id if path.with_name(f"{header_id}.md").samefile(path) else stem
+    except (OSError, ValueError):
+        return stem
 
 
 def _split_frontmatter(raw: str) -> tuple[dict[str, str], str]:

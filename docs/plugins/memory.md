@@ -36,8 +36,11 @@ the note text
 ```
 
 - **The file name is the id.** The `id` line in the header is only there for
-  people reading the file. Ids can't be blank, can't contain control
-  characters, and can't point outside the store directory.
+  people reading the file. Ids must be strings, can't be blank, can't contain
+  control characters, and must be plain file names: anything with a path part,
+  such as `./x` or `a/../x`, is rejected so one note can't go by two ids. On a
+  case-insensitive filesystem, `Foo` and `foo` are the same note, and it keeps
+  the spelling it was first saved under.
 - **Text is saved exactly as given.** Only the header at the very top of the
   file is parsed, and it ends at the first `---` line, so a note can contain
   its own `---` lines without breaking. The store adds one newline after the
@@ -49,9 +52,12 @@ the note text
 - **Saves are atomic.** Each save goes to a temporary file, is flushed to disk,
   and then replaces the old file in one step, so a crash never leaves a
   half-written note. Saves and deletes also lock `<dir>/.lock` with `flock`, so
-  several processes can share one directory safely. Where `flock` isn't
-  available (for example on Windows), only threads within a single process are
-  coordinated. New files are created readable by their owner only.
+  several processes can share one directory safely. All stores on the same
+  directory in one process also share a thread lock, so where `flock` isn't
+  available (for example on Windows), writers within a single process are still
+  coordinated, but separate processes are not. New files are created readable
+  by their owner only. If a writer is killed mid-save, its temporary file is
+  deleted the next time a store opens the directory, once it is an hour old.
 
 ## How `recall` ranks results
 

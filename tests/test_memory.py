@@ -565,6 +565,8 @@ def _save_many_in_process(directory: str, worker: int) -> None:
 def test_concurrent_processes_do_not_corrupt_store(tmp_path):
     import multiprocessing
 
+    # Seeded first: the lock must keep every concurrent update on this created_at.
+    seed = store(tmp_path).save("seed", id="shared")
     mp = multiprocessing.get_context("spawn")
     procs = [
         mp.Process(target=_save_many_in_process, args=(str(tmp_path), w))
@@ -579,6 +581,7 @@ def test_concurrent_processes_do_not_corrupt_store(tmp_path):
     texts = {i.text for i in s.all()}
     assert {f"worker {w} fact {i}" for w in range(3) for i in range(10)} <= texts
     assert s.get("shared").text.startswith("worker ")
+    assert s.get("shared").created_at == seed.created_at
     assert len(s.all()) == 31
     assert list(tmp_path.glob("*.tmp")) == []
 
@@ -676,3 +679,153 @@ def test_search_non_positive_limit_returns_empty(tmp_path):
     s.save("match me")
     assert s.search("match", limit=0) == []
     assert s.search("match", limit=-1) == []
+
+
+# --- review follow-ups: canonical ids, shared locks, stale temps ---------
+
+
+@pytest.mark.parametrize("bad", ["./x", "a/../x", "sub/x", "x/"])
+def test_non_canonical_ids_are_rejected(tmp_path, bad):
+    s = store(tmp_path)
+    with pytest.raises(ValueError):
+        s.save("hello", id=bad)
+    with pytest.raises(ValueError):
+        s.get(bad)
+    assert list(tmp_path.glob("*.md")) == []
+
+
+def test_saved_id_matches_id_reported_by_reads(tmp_path):
+    s = store(tmp_path)
+    item = s.save("hello", id="x")
+    assert item.id == "x"
+    assert s.get("x").id == "x"
+    assert [i.id for i in s.all()] == ["x"]
+
+
+@pytest.mark.parametrize("bad", [5, 1.5, ["x"], {"a": 1}])
+def test_non_string_id_raises_value_error(tmp_path, bad):
+    s = store(tmp_path)
+    with pytest.raises(ValueError):
+        s.save("x", id=bad)
+    with pytest.raises(ValueError):
+        s.get(bad)
+
+
+def test_remember_tool_accepts_numeric_id(tmp_path):
+    s = store(tmp_path)
+    out = Remember().run({"text": "fact", "id": 5}, make_ctx(s))
+    assert out == "remembered (5)"
+    assert s.get("5").text == "fact"
+
+
+def _case_insensitive(directory) -> bool:
+    probe = directory / "CaseProbe.md"
+    probe.write_text("", encoding="utf-8")
+    try:
+        return (directory / "caseprobe.md").exists()
+    finally:
+        probe.unlink()
+
+
+def test_case_aliased_ids_report_the_saved_spelling(tmp_path):
+    if not _case_insensitive(tmp_path):
+        pytest.skip("filesystem is case-sensitive")
+    s = store(tmp_path)
+    first = s.save("hi", id="Foo")
+    assert s.get("foo").id == "Foo"
+    again = s.save("updated", id="foo")
+    assert again.id == "Foo"
+    assert again.created_at == first.created_at
+    assert [(i.id, i.text) for i in s.all()] == [("Foo", "updated")]
+
+
+def test_header_case_alias_ignored_when_it_names_another_file(tmp_path):
+    if _case_insensitive(tmp_path):
+        pytest.skip("filesystem is case-insensitive")
+    (tmp_path / "foo.md").write_text(
+        '---\nid: "Foo"\ncreated_at: 1\nformat: 2\n---\nbody\n', encoding="utf-8"
+    )
+    assert store(tmp_path).get("foo").id == "foo"
+
+
+def test_stores_on_one_directory_share_the_in_process_lock(tmp_path, monkeypatch):
+    import threading
+    import time as _time
+
+    import nexus_ai_harness.plugins.memory.file as filemod
+
+    monkeypatch.setattr(filemod, "_FCNTL", None)
+    original = FileMemoryStore._write_atomic
+    active = []
+    overlaps = []
+    guard = threading.Lock()
+
+    def slow_write(self, path, data):
+        with guard:
+            active.append(1)
+            if len(active) > 1:
+                overlaps.append(len(active))
+        _time.sleep(0.02)
+        try:
+            original(self, path, data)
+        finally:
+            with guard:
+                active.pop()
+
+    monkeypatch.setattr(FileMemoryStore, "_write_atomic", slow_write)
+    seed = store(tmp_path).save("seed", id="shared")
+    stores = [FileMemoryStore(tmp_path) for _ in range(4)]
+    threads = [
+        threading.Thread(target=st.save, args=(f"v{n}", "shared"))
+        for n, st in enumerate(stores)
+    ]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert overlaps == []
+    assert store(tmp_path).get("shared").created_at == seed.created_at
+
+
+def test_save_blocks_while_another_holder_has_the_flock(tmp_path):
+    import os
+    import threading
+
+    import nexus_ai_harness.plugins.memory.file as filemod
+
+    if filemod._FCNTL is None:
+        pytest.skip("fcntl is unavailable")
+    fcntl = filemod._FCNTL
+    s = store(tmp_path)
+    fd = os.open(tmp_path / ".lock", os.O_RDWR | os.O_CREAT, 0o600)
+    try:
+        # A separate open file description conflicts, just as another process would.
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        done = threading.Event()
+        worker = threading.Thread(target=lambda: (s.save("x", id="a"), done.set()))
+        worker.start()
+        assert not done.wait(0.3)
+        assert FileMemoryStore(tmp_path).get("a") is None
+    finally:
+        os.close(fd)
+    worker.join(timeout=10)
+    assert done.is_set()
+    assert s.get("a").text == "x"
+
+
+def test_opening_store_removes_only_stale_temp_files(tmp_path):
+    import os
+    import time as _time
+
+    stale = tmp_path / ".mem_1.md.abcd.tmp"
+    fresh = tmp_path / ".mem_2.md.efgh.tmp"
+    stale.write_text("old", encoding="utf-8")
+    fresh.write_text("new", encoding="utf-8")
+    old = _time.time() - 2 * 3600
+    os.utime(stale, (old, old))
+    (tmp_path / "keep.md").write_text("note", encoding="utf-8")
+    os.utime(tmp_path / "keep.md", (old, old))
+    s = store(tmp_path)
+    assert not stale.exists()
+    assert fresh.exists()
+    assert s.get("keep").text == "note"
