@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import asyncio
 
+from nexus_ai_harness.core.errors import ModelAPIError
 from nexus_ai_harness.core.events import (
     Event,
     IterationStarted,
     LoopStopped,
+    ModelCallFailed,
 )
 from nexus_ai_harness.core.message import Message
 from nexus_ai_harness.core.response import Response
@@ -15,7 +17,7 @@ from nexus_ai_harness.protocols.context_manager import ContextManager
 from nexus_ai_harness.protocols.hook import Hook
 from nexus_ai_harness.protocols.model import Model
 from nexus_ai_harness.protocols.router import Router
-from tests.conftest import ScriptedModel, make_ctx
+from tests.conftest import FailingModel, ScriptedModel, make_ctx
 
 
 def test_chat_loop_returns_text_and_appends_assistant_message():
@@ -156,3 +158,19 @@ def test_chat_loop_ignores_a_pre_set_interrupt():
     result = asyncio.run(ChatLoop().run(ctx))
     assert result == "hi"  # single-shot; the interrupt is not honored
     assert ctx.state(RunState).stop_reason == "completed"
+
+
+# --- model call failures ---------------------------------------------------
+
+
+def test_chat_loop_model_error_ends_with_model_error_stop_reason():
+    error = ModelAPIError("HTTP 503: overloaded", status=503, attempts=2)
+    rec = _EventRecorder()
+    ctx = make_ctx(FailingModel(error), rec)
+    result = asyncio.run(ChatLoop().run(ctx))
+    assert result == "stopped: model error: HTTP 503: overloaded"
+    assert ctx.state(RunState).stop_reason == "model_error"
+    kinds = [type(e).__name__ for e in rec.events]
+    assert kinds == ["ModelCallStarted", "ModelCallFailed"]
+    assert rec.events[-1] == ModelCallFailed(error, 2)
+    assert ctx.history == []  # no assistant turn was recorded

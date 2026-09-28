@@ -69,7 +69,11 @@ class AnthropicModel(BaseModel):
         if self.api_key:
             headers["x-api-key"] = self.api_key
         response = post_json(
-            f"{self.base_url}/messages", payload, headers, self.timeout
+            f"{self.base_url}/messages",
+            payload,
+            headers,
+            self.timeout,
+            retry=self.retry,
         )
         parsed = self._parse(response)
         parsed.cost = self._cost(parsed.usage)

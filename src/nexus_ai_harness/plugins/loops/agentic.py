@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import asyncio
 
+from nexus_ai_harness.core.errors import ModelAPIError
 from nexus_ai_harness.core.events import (
     IterationCompleted,
     IterationStarted,
     LoopStopped,
+    ModelCallFailed,
     ModelCallStarted,
     ResponseReceived,
 )
@@ -23,6 +25,15 @@ from nexus_ai_harness.services.tool_runner import ToolRunner
 
 
 class AgenticLoop(Loop):
+    """Calls the model and runs its tool calls until it answers without any.
+
+    Every exit sets ``RunState.stop_reason``: ``"completed"``, ``"interrupted"``,
+    ``"guard: <reason>"``, or ``"model_error"``. A model call that still fails
+    after the backend's own retries ends the run like a guard stop: it emits
+    ``ModelCallFailed`` and ``LoopStopped`` and returns a ``"stopped: ..."`` text,
+    so the caller gets a ``RunResult`` instead of an exception.
+    """
+
     requires = (Model,)
 
     async def run(self, ctx: Context) -> str:
@@ -64,7 +75,14 @@ class AgenticLoop(Loop):
                 raise LookupError("no model registered")
             ctx.emit(ModelCallStarted(list(history)))
             # Hand the model exactly the tools the runner can dispatch.
-            response = await ctx.invoke(model.complete, history, available, ctx)
+            try:
+                response = await ctx.invoke(model.complete, history, available, ctx)
+            except Exception as exc:  # like a tool error, a model error must not crash
+                ctx.emit(ModelCallFailed(exc, _attempts(exc)))
+                ctx.state(RunState).stop_reason = "model_error"
+                ctx.emit(IterationCompleted(i))
+                ctx.emit(LoopStopped("model_error"))
+                return f"stopped: model error: {exc}"
             ctx.emit(ResponseReceived(response))
             ctx.add_message(
                 Message(
@@ -95,3 +113,7 @@ class AgenticLoop(Loop):
                 ctx.add_message(message)
             ctx.emit(IterationCompleted(i))
             i += 1
+
+
+def _attempts(exc: Exception) -> int | None:
+    return exc.attempts if isinstance(exc, ModelAPIError) else None

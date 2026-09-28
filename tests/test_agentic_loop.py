@@ -3,7 +3,10 @@ from __future__ import annotations
 import asyncio
 import time
 
-from nexus_ai_harness.core.events import Event, LoopStopped
+import pytest
+
+from nexus_ai_harness.core.errors import RateLimitError
+from nexus_ai_harness.core.events import Event, LoopStopped, ModelCallFailed
 from nexus_ai_harness.core.message import Message
 from nexus_ai_harness.core.response import Response
 from nexus_ai_harness.core.run import RunState
@@ -21,7 +24,7 @@ from nexus_ai_harness.protocols.hook import Hook
 from nexus_ai_harness.protocols.model import Model
 from nexus_ai_harness.protocols.router import Router
 from nexus_ai_harness.protocols.tool import Tool
-from tests.conftest import RecordingTool, ScriptedModel, make_ctx
+from tests.conftest import FailingModel, RecordingTool, ScriptedModel, make_ctx
 
 
 class LoopStopRecorder(Hook):
@@ -493,3 +496,63 @@ def test_parallel_tool_calls_run_concurrently():
     asyncio.run(AgenticLoop().run(ctx))
     elapsed = time.perf_counter() - start
     assert elapsed < 0.5  # 3x0.2s ran in parallel, not 0.6s sequential
+
+
+# --- model call failures ---------------------------------------------------
+
+
+class _EventLog(Hook):
+    def __init__(self) -> None:
+        self.events: list[Event] = []
+
+    def on(self, event: Event, ctx) -> None:
+        self.events.append(event)
+
+
+def test_model_error_ends_the_run_with_model_error_stop_reason():
+    error = RateLimitError("HTTP 429: slow down", status=429, attempts=4)
+    log = _EventLog()
+    ctx = make_ctx(FailingModel(error), log)
+    ctx.add_message(Message(role="user", content="hi"))
+    result = asyncio.run(AgenticLoop().run(ctx))
+    assert result == "stopped: model error: HTTP 429: slow down"
+    assert ctx.state(RunState).stop_reason == "model_error"
+    failed = [e for e in log.events if isinstance(e, ModelCallFailed)]
+    assert failed == [ModelCallFailed(error, 4)]
+    tail = [type(e).__name__ for e in log.events[-3:]]
+    assert tail == ["ModelCallFailed", "IterationCompleted", "LoopStopped"]
+    assert log.events[-1] == LoopStopped("model_error")
+
+
+def test_model_error_after_a_tool_turn_keeps_the_prior_work():
+    call = {"id": "c1", "name": "echo", "arguments": {"x": 1}}
+    tool = RecordingTool("echo")
+    model = FailingModel(ConnectionError("reset"), Response(text="", tool_calls=[call]))
+    ctx = make_ctx(model, tool, AllowList(["echo"]), AutoApprove())
+    ctx.add_message(Message(role="user", content="hi"))
+    result = asyncio.run(AgenticLoop().run(ctx))
+    assert tool.calls == [{"x": 1}]
+    assert len(model.calls) == 2
+    assert result == "stopped: model error: reset"
+    assert ctx.state(RunState).stop_reason == "model_error"
+    assert [m.role for m in ctx.history] == ["user", "assistant", "tool"]
+
+
+def test_untyped_model_error_reports_unknown_attempts():
+    log = _EventLog()
+    ctx = make_ctx(FailingModel(ValueError("bad")), log)
+    asyncio.run(AgenticLoop().run(ctx))
+    failed = [e for e in log.events if isinstance(e, ModelCallFailed)]
+    assert len(failed) == 1
+    assert failed[0].attempts is None
+    assert isinstance(failed[0].error, ValueError)
+
+
+def test_model_cancellation_is_not_swallowed():
+    class CancelledModel(Model):
+        async def complete(self, history, tools, ctx):
+            raise asyncio.CancelledError
+
+    ctx = make_ctx(CancelledModel())
+    with pytest.raises(asyncio.CancelledError):
+        asyncio.run(AgenticLoop().run(ctx))
