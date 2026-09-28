@@ -89,6 +89,14 @@ class SessionEnded(Event):
 
 
 @dataclass
+class SessionSaveFailed(Event):
+    """Persisting a session snapshot raised; the run carries on regardless."""
+
+    session_id: str
+    error: BaseException
+
+
+@dataclass
 class LoopStopped(Event):
     """The loop terminated; reason distinguishes how (completed, interrupted, guard)."""
 
