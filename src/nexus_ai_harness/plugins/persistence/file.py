@@ -129,23 +129,12 @@ class FileSessionStore(SessionStore):
         self._dir.mkdir(parents=True, exist_ok=True)
 
     def save(self, session_id: str, data: dict) -> None:
-        path = self._path(session_id)
-        # Serialize first so a non-JSON payload raises before any file is touched.
-        payload = json.dumps(data, indent=2)
-        # A unique temp name stops concurrent saves of one id clobbering each other.
-        fd, tmp_name = tempfile.mkstemp(
-            dir=path.parent, prefix=f"{path.name}.", suffix=".tmp"
-        )
-        tmp = Path(tmp_name)
-        try:
-            with os.fdopen(fd, "w", encoding="utf-8") as fh:
-                fh.write(payload)
-                fh.flush()
-                os.fsync(fh.fileno())
-            os.replace(tmp, path)
-            _fsync_dir(path.parent)
-        finally:
-            tmp.unlink(missing_ok=True)  # drop the temp if replace didn't consume it
+        self._write(session_id, data, exclusive=False)
+
+    def create(self, session_id: str, data: dict) -> None:
+        # Hard-linking the temp file into place fails if the target exists, so
+        # two racing creates (or a case-folded name clash) can't both win.
+        self._write(session_id, data, exclusive=True)
 
     def load(self, session_id: str) -> dict | None:
         path = self._path(session_id)
@@ -171,12 +160,52 @@ class FileSessionStore(SessionStore):
 
     # --- persistence helpers -------------------------------------------------
 
+    def _write(self, session_id: str, data: dict, *, exclusive: bool) -> None:
+        path = self._path(session_id)
+        # Serialize first so a non-JSON payload raises before any file is touched.
+        payload = json.dumps(data, indent=2)
+        # A unique temp name stops concurrent saves of one id clobbering each other.
+        fd, tmp_name = tempfile.mkstemp(
+            dir=path.parent, prefix=f"{path.name}.", suffix=".tmp"
+        )
+        tmp = Path(tmp_name)
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as fh:
+                fh.write(payload)
+                fh.flush()
+                os.fsync(fh.fileno())
+            if exclusive:
+                try:
+                    os.link(tmp, path)
+                except FileExistsError:
+                    raise FileExistsError(
+                        f"session {session_id!r} already exists"
+                    ) from None
+                except OSError:
+                    # No hard links on this filesystem (e.g. FAT): fall back to a
+                    # best-effort check, as the protocol's default does.
+                    if path.exists():
+                        raise FileExistsError(
+                            f"session {session_id!r} already exists"
+                        ) from None
+                    os.replace(tmp, path)
+            else:
+                os.replace(tmp, path)
+            _fsync_dir(path.parent)
+        finally:
+            tmp.unlink(missing_ok=True)  # drop the temp if it wasn't moved into place
+
     def _path(self, session_id: str) -> Path:
         # session_id may be untrusted; confine it to the store dir so it can't escape.
         if not session_id or not session_id.strip():
             raise ValueError(f"invalid session id: {session_id!r}")
         candidate = (self._dir / f"{session_id}.json").resolve()
-        if candidate.parent != self._dir.resolve():
+        # Reject ids that normalize to another name (e.g. "./x" -> "x") too, so an
+        # id always maps to exactly one file and list_ids() round-trips it.
+        if (
+            candidate.parent != self._dir.resolve()
+            or candidate.name != f"{session_id}.json"
+        ):
             raise ValueError(f"invalid session id: {session_id!r}")
         return candidate
 
@@ -209,7 +238,10 @@ def fork_session(
     """Branch a stored session into a new one, leaving the original intact.
 
     The fork is saved to ``store`` straight away under its new id, with
-    ``parent_id`` recording ``source_id``, and returned ready to run.
+    ``parent_id`` recording ``source_id``, and returned ready to run. It is
+    written with :meth:`~protocols.session_store.SessionStore.create`, so an
+    existing session is never replaced; :class:`FileSessionStore` makes that
+    check atomic, other stores may only make it best-effort.
 
     Args:
         store: The session store holding the source session.
@@ -228,9 +260,10 @@ def fork_session(
     if source is None:
         return None
     forked = source.fork(new_id)
-    if forked.id in store.list_ids():  # never overwrite another session
-        raise ValueError(f"session {forked.id!r} already exists")
-    store.save(forked.id, snapshot_from_session(forked))
+    try:
+        store.create(forked.id, snapshot_from_session(forked))
+    except FileExistsError as exc:  # never overwrite another session
+        raise ValueError(f"session {forked.id!r} already exists") from exc
     return forked
 
 

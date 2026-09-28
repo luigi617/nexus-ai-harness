@@ -8,6 +8,7 @@ from nexus_ai_harness.core.events import (
     IterationCompleted,
     IterationStarted,
     MessageAdded,
+    ModelCallStarted,
     SessionEnded,
     SessionSaveFailed,
 )
@@ -24,13 +25,15 @@ class AutoSave(Hook):
     """Persist the running session at loop boundaries so it can be resumed.
 
     By default a snapshot is written to the registered :class:`SessionStore`
-    when a loop iteration starts or completes, but only if a message was added
-    since the last save, and always when the session ends. Saving at iteration
-    boundaries rather than on every message keeps I/O proportional to the
-    number of turns instead of the number of messages, and means a resumed
-    session never starts partway through an iteration. Pass
-    ``every_message=True`` to also save after each message, as earlier releases
-    did by default.
+    when a loop iteration starts or completes and just before each model call,
+    but only if a message was added since the last save, and always when the
+    session ends. Saving at these boundaries rather than on every message keeps
+    I/O proportional to the number of turns instead of the number of messages,
+    and means a resumed session never starts partway through an iteration.
+    The model-call boundary is what every loop passes through (``ChatLoop``
+    emits no iteration events), so the user's input is on disk before the model
+    is asked, even if that call then raises. Pass ``every_message=True`` to
+    also save after each message, as earlier releases did by default.
 
     Two invariants keep this side-channel from interfering with the run:
 
@@ -59,7 +62,12 @@ class AutoSave(Hook):
 
     def on(self, event: Event, ctx: Context) -> None:
         if not isinstance(
-            event, MessageAdded | IterationStarted | IterationCompleted | SessionEnded
+            event,
+            MessageAdded
+            | IterationStarted
+            | IterationCompleted
+            | ModelCallStarted
+            | SessionEnded,
         ):
             return
         if ctx.state(SpawnState).depth != 0:  # ignore forked subagent sessions
@@ -71,7 +79,6 @@ class AutoSave(Hook):
                 self._save(ctx)
         elif isinstance(event, SessionEnded):
             self._save(ctx)  # the final snapshot carries the run's stop reason
-            self._unsaved.discard(session_id)
         elif session_id in self._unsaved:
             self._save(ctx)
 

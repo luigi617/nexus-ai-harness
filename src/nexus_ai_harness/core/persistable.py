@@ -94,8 +94,8 @@ def dump(obj: object) -> dict | None:
 
     Returns:
         The instance's JSON-safe data, or ``None`` (with a
-        :class:`PersistenceWarning`) if its class is not registered or its data
-        does not survive a JSON round-trip.
+        :class:`PersistenceWarning`) if its class is not registered, its
+        ``to_dict`` raises, or its data does not survive a JSON round-trip.
     """
     name = persisted_name(type(obj))
     if name is None:
@@ -109,9 +109,9 @@ def dump(obj: object) -> dict | None:
         to_dict = getattr(obj, "to_dict", None)
         data = to_dict() if callable(to_dict) else dataclasses.asdict(obj)  # type: ignore[call-overload]
         json.dumps(data)  # prove it is JSON-safe now, not at write time
-    except (TypeError, ValueError) as exc:
+    except Exception as exc:  # a buggy to_dict must not sink the whole snapshot
         warnings.warn(
-            f"skipping {name!r}: its state is not JSON-serializable ({exc})",
+            f"skipping {name!r}: its state could not be serialized ({exc!r})",
             PersistenceWarning,
             stacklevel=2,
         )
@@ -135,7 +135,8 @@ def restore(name: str, data: Any) -> object | None:
 
     Returns:
         The rebuilt instance, or ``None`` (with a :class:`PersistenceWarning`)
-        if ``name`` is not registered or the data no longer fits the class.
+        if ``name`` is not registered, the data no longer fits the class, or
+        its ``from_dict`` raises.
     """
     cls = persistable_class(name)
     if cls is None:
@@ -153,9 +154,9 @@ def restore(name: str, data: Any) -> object | None:
             return from_dict(data)
         known = {f.name for f in dataclasses.fields(cls) if f.init}
         return cls(**{k: v for k, v in data.items() if k in known})
-    except (TypeError, ValueError) as exc:
+    except Exception as exc:  # e.g. KeyError from from_dict on an older snapshot
         warnings.warn(
-            f"cannot restore {name!r}: {exc}", PersistenceWarning, stacklevel=2
+            f"cannot restore {name!r}: {exc!r}", PersistenceWarning, stacklevel=2
         )
         return None
 

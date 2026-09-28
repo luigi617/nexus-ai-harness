@@ -11,6 +11,7 @@ from nexus_ai_harness.core.events import (
     IterationCompleted,
     IterationStarted,
     MessageAdded,
+    ModelCallStarted,
     SessionEnded,
     SessionSaveFailed,
 )
@@ -84,7 +85,7 @@ def test_delete(tmp_path):
     assert s.load("sess_1") is None
 
 
-@pytest.mark.parametrize("bad", ["../escape", "a/b", "/etc/passwd"])
+@pytest.mark.parametrize("bad", ["../escape", "a/b", "/etc/passwd", "./a", "x/../a"])
 def test_path_escape_raises(tmp_path, bad):
     s = store(tmp_path)
     with pytest.raises(ValueError, match="invalid session id"):
@@ -345,6 +346,40 @@ def test_autosave_skips_boundaries_with_nothing_new(tmp_path):
     assert s.saves == 1
 
 
+def test_autosave_saves_before_a_model_call(tmp_path):
+    # ChatLoop emits no iteration events; the model-call boundary still makes
+    # the user's input durable before the model is asked.
+    s = _CountingStore(tmp_path)
+    ctx = make_ctx(s, AutoSave())
+    ctx.add_message(Message(role="user", content="hi"))
+    ctx.emit(ModelCallStarted(list(ctx.history)))
+    assert s.saves == 1
+    ctx.emit(ModelCallStarted(list(ctx.history)))  # nothing new since
+    assert s.saves == 1
+
+
+def test_autosave_keeps_a_failed_final_save_pending(tmp_path):
+    s = store(tmp_path)
+    ctx = make_ctx(s, AutoSave())
+    boom = True
+
+    def flaky_save(session_id: str, data: dict) -> None:
+        if boom:
+            raise OSError("transient")
+        FileSessionStore.save(s, session_id, data)
+
+    s.save = flaky_save  # type: ignore[method-assign]
+    ctx.add_message(Message(role="user", content="hi"))
+    ctx.state(RunState).stop_reason = "completed"
+    with pytest.warns(PersistenceWarning, match="transient"):
+        ctx.emit(SessionEnded(session_id=ctx.session_id, result="done"))
+    boom = False
+    ctx.emit(IterationStarted(0))  # the lost final snapshot is retried here
+    saved = s.load(ctx.session_id)
+    assert saved is not None
+    assert saved["stop_reason"] == "completed"
+
+
 def test_autosave_retries_after_a_failed_save(tmp_path):
     s = store(tmp_path)
     ctx = make_ctx(s, AutoSave())
@@ -475,6 +510,42 @@ def test_non_serializable_registered_state_is_skipped_not_fatal(tmp_path):
     assert "tests.persistence.opaque" not in saved["state"]
 
 
+@persistable("tests.persistence.raising")
+class _RaisingState:
+    def to_dict(self) -> dict:
+        raise RuntimeError("to_dict exploded")
+
+    @classmethod
+    def from_dict(cls, data: dict) -> _RaisingState:
+        data["missing"]  # KeyError, as from a snapshot older than the class
+        return cls()
+
+
+def test_state_whose_to_dict_raises_is_skipped_and_history_still_saved(tmp_path):
+    s = store(tmp_path)
+    ctx = make_ctx(s, AutoSave(every_message=True))
+    ctx.state(_RaisingState)
+    ctx.state(SummaryState).text = "recap"
+    with pytest.warns(PersistenceWarning, match="to_dict exploded"):
+        ctx.add_message(Message(role="user", content="hi"))
+    saved = s.load(ctx.session_id)
+    assert saved is not None
+    assert [m["content"] for m in saved["history"]] == ["hi"]
+    assert saved["state"] == {"summarizing.summary": {"upto": 0, "text": "recap"}}
+
+
+def test_state_whose_from_dict_raises_falls_back_to_default():
+    snap = {
+        "version": SCHEMA_VERSION,
+        "history": [],
+        "state": {"tests.persistence.raising": {}},
+    }
+    session = session_from_dict(snap)
+    with pytest.warns(PersistenceWarning, match="cannot restore"):
+        inst = session.state(_RaisingState)  # must not crash the asking plugin
+    assert isinstance(inst, _RaisingState)
+
+
 def test_unclaimed_restored_state_survives_resave():
     # State for a class nobody has asked for yet (e.g. its plugin isn't loaded
     # this run) must be carried forward, not dropped by the next save.
@@ -573,6 +644,111 @@ def test_fork_session_refuses_to_overwrite(tmp_path):
     with pytest.raises(ValueError, match="already exists"):
         fork_session(s, "sess_a", new_id="sess_b")
     assert s.load("sess_b") == {"id": "sess_b", "history": []}
+
+
+def test_fork_session_refuses_ids_that_normalize_onto_another_session(tmp_path):
+    # "./victim" resolves to victim.json; it must not replace that session.
+    s = store(tmp_path)
+    s.save("src", {"id": "src", "history": [{"role": "user", "content": "src"}]})
+    s.save("victim", {"id": "victim", "history": []})
+    with pytest.raises(ValueError, match="invalid session id"):
+        fork_session(s, "src", new_id="./victim")
+    assert s.load("victim") == {"id": "victim", "history": []}
+
+
+def test_fork_session_refuses_case_folded_clash(tmp_path):
+    s = store(tmp_path)
+    s.save("src", {"id": "src", "history": []})
+    s.save("v2", {"id": "v2", "history": []})
+    if not (tmp_path / "V2.json").exists():
+        pytest.skip("filesystem is case-sensitive")
+    with pytest.raises(ValueError, match="already exists"):
+        fork_session(s, "src", new_id="V2")
+    assert s.load("v2") == {"id": "v2", "history": []}
+
+
+def test_concurrent_forks_to_one_id_create_it_once(tmp_path):
+    s = store(tmp_path)
+    s.save("src", {"id": "src", "history": []})
+    wins: list[str] = []
+    losses: list[BaseException] = []
+    barrier = threading.Barrier(8)
+
+    def worker() -> None:
+        barrier.wait()
+        try:
+            fork_session(s, "src", new_id="child")
+            wins.append("child")
+        except ValueError as exc:
+            losses.append(exc)
+
+    threads = [threading.Thread(target=worker) for _ in range(8)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert len(wins) == 1
+    assert len(losses) == 7
+    assert list(tmp_path.glob("*.tmp")) == []
+
+
+def test_file_store_create_is_exclusive(tmp_path):
+    s = store(tmp_path)
+    s.create("sess_1", {"n": 1})
+    with pytest.raises(FileExistsError, match="already exists"):
+        s.create("sess_1", {"n": 2})
+    assert s.load("sess_1") == {"n": 1}
+    assert list(tmp_path.glob("*.tmp")) == []
+
+
+def test_file_store_create_falls_back_without_hard_links(tmp_path, monkeypatch):
+    def no_link(src, dst):
+        raise PermissionError("hard links unsupported")
+
+    monkeypatch.setattr(os, "link", no_link)
+    s = store(tmp_path)
+    s.create("sess_1", {"n": 1})
+    with pytest.raises(FileExistsError):
+        s.create("sess_1", {"n": 2})
+    assert s.load("sess_1") == {"n": 1}
+    assert list(tmp_path.glob("*.tmp")) == []
+
+
+class _DictStore(SessionStore):
+    """A minimal in-memory store that relies on the protocol's default create."""
+
+    def __init__(self) -> None:
+        self.data: dict[str, dict] = {}
+
+    def save(self, session_id: str, data: dict) -> None:
+        self.data[session_id] = data
+
+    def load(self, session_id: str) -> dict | None:
+        return self.data.get(session_id)
+
+    def list_ids(self) -> list[str]:
+        return sorted(self.data)
+
+    def delete(self, session_id: str) -> bool:
+        return self.data.pop(session_id, None) is not None
+
+
+def test_default_create_refuses_existing_ids():
+    s = _DictStore()
+    s.create("a", {"n": 1})
+    with pytest.raises(FileExistsError):
+        s.create("a", {"n": 2})
+    assert s.load("a") == {"n": 1}
+
+
+def test_fork_session_works_on_any_store():
+    s = _DictStore()
+    s.save("a", {"id": "a", "history": []})
+    forked = fork_session(s, "a", new_id="b")
+    assert forked is not None
+    assert s.data["b"]["parent_id"] == "a"
+    with pytest.raises(ValueError, match="already exists"):
+        fork_session(s, "a", new_id="b")
 
 
 def test_fork_session_missing_source_returns_none(tmp_path):

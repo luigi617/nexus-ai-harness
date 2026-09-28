@@ -2,11 +2,17 @@ from __future__ import annotations
 
 import asyncio
 
+import pytest
+
+from nexus_ai_harness.core.message import Message
 from nexus_ai_harness.core.response import Response
 from nexus_ai_harness.harness import NexusAIHarness
 from nexus_ai_harness.harness.session import Session
-from nexus_ai_harness.plugins.context_manager.summarizing import SummaryState
-from nexus_ai_harness.plugins.loops import AgenticLoop
+from nexus_ai_harness.plugins.context_manager.summarizing import (
+    SummarizingContextManager,
+    SummaryState,
+)
+from nexus_ai_harness.plugins.loops import AgenticLoop, ChatLoop
 from nexus_ai_harness.plugins.permissions import AllowList, AutoApprove
 from nexus_ai_harness.plugins.persistence import (
     FileSessionStore,
@@ -14,6 +20,7 @@ from nexus_ai_harness.plugins.persistence import (
     resume,
 )
 from nexus_ai_harness.plugins.persistence.autosave import AutoSave
+from nexus_ai_harness.protocols.model import Model
 from tests.conftest import RecordingTool, ScriptedModel
 
 
@@ -146,3 +153,76 @@ def test_summary_state_survives_resume(tmp_path):
     resumed = resume(store, session.id)
     assert resumed is not None
     assert resumed.state(SummaryState) == SummaryState(upto=1, text="earlier recap")
+
+
+class _FailingModel(Model):
+    async def complete(self, history, tools, ctx) -> Response:
+        raise RuntimeError("model API down")
+
+
+def test_chat_loop_input_survives_a_failing_model_call(tmp_path):
+    # ChatLoop emits no iteration events, and a raising loop never reaches
+    # SessionEnded; the user's input must still be on disk.
+    store = FileSessionStore(tmp_path)
+    harness = (
+        NexusAIHarness().use(ChatLoop()).use(_FailingModel()).use(store).use(AutoSave())
+    )
+    session = Session()
+    with pytest.raises(RuntimeError, match="model API down"):
+        harness.run_sync("important user input", session=session)
+    saved = store.load(session.id)
+    assert saved is not None
+    assert [m["content"] for m in saved["history"]] == ["important user input"]
+
+
+def test_chat_loop_run_is_saved(tmp_path):
+    store = _CountingStore(tmp_path)
+    harness = (
+        NexusAIHarness()
+        .use(ChatLoop())
+        .use(ScriptedModel(Response(text="hi back")))
+        .use(store)
+        .use(AutoSave())
+    )
+    result = harness.run_sync("hi")
+    assert store.saves == 2  # before the model call, then the end of the run
+    saved = store.load(result.session.id)
+    assert saved is not None
+    assert [m["content"] for m in saved["history"]] == ["hi", "hi back"]
+    assert saved["stop_reason"] == "completed"
+
+
+def _summarizing_harness(store: FileSessionStore, model: Model) -> NexusAIHarness:
+    return (
+        NexusAIHarness()
+        .use(AgenticLoop())
+        .use(model)
+        .use(SummarizingContextManager(max_messages=4, keep_recent=2))
+        .use(store)
+        .use(AutoSave())
+    )
+
+
+def test_resumed_summarizer_reuses_the_saved_summary(tmp_path):
+    store = FileSessionStore(tmp_path)
+    prior = [
+        Message(role=role, content=f"{role} {n}")
+        for n in range(3)
+        for role in ("user", "assistant")
+    ]
+    session = Session(history=prior)
+    # First call is the summarization request, the second the actual reply.
+    first = ScriptedModel(Response(text="RECAP-1"), Response(text="ok"))
+    _summarizing_harness(store, first).run_sync("hello", session=session)
+    assert len(first.calls) == 2
+    assert session.state(SummaryState).text == "RECAP-1"
+
+    resumed = resume(store, session.id)
+    assert resumed is not None
+    second = ScriptedModel(Response(text="ok again"))
+    _summarizing_harness(store, second).run_sync("again", session=resumed)
+
+    # Only the reply was requested: the restored summary was reused, not rebuilt.
+    assert len(second.calls) == 1
+    contents = [m.content for m in second.calls[0]]
+    assert "[Conversation summary so far]\nRECAP-1" in contents

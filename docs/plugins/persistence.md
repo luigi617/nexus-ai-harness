@@ -24,10 +24,17 @@ await harness.run("What was the code?", session=session)
 
 ### When AutoSave writes
 
-`AutoSave` saves at loop boundaries: when an iteration starts or completes (only
-if a message was added since the last save), and always when the session ends.
-Writes grow with the number of turns rather than the number of messages, and a
-resumed session never starts partway through an iteration.
+`AutoSave` saves at loop boundaries: when an iteration starts or completes and
+just before each model call (each only if a message was added since the last
+save), and always when the session ends. Writes grow with the number of turns
+rather than the number of messages, and a resumed session never starts partway
+through an iteration.
+
+The model-call boundary is the one every loop passes through. `ChatLoop` emits
+no iteration events, but the user's message is still on disk before the model
+is asked, so a model call that raises doesn't lose it. If a run raises, messages
+added after the last boundary (for example, an assistant reply whose tool calls
+then failed) aren't saved; the snapshot stays at the last clean boundary.
 
 | Option | Default | Effect |
 |---|---|---|
@@ -36,8 +43,8 @@ resumed session never starts partway through an iteration.
 
 A failed save doesn't stop the run, but it isn't hidden either: it raises a
 `PersistenceWarning` and emits a `SessionSaveFailed` event (with the session id
-and the error), and the next boundary tries again. Subagent sessions are never
-saved.
+and the error), and the next boundary tries again, including when the failed
+save was the final one at session end. Subagent sessions are never saved.
 
 ### How FileSessionStore writes
 
@@ -62,7 +69,12 @@ assert branch.parent_id == session_id
 ```
 
 `fork_session` returns `None` if the source doesn't exist and raises
-`ValueError` rather than overwrite an existing `new_id`. To branch a live,
+`ValueError` rather than overwrite an existing `new_id`. It writes the fork with
+`SessionStore.create`, which refuses an id that's already stored.
+`FileSessionStore` makes that atomic: it hard-links the new file into place, so
+two racing forks to the same id can't both succeed, and on case-insensitive
+filesystems `V2` won't replace `v2`. `FileSessionStore` also rejects ids that
+would map to a different file name, such as `./other`. To branch a live,
 in-memory session, call `session.fork()`. It deep-copies the history and state
 and carries over pending interventions.
 
@@ -95,7 +107,10 @@ Built-in state that opts in: `SummaryState` (the summarizing context manager's
 cached summary) and the `InjectMessage` intervention.
 
 Other state is skipped on purpose. If opted-in state can't be serialized or
-restored, it's skipped with a `PersistenceWarning` instead of breaking the save.
+restored, including when a custom `to_dict` or `from_dict` raises, that entry is
+skipped with a `PersistenceWarning` instead of breaking the save. The rest of the
+snapshot is still written, and the plugin asking for restored state gets a
+default instance.
 Saved state is restored the first time `ctx.state(cls)` asks for it, so it
 doesn't matter whether the plugin was imported before `resume`. State that no
 code asks for is carried into the next save unchanged.
@@ -137,6 +152,8 @@ def _v2_to_v3(data: dict) -> dict:
 ## Writing a store
 
 Subclass `SessionStore` and implement `save`, `load`, `list_ids`, and `delete`.
-They work with plain snapshot dicts. Persist JSON only, never pickle, and treat
+They work with plain snapshot dicts. `create` has a default that checks `load`
+and then calls `save`. That default isn't safe against concurrent writers, so
+override it if your backend can create a key atomically. Persist JSON only, never pickle, and treat
 the session id as untrusted input. `resume`, `fork_session`, and `AutoSave` work
 with any store.

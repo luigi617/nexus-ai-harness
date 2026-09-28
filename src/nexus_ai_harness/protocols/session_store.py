@@ -30,6 +30,25 @@ class SessionStore(Plugin):
             data: A JSON-serializable snapshot of the session.
         """
 
+    def create(self, session_id: str, data: dict) -> None:
+        """Persist a snapshot only if no session with ``session_id`` exists yet.
+
+        Used by forking so a branch never replaces another session. This default
+        checks with :meth:`load` and then calls :meth:`save`, which is
+        best-effort under concurrent writers; stores that can create a key
+        atomically should override it.
+
+        Args:
+            session_id: The new session's stable identifier and storage key.
+            data: A JSON-serializable snapshot of the session.
+
+        Raises:
+            FileExistsError: If a session with ``session_id`` is already stored.
+        """
+        if self.load(session_id) is not None:
+            raise FileExistsError(f"session {session_id!r} already exists")
+        self.save(session_id, data)
+
     @abstractmethod
     def load(self, session_id: str) -> dict | None:
         """Load a previously saved snapshot.

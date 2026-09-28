@@ -34,6 +34,19 @@ class Custom:
         return cls(data["v"])
 
 
+@persistable("tests.persistable.raising")
+class Raising:
+    """Custom hooks that raise errors other than TypeError/ValueError."""
+
+    def to_dict(self) -> dict:
+        raise RuntimeError("to_dict exploded")
+
+    @classmethod
+    def from_dict(cls, data: dict) -> Raising:
+        data["missing"]  # KeyError, as on a snapshot saved before a field existed
+        return cls()
+
+
 @persistable("tests.persistable.opaque")
 @dataclass
 class Opaque:
@@ -67,7 +80,7 @@ def test_custom_to_dict_from_dict_roundtrip():
 
 
 def test_dump_skips_non_json_state_with_warning():
-    with pytest.warns(PersistenceWarning, match="not JSON-serializable"):
+    with pytest.warns(PersistenceWarning, match="could not be serialized"):
         assert dump(Opaque(handle=object())) is None
 
 
@@ -110,3 +123,13 @@ def test_name_clash_rejected():
 def test_empty_name_rejected():
     with pytest.raises(ValueError, match="non-empty"):
         persistable(" ")
+
+
+def test_dump_skips_state_whose_to_dict_raises_anything():
+    with pytest.warns(PersistenceWarning, match="to_dict exploded"):
+        assert dump(Raising()) is None
+
+
+def test_restore_skips_state_whose_from_dict_raises_anything():
+    with pytest.warns(PersistenceWarning, match="cannot restore.*missing"):
+        assert restore("tests.persistable.raising", {}) is None
