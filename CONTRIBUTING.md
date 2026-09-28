@@ -16,3 +16,17 @@ pytest                # tests
 ```
 
 Follow the [code style](docs/code-style.md) for comments and docstrings.
+
+## Changelog
+
+Every PR adds a changelog fragment named after the PR number, e.g. `.changes/unreleased/42.json`:
+
+```json
+{
+  "id": 42,
+  "description": "Add retry support to the Bedrock model."
+}
+```
+
+CI fails without one; label the PR `skip-changelog` for changes users won't
+notice (CI, refactors, typos). Don't edit `CHANGELOG.md` directly.

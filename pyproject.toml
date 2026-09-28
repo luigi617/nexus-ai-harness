@@ -20,6 +20,7 @@ dependencies = [
 Homepage = "https://github.com/luigi617/nexus-ai-harness"
 Repository = "https://github.com/luigi617/nexus-ai-harness"
 Issues = "https://github.com/luigi617/nexus-ai-harness/issues"
+Changelog = "https://github.com/luigi617/nexus-ai-harness/blob/main/CHANGELOG.md"
 
 # Dependency groups (PEP 735) are not published to PyPI, so they may use
 # direct git references. Install with `pip install -e . --group dev`.

@@ -1,20 +1,44 @@
 name: Release
 
+# Runs when a release PR (branch release/vX.Y.Z, opened by the Prepare release
+# workflow) is merged.
 on:
-  release:
-    types: [published]
+  pull_request:
+    types: [closed]
+    branches: [main]
 
 jobs:
   build:
     name: Build
+    if: >-
+      github.event.pull_request.merged
+      && github.event.pull_request.head.repo.full_name == github.repository
+      && startsWith(github.event.pull_request.head.ref, 'release/v')
     runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+      sha: ${{ steps.version.outputs.sha }}
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ github.event.pull_request.merge_commit_sha }}
           fetch-depth: 0
+      - id: version
+        env:
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          SHA: ${{ github.event.pull_request.merge_commit_sha }}
+        run: |
+          tag="${HEAD_REF#release/}"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          # Tag locally so setuptools-scm builds this exact version.
+          git tag "$tag"
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
+      - run: python scripts/changelog.py notes "${TAG#v}" > release-notes.md
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
       - run: pip install build twine
       - run: python -m build
       - run: twine check --strict dist/*
@@ -22,6 +46,10 @@ jobs:
         with:
           name: dist
           path: dist/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-notes
+          path: release-notes.md
 
   publish:
     name: Publish to PyPI
@@ -38,3 +66,28 @@ jobs:
           name: dist
           path: dist/
       - uses: pypa/gh-action-pypi-publish@release/v1
+
+  github-release:
+    name: Create GitHub release
+    needs: [build, publish]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-notes
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.build.outputs.tag }}
+          SHA: ${{ needs.build.outputs.sha }}
+        run: >
+          gh release create "$TAG" dist/*
+          --repo "$GITHUB_REPOSITORY"
+          --target "$SHA"
+          --title "$TAG"
+          --notes-file release-notes.md

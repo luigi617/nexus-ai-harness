@@ -1,0 +1,35 @@
+name: Changelog
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  fragment:
+    name: Changelog fragment
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: python scripts/changelog.py check
+      - name: Require a new fragment
+        if: >-
+          !startsWith(github.head_ref, 'release/')
+          && !contains(github.event.pull_request.labels.*.name, 'skip-changelog')
+        run: |
+          added=$(git diff --name-only --diff-filter=A \
+            "origin/$GITHUB_BASE_REF...HEAD" -- '.changes/unreleased/*.json')
+          if [ -z "$added" ]; then
+            echo "::error::Add .changes/unreleased/<PR number>.json" \
+              "(or label the PR skip-changelog)."
+            exit 1
+          fi
+          echo "$added"
