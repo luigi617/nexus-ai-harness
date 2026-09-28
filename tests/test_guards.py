@@ -4,15 +4,20 @@ import asyncio
 
 import pytest
 
-from core.message import Message
-from core.response import Response
-from core.run import RunState
-from harness.harness import NexusAIHarness
-from harness.validation import MissingDependencyError
-from plugins.guards import BudgetGuard, MaxIterations, Timeout
-from plugins.hooks import CostCounter, CostState, ElapsedState, IterationState
-from plugins.loops import AgenticLoop
-from services.guard_chain import GuardChain
+from nexus_ai_harness.core.message import Message
+from nexus_ai_harness.core.response import Response
+from nexus_ai_harness.core.run import RunState
+from nexus_ai_harness.harness.harness import NexusAIHarness
+from nexus_ai_harness.harness.validation import MissingDependencyError
+from nexus_ai_harness.plugins.guards import BudgetGuard, MaxIterations, Timeout
+from nexus_ai_harness.plugins.hooks import (
+    CostCounter,
+    CostState,
+    ElapsedState,
+    IterationState,
+)
+from nexus_ai_harness.plugins.loops import AgenticLoop
+from nexus_ai_harness.services.guard_chain import GuardChain
 from tests.conftest import ScriptedModel, make_ctx
 
 

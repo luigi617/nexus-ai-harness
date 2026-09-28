@@ -13,9 +13,9 @@ from benchmarks.core.benchmark import Benchmark, Episode
 from benchmarks.core.metrics import MetricsCollector, read_metrics
 from benchmarks.core.report import Report
 from benchmarks.core.task import Attempt, RunMetrics, Score, Task
-from harness.result import RunResult
-from harness.session import Session
-from protocols.model import Model
+from nexus_ai_harness.harness.result import RunResult
+from nexus_ai_harness.harness.session import Session
+from nexus_ai_harness.protocols.model import Model
 
 
 class Runner:

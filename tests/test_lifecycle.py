@@ -5,13 +5,13 @@ import contextlib
 
 import pytest
 
-from core.response import Response
-from harness import NexusAIHarness
-from plugins.loops import AgenticLoop
-from protocols.context import Context
-from protocols.lifecycle import Lifecycle
-from protocols.model import Model
-from protocols.plugin import Plugin
+from nexus_ai_harness.core.response import Response
+from nexus_ai_harness.harness import NexusAIHarness
+from nexus_ai_harness.plugins.loops import AgenticLoop
+from nexus_ai_harness.protocols.context import Context
+from nexus_ai_harness.protocols.lifecycle import Lifecycle
+from nexus_ai_harness.protocols.model import Model
+from nexus_ai_harness.protocols.plugin import Plugin
 from tests.conftest import ScriptedModel
 
 
@@ -374,7 +374,7 @@ def test_hot_swap_reuses_the_same_instance():
 
 
 def test_late_non_lifecycle_plugin_takes_effect_on_the_next_run():
-    from protocols.interceptor import Interceptor
+    from nexus_ai_harness.protocols.interceptor import Interceptor
 
     order: list[str] = []
 
@@ -413,7 +413,7 @@ def test_interleaved_late_plugins_start_once_and_stop_in_reverse():
 
 
 def test_restart_does_not_duplicate_in_start_subscriptions():
-    from core.events import Event, ModelCallStarted
+    from nexus_ai_harness.core.events import Event, ModelCallStarted
 
     seen: list[Event] = []
 
@@ -471,7 +471,7 @@ def test_rollback_interrupted_by_cancellation_reinitializes_on_retry():
 
 
 def test_failed_plugins_subscriptions_do_not_leak():
-    from core.events import Event, ModelCallStarted
+    from nexus_ai_harness.core.events import Event, ModelCallStarted
 
     seen: list[Event] = []
 

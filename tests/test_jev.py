@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from core.evaluation import EvaluationResult
-from plugins.evaluators import JevEvaluator, choice, noul, score
-from protocols.evaluator import Evaluator
-from protocols.model import Model
+from nexus_ai_harness.core.evaluation import EvaluationResult
+from nexus_ai_harness.plugins.evaluators import JevEvaluator, choice, noul, score
+from nexus_ai_harness.protocols.evaluator import Evaluator
+from nexus_ai_harness.protocols.model import Model
 
 
 def test_jev_is_an_evaluator_not_a_model():
@@ -60,7 +60,7 @@ def test_base_url_override_strips_trailing_slash():
 
 
 def test_evaluate_assembles_payload_auth_and_wires_cost(monkeypatch):
-    import plugins.evaluators.jev as jevmod
+    import nexus_ai_harness.plugins.evaluators.jev as jevmod
 
     captured: dict = {}
 
@@ -98,7 +98,7 @@ def test_evaluate_assembles_payload_auth_and_wires_cost(monkeypatch):
 
 
 def test_evaluate_omits_auth_header_without_key(monkeypatch):
-    import plugins.evaluators.jev as jevmod
+    import nexus_ai_harness.plugins.evaluators.jev as jevmod
 
     monkeypatch.delenv("TYPESAFE_API_KEY", raising=False)
     captured: dict = {}

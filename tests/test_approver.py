@@ -6,8 +6,8 @@ import time
 
 import pytest
 
-from core.permission import ApprovalRequest
-from plugins.permissions import AutoApprove, ConsoleApprover
+from nexus_ai_harness.core.permission import ApprovalRequest
+from nexus_ai_harness.plugins.permissions import AutoApprove, ConsoleApprover
 from tests.conftest import make_ctx
 
 

@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from graph import Graph
-from graph.node import Node
+from nexus_ai_harness.graph import Graph
+from nexus_ai_harness.graph.node import Node
 
 
 def test_add_node_is_idempotent_and_backfills_data():

@@ -3,10 +3,10 @@ from __future__ import annotations
 from types import SimpleNamespace
 from typing import ClassVar
 
-from core.message import Message
-from core.response import Response
-from plugins.models.anthropic import ANTHROPIC_VERSION, AnthropicModel
-from plugins.models.base import BaseModel
+from nexus_ai_harness.core.message import Message
+from nexus_ai_harness.core.response import Response
+from nexus_ai_harness.plugins.models.anthropic import ANTHROPIC_VERSION, AnthropicModel
+from nexus_ai_harness.plugins.models.base import BaseModel
 
 
 def _tool(name="calc", description="d", parameters=None):
@@ -128,7 +128,9 @@ def _patch_post_json(monkeypatch, response):
         captured.update(url=url, payload=payload, headers=headers, timeout=timeout)
         return response
 
-    monkeypatch.setattr("plugins.models.anthropic.post_json", fake_post_json)
+    monkeypatch.setattr(
+        "nexus_ai_harness.plugins.models.anthropic.post_json", fake_post_json
+    )
     return captured
 
 
@@ -174,7 +176,9 @@ def test_generate_builds_request_headers_and_wires_cost(monkeypatch):
 
 
 def test_generate_omits_api_key_system_and_tools_when_absent(monkeypatch):
-    monkeypatch.setattr("plugins.models.base.load_dotenv", lambda *a, **k: None)
+    monkeypatch.setattr(
+        "nexus_ai_harness.plugins.models.base.load_dotenv", lambda *a, **k: None
+    )
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     captured = _patch_post_json(
         monkeypatch,
@@ -275,7 +279,9 @@ def test_complete_forwards_the_given_tools():
 
 
 def test_init_api_key_precedence(monkeypatch):
-    monkeypatch.setattr("plugins.models.base.load_dotenv", lambda *a, **k: None)
+    monkeypatch.setattr(
+        "nexus_ai_harness.plugins.models.base.load_dotenv", lambda *a, **k: None
+    )
     monkeypatch.setenv("FAKE_API_KEY", "envkey")
 
     assert _FakeModel(model="m1").api_key == "envkey"  # from env
@@ -283,7 +289,9 @@ def test_init_api_key_precedence(monkeypatch):
 
 
 def test_init_empty_api_key_env_yields_none(monkeypatch):
-    monkeypatch.setattr("plugins.models.base.load_dotenv", lambda *a, **k: None)
+    monkeypatch.setattr(
+        "nexus_ai_harness.plugins.models.base.load_dotenv", lambda *a, **k: None
+    )
 
     class _NoEnvModel(_FakeModel):
         api_key_env = ""
@@ -292,7 +300,9 @@ def test_init_empty_api_key_env_yields_none(monkeypatch):
 
 
 def test_init_base_url_override_stripped_and_description_and_params(monkeypatch):
-    monkeypatch.setattr("plugins.models.base.load_dotenv", lambda *a, **k: None)
+    monkeypatch.setattr(
+        "nexus_ai_harness.plugins.models.base.load_dotenv", lambda *a, **k: None
+    )
     m = _FakeModel(model="m1", base_url="https://proxy.local/v2/", foo=1, bar="b")
     assert m.base_url == "https://proxy.local/v2"
     assert m.description == "desc one"

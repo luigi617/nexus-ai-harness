@@ -3,11 +3,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from benchmarks.core.task import RunMetrics
-from core.events import Event, ResponseReceived
-from core.run import RunState
-from harness.session import Session
-from protocols.context import Context
-from protocols.hook import Hook
+from nexus_ai_harness.core.events import Event, ResponseReceived
+from nexus_ai_harness.core.run import RunState
+from nexus_ai_harness.harness.session import Session
+from nexus_ai_harness.protocols.context import Context
+from nexus_ai_harness.protocols.hook import Hook
 
 
 @dataclass

@@ -1,0 +1,32 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+from nexus_ai_harness.core.message import Message
+from nexus_ai_harness.protocols.context import Context
+from nexus_ai_harness.protocols.model import Model
+from nexus_ai_harness.protocols.router import Router
+
+
+@dataclass
+class StickyState:
+    model: Model | None = None
+
+
+class StickyRouter(Router):
+    """Decide once, then reuse that model for the rest of the run.
+
+    Delegates to an inner router on the first turn (when the history holds the
+    first task) and reuses that model afterwards. Wrap any router, e.g.
+    ``StickyRouter(LLMRouter(...))`` to pick a model from the first task and
+    keep it.
+    """
+
+    def __init__(self, inner: Router) -> None:
+        self._inner = inner
+
+    async def route(self, history: list[Message], ctx: Context) -> Model:
+        state = ctx.state(StickyState)
+        if state.model is None:
+            state.model = await ctx.invoke(self._inner.route, history, ctx)
+        return state.model

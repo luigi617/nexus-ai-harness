@@ -5,9 +5,9 @@ import re
 
 import pytest
 
-from plugins.memory import FileMemoryStore
-from plugins.tools import Forget, Recall, Remember
-from protocols.memory import MemoryStore
+from nexus_ai_harness.plugins.memory import FileMemoryStore
+from nexus_ai_harness.plugins.tools import Forget, Recall, Remember
+from nexus_ai_harness.protocols.memory import MemoryStore
 from tests.conftest import make_ctx
 
 
@@ -145,7 +145,7 @@ def test_unreadable_file_is_skipped_not_fatal(tmp_path):
 
 def _monotonic_time(monkeypatch):
     """Make plugins.memory.file.time.time strictly increasing per call."""
-    import plugins.memory.file as filemod
+    import nexus_ai_harness.plugins.memory.file as filemod
 
     state = {"t": 0.0}
 

@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import pytest
 
-from core.events import Event, MessageAdded, ModelCallStarted
-from core.message import Message
-from core.subscription import Subscription
-from harness.registry import Registry
-from protocols.hook import Hook
-from protocols.plugin import Plugin
+from nexus_ai_harness.core.events import Event, MessageAdded, ModelCallStarted
+from nexus_ai_harness.core.message import Message
+from nexus_ai_harness.core.subscription import Subscription
+from nexus_ai_harness.harness.registry import Registry
+from nexus_ai_harness.protocols.hook import Hook
+from nexus_ai_harness.protocols.plugin import Plugin
 from tests.conftest import make_ctx
 
 

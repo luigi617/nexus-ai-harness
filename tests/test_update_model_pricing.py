@@ -103,7 +103,7 @@ class M:
 _INSERT_SRC = """\
 from __future__ import annotations
 
-from plugins.models.openai_compatible import OpenAICompatibleModel
+from nexus_ai_harness.plugins.models.openai_compatible import OpenAICompatibleModel
 
 
 class M(OpenAICompatibleModel):

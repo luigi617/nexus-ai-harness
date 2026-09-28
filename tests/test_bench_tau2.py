@@ -12,8 +12,8 @@ from benchmarks.suites.tau2 import (
     _respond,
     _use_tool,
 )
-from harness.result import RunResult
-from harness.session import Session
+from nexus_ai_harness.harness.result import RunResult
+from nexus_ai_harness.harness.session import Session
 
 
 class FakeEnv:

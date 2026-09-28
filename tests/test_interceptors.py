@@ -4,19 +4,19 @@ import asyncio
 
 import pytest
 
-from core.response import Response
-from harness.context import RunContext
-from harness.harness import NexusAIHarness
-from harness.registry import Registry
-from harness.session import Session
-from plugins.loops import AgenticLoop
-from plugins.permissions import AllowList, AutoApprove
-from protocols.context import Context
-from protocols.interceptor import Interceptor
-from protocols.loop import Loop
-from protocols.model import Model
-from protocols.plugin import Plugin
-from protocols.tool import Tool
+from nexus_ai_harness.core.response import Response
+from nexus_ai_harness.harness.context import RunContext
+from nexus_ai_harness.harness.harness import NexusAIHarness
+from nexus_ai_harness.harness.registry import Registry
+from nexus_ai_harness.harness.session import Session
+from nexus_ai_harness.plugins.loops import AgenticLoop
+from nexus_ai_harness.plugins.permissions import AllowList, AutoApprove
+from nexus_ai_harness.protocols.context import Context
+from nexus_ai_harness.protocols.interceptor import Interceptor
+from nexus_ai_harness.protocols.loop import Loop
+from nexus_ai_harness.protocols.model import Model
+from nexus_ai_harness.protocols.plugin import Plugin
+from nexus_ai_harness.protocols.tool import Tool
 from tests.conftest import RecordingTool, ScriptedModel
 
 

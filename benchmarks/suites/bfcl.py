@@ -11,15 +11,15 @@ from benchmarks.core.benchmark import Benchmark, Episode
 from benchmarks.core.config import BenchmarkConfig
 from benchmarks.core.registry import register
 from benchmarks.core.task import Score, Task
-from core.events import Event, ResponseReceived
-from harness import NexusAIHarness
-from harness.result import RunResult
-from harness.session import Session
-from plugins.loops import ChatLoop
-from protocols.context import Context
-from protocols.hook import Hook
-from protocols.model import Model
-from protocols.tool import Tool
+from nexus_ai_harness.core.events import Event, ResponseReceived
+from nexus_ai_harness.harness import NexusAIHarness
+from nexus_ai_harness.harness.result import RunResult
+from nexus_ai_harness.harness.session import Session
+from nexus_ai_harness.plugins.loops import ChatLoop
+from nexus_ai_harness.protocols.context import Context
+from nexus_ai_harness.protocols.hook import Hook
+from nexus_ai_harness.protocols.model import Model
+from nexus_ai_harness.protocols.tool import Tool
 
 DEFAULT_CATEGORIES = ["simple", "multiple", "parallel", "parallel_multiple"]
 # Category -> upstream file stem. ``simple`` maps to the Python split; the Java

@@ -3,19 +3,24 @@ from __future__ import annotations
 import asyncio
 import time
 
-from core.events import Event, LoopStopped
-from core.message import Message
-from core.response import Response
-from core.run import RunState
-from plugins.guards import BudgetGuard, MaxIterations, Timeout
-from plugins.hooks import CostCounter, CostState, ElapsedTime, IterationCounter
-from plugins.loops import AgenticLoop
-from plugins.permissions import AllowList, AutoApprove
-from protocols.context_manager import ContextManager
-from protocols.hook import Hook
-from protocols.model import Model
-from protocols.router import Router
-from protocols.tool import Tool
+from nexus_ai_harness.core.events import Event, LoopStopped
+from nexus_ai_harness.core.message import Message
+from nexus_ai_harness.core.response import Response
+from nexus_ai_harness.core.run import RunState
+from nexus_ai_harness.plugins.guards import BudgetGuard, MaxIterations, Timeout
+from nexus_ai_harness.plugins.hooks import (
+    CostCounter,
+    CostState,
+    ElapsedTime,
+    IterationCounter,
+)
+from nexus_ai_harness.plugins.loops import AgenticLoop
+from nexus_ai_harness.plugins.permissions import AllowList, AutoApprove
+from nexus_ai_harness.protocols.context_manager import ContextManager
+from nexus_ai_harness.protocols.hook import Hook
+from nexus_ai_harness.protocols.model import Model
+from nexus_ai_harness.protocols.router import Router
+from nexus_ai_harness.protocols.tool import Tool
 from tests.conftest import RecordingTool, ScriptedModel, make_ctx
 
 
@@ -174,7 +179,7 @@ class ClockTool(Tool):
 
 
 def test_timeout_stops_live_loop_after_expected_turns(monkeypatch):
-    import plugins.hooks.elapsed as elapsed_mod
+    import nexus_ai_harness.plugins.hooks.elapsed as elapsed_mod
 
     clock = _Clock()
     monkeypatch.setattr(elapsed_mod, "time", _FakeTime(clock))
@@ -349,7 +354,7 @@ def test_persisted_assistant_message_preserves_tool_calls():
 def test_async_tool_provider_is_expanded_into_the_loop():
     # A ToolProvider whose provide_tools is `async def` must be awaited and its
     # tools made callable, exercising the loop's ctx.invoke adaptation.
-    from protocols.tool_provider import ToolProvider
+    from nexus_ai_harness.protocols.tool_provider import ToolProvider
 
     class AsyncProvider(ToolProvider):
         def __init__(self, tool: Tool) -> None:
@@ -375,9 +380,9 @@ def test_provider_tools_are_advertised_to_the_model():
     # not merely dispatchable — a model that never sees them will never call
     # them. Drive a real BaseModel subclass through the loop and capture the
     # tools it is handed.
-    from core.response import Response as _Response
-    from plugins.models.base import BaseModel
-    from protocols.tool_provider import ToolProvider
+    from nexus_ai_harness.core.response import Response as _Response
+    from nexus_ai_harness.plugins.models.base import BaseModel
+    from nexus_ai_harness.protocols.tool_provider import ToolProvider
 
     class RecordingBaseModel(BaseModel):
         provider = "test"
@@ -408,8 +413,8 @@ def test_provider_tools_are_advertised_to_the_model():
 def test_base_model_forwards_the_tools_it_is_given():
     # complete() advertises exactly the tools it is handed, not a set it looks
     # up itself — the loop owns tool assembly.
-    from core.response import Response as _Response
-    from plugins.models.base import BaseModel
+    from nexus_ai_harness.core.response import Response as _Response
+    from nexus_ai_harness.plugins.models.base import BaseModel
 
     class RecordingBaseModel(BaseModel):
         provider = "test"

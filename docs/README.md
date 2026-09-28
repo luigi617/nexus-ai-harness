@@ -1,18 +1,22 @@
 # Documentation
 
-- [Architecture](architecture.md) — how the harness is put together.
-- [Writing a plugin](writing-a-plugin.md) — implement a protocol and register it.
-- [Code style](code-style.md) — coding conventions for the repo.
+- [Architecture](architecture.md) — how the harness fits together.
+- [Writing a plugin](writing-a-plugin.md) — build and register your own.
+- [Code style](code-style.md) — conventions for contributors.
 
 ## Plugins
 
-- [Models](plugins/models.md)
-- [Routers](plugins/routers.md)
-- [Memory](plugins/memory.md)
-- [Subagents](plugins/subagents.md)
-- [Skills](plugins/skills.md)
-- [Interventions](plugins/interventions.md)
-- Sandbox — confine tool file access and subprocesses to a workspace root.
-- Filesystem/shell tools — `read_file`, `write_file`, `list_dir`, and `shell`.
-- MCP — connect to MCP servers and expose their tools to the loop.
-- Persistence — save session snapshots and resume a run later.
+- [Models](plugins/models.md) — the LLM backends you can call.
+- [Routers](plugins/routers.md) — pick which model handles each turn.
+- [Memory](plugins/memory.md) — remember and recall across sessions.
+- [Subagents](plugins/subagents.md) — delegate a task to a fresh agent.
+- [Skills](plugins/skills.md) — load task-specific instructions on demand.
+- [Evaluators](plugins/evaluators.md) — structured scoring of agent runs.
+- [Interventions](plugins/interventions.md) — steer or stop a running agent.
+
+Other built-in plugins:
+
+- **Sandbox** — confine tool file access and commands to a workspace folder.
+- **Filesystem & shell tools** — `read_file`, `write_file`, `list_dir`, `shell`.
+- **MCP** — connect to MCP servers and use their tools.
+- **Persistence** — save a session and resume it later.

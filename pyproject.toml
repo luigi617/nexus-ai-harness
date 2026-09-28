@@ -16,12 +16,19 @@ dependencies = [
     "python-dotenv>=1.0",
 ]
 
-[project.optional-dependencies]
+[project.urls]
+Homepage = "https://github.com/luigi617/nexus-ai-harness"
+Repository = "https://github.com/luigi617/nexus-ai-harness"
+Issues = "https://github.com/luigi617/nexus-ai-harness/issues"
+
+# Dependency groups (PEP 735) are not published to PyPI, so they may use
+# direct git references. Install with `pip install -e . --group dev`.
+[dependency-groups]
 dev = [
     "pytest==9.1.1",
     "ruff==0.16.4",
     "mypy==2.3.1",
-    "nexus-ai-harness[benchmarks]",
+    { include-group = "benchmarks" },
 ]
 # Every benchmark dependency.
 benchmarks = [
@@ -66,16 +73,7 @@ convention = "google"
 "tests/**" = ["D"]
 
 [tool.ruff.lint.isort]
-known-first-party = [
-    "benchmarks",
-    "core",
-    "graph",
-    "harness",
-    "protocols",
-    "plugins",
-    "services",
-    "tests",
-]
+known-first-party = ["benchmarks", "nexus_ai_harness", "tests"]
 
 [tool.ruff.lint.flake8-builtins]
 builtins-ignorelist = ["id"]

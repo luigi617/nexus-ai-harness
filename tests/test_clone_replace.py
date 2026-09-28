@@ -4,16 +4,16 @@ import asyncio
 
 import pytest
 
-from core.events import Event, ModelCallStarted
-from core.response import Response
-from harness import NexusAIHarness, PluginStatus
-from harness.registry import Registry
-from plugins.loops import AgenticLoop
-from protocols.context import Context
-from protocols.lifecycle import Lifecycle
-from protocols.loop import Loop
-from protocols.model import Model
-from protocols.plugin import Plugin
+from nexus_ai_harness.core.events import Event, ModelCallStarted
+from nexus_ai_harness.core.response import Response
+from nexus_ai_harness.harness import NexusAIHarness, PluginStatus
+from nexus_ai_harness.harness.registry import Registry
+from nexus_ai_harness.plugins.loops import AgenticLoop
+from nexus_ai_harness.protocols.context import Context
+from nexus_ai_harness.protocols.lifecycle import Lifecycle
+from nexus_ai_harness.protocols.loop import Loop
+from nexus_ai_harness.protocols.model import Model
+from nexus_ai_harness.protocols.plugin import Plugin
 from tests.conftest import ScriptedModel
 
 

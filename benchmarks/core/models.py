@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from plugins.models import (
+from nexus_ai_harness.plugins.models import (
     AnthropicModel,
     BedrockModel,
     DeepSeekModel,
@@ -13,7 +13,7 @@ from plugins.models import (
     QwenModel,
     XAIModel,
 )
-from protocols.model import Model
+from nexus_ai_harness.protocols.model import Model
 
 _PROVIDERS: dict[str, type[Model]] = {
     "bedrock": BedrockModel,

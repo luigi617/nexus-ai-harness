@@ -1,40 +1,30 @@
 # Skills
 
-A **skill** is a named, on-demand instruction set the model loads only when it's
-relevant — *progressive disclosure*. A skill *is a tool*: the model sees its
-`name` and one-line `description` in its tool list, and when it calls the skill
-the full `instructions` are returned into the conversation to steer the
-following turns. The prompt stays small while deep, task-specific guidance is
-available exactly when needed.
+A skill is a set of instructions the agent loads only when it needs them. The
+agent sees each skill's name and one-line description; when it decides a skill is
+relevant, the full instructions are pulled into the conversation to guide the
+next steps. Your prompt stays small, and deep guidance is there when it's needed.
 
-Because a skill is a tool, there's nothing special to wire — register it like
-any other plugin.
+A skill works like any other tool, so you register it the same way.
 
-## Wiring
+## Adding skills
 
 ```python
-from harness import NexusAIHarness
-from plugins import AgenticLoop, load_skills
+from nexus_ai_harness.plugins import load_skills
 
-harness = NexusAIHarness().use(AgenticLoop()).use(model)
-harness.use(DeepCalc())                              # a code-authored skill
-for skill in load_skills("~/.nexus-ai-harness/skills"):   # or SKILL.md files
+harness.use(DeepCalc())                                   # a skill written in code
+for skill in load_skills("~/.nexus-ai-harness/skills"):   # skills from SKILL.md files
     harness.use(skill)
 ```
 
-`load_skills(directory)` returns skills you `.use()`; there is no separate skill
-tool to register. The batteries-included `default_harness(model)` works the same
-way — add skills to it with `.use(skill)`.
+Give skills names that don't clash with your other tools — they share the same
+tool namespace and go through the same permission checks.
 
-Since a skill is a tool, it flows through the permission layer by name (an
-`AllowList`/`DenyList` can gate individual skills) and shares the tool
-namespace, so give skills names that won't collide with your other tools.
+## Writing a skill
 
-## Authoring a skill
+### As a `SKILL.md` file (no code)
 
-### From a `SKILL.md` file (no code)
-
-Lay skills out one folder each, matching the Claude Code convention:
+Put each skill in its own folder:
 
 ```
 skills/
@@ -50,20 +40,14 @@ description: Respond in exaggerated pirate dialect.
 Respond only as a pirate. Begin every reply with "ARRR" and use nautical slang.
 ```
 
-`load_skills(directory)` reads every `SKILL.md` under `directory` (recursively).
-Frontmatter (`name`, `description`) is parsed eagerly so the tool listing is
-cheap; the instruction body is read lazily, only when the skill is invoked. If
-`name` is omitted it falls back to the folder name. A file that can't be read is
-skipped with a warning rather than sinking the whole load.
-
-Frontmatter is intentionally minimal: flat `key: value` pairs only (a leading
-BOM is tolerated). Nested or multi-line YAML isn't parsed, and the body must not
-begin with a `---` line.
+`load_skills(directory)` finds every `SKILL.md` under `directory`. The `name` and
+`description` come from the frontmatter (if `name` is omitted, the folder name is
+used); the instructions are the body below it.
 
 ### In code
 
 ```python
-from protocols.skill import Skill
+from nexus_ai_harness.protocols.skill import Skill
 
 class DeepCalc(Skill):
     name = "deep-calc"
@@ -73,14 +57,5 @@ class DeepCalc(Skill):
         return "Work through each step and show your work before answering."
 ```
 
-Only `name`, `description`, and `instructions` are yours to supply — the `Skill`
-base handles being called (it returns the instructions and emits the event) and
-declares an empty argument schema, since invoking a skill *is* the request to
-load it.
-
-## Observability
-
-Invoking a skill emits a `SkillInvoked(name)` event — fired before the body is
-read, so even a failed lazy load is visible — so hooks and tracers can record
-which skills a run used. The usual `ToolCallStarted` / `ToolCallCompleted`
-events fire too, since a skill is a tool.
+You only supply `name`, `description`, and `instructions`; the base class handles
+the rest.

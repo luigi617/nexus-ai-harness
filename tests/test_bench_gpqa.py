@@ -7,8 +7,8 @@ from benchmarks.suites.gpqa import (
     _render_prompt,
     _shuffle_options,
 )
-from harness.result import RunResult
-from harness.session import Session
+from nexus_ai_harness.harness.result import RunResult
+from nexus_ai_harness.harness.session import Session
 
 
 def _result(text: str) -> RunResult:

@@ -2,15 +2,15 @@ from __future__ import annotations
 
 import asyncio
 
-from core.events import Event, ModelCallStarted
-from core.response import Response
-from harness import NexusAIHarness
-from plugins.loops import AgenticLoop
-from protocols.context import Context
-from protocols.interceptor import Interceptor
-from protocols.lifecycle import Lifecycle
-from protocols.model import Model
-from protocols.plugin import Plugin
+from nexus_ai_harness.core.events import Event, ModelCallStarted
+from nexus_ai_harness.core.response import Response
+from nexus_ai_harness.harness import NexusAIHarness
+from nexus_ai_harness.plugins.loops import AgenticLoop
+from nexus_ai_harness.protocols.context import Context
+from nexus_ai_harness.protocols.interceptor import Interceptor
+from nexus_ai_harness.protocols.lifecycle import Lifecycle
+from nexus_ai_harness.protocols.model import Model
+from nexus_ai_harness.protocols.plugin import Plugin
 from tests.conftest import ScriptedModel
 
 

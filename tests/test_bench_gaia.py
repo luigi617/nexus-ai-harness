@@ -8,8 +8,8 @@ from benchmarks.suites.gaia import (
     _gaia_match,
     _normalize_str,
 )
-from harness.result import RunResult
-from harness.session import Session
+from nexus_ai_harness.harness.result import RunResult
+from nexus_ai_harness.harness.session import Session
 
 
 def _result(text: str) -> RunResult:

@@ -1,42 +1,57 @@
 # Nexus AI Harness
 
-A plugin-based harness for building LLM agents.
+Build LLM agents by composing the pieces you want.
 
-Everything an agent needs is a **plugin**, including agent loop, model, context management, permission, memory, subagent, tools, OS sandboxing, real filesystem/shell tools, MCP client, and session persistence/resume. Plugins are registered on a harness and resolved by their protocol
-type, so you compose an agent by picking the pieces you want.
+Every part of an agent — the loop, model, memory, tools, permissions, subagents,
+and more — is a **plugin**. You pick the plugins you need and register them on a
+harness. Swap any piece without touching the rest.
 
-## Example Usage
+## Install
 
-Using the default harness
-```python
-from plugins import default_harness
-from plugins.models import BedrockModel
-
-harness = default_harness(BedrockModel(model="..."))
-answer = harness.run_sync("What is 128 * 47?")  # or: await harness.run(...)
+```bash
+pip install nexus-ai-harness
 ```
 
-Or build your own:
+Set the API key for the model you'll use (copy `.env.example` to `.env` and fill
+it in). For Anthropic that's `ANTHROPIC_API_KEY`; see [Models](docs/plugins/models.md)
+for other providers.
+
+## Usage
+
+Start with the batteries-included harness:
 
 ```python
-from harness import NexusAIHarness
-from plugins.loops import AgenticLoop
+from nexus_ai_harness.plugins import default_harness
+from nexus_ai_harness.plugins.models import AnthropicModel
+
+harness = default_harness(AnthropicModel(model="..."))
+answer = harness.run_sync("What is 128 * 47?")   # or: await harness.run(...)
+```
+
+Or compose your own:
+
+```python
+from nexus_ai_harness.harness import NexusAIHarness
+from nexus_ai_harness.plugins.loops import AgenticLoop
+from nexus_ai_harness.plugins.models import AnthropicModel
 
 harness = (
     NexusAIHarness()
     .use(AgenticLoop())
-    .use(BedrockModel(model="..."))
-    .use(...)
+    .use(AnthropicModel(model="..."))
+    .use(...)                       # add the plugins you want
 )
 ```
 
 ## Documentation
 
-See [docs/](docs/README.md) for architecture, plugin guides, and how to write your own.
+See [docs/](docs/README.md) for the architecture, the plugin guides, and how to
+write your own plugin.
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution guidelines.
+See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
+
 MIT

@@ -4,21 +4,21 @@ from typing import ClassVar
 
 import pytest
 
-from core.response import Response
-from harness import MissingDependencyError, NexusAIHarness
-from harness.registry import Registry
-from harness.validation import (
+from nexus_ai_harness.core.response import Response
+from nexus_ai_harness.harness import MissingDependencyError, NexusAIHarness
+from nexus_ai_harness.harness.registry import Registry
+from nexus_ai_harness.harness.validation import (
     describe_registry,
     validate_registry,
 )
-from plugins.loops import AgenticLoop, ChatLoop
-from protocols.context_manager import ContextManager
-from protocols.hook import Hook
-from protocols.loop import Loop
-from protocols.model import Model
-from protocols.plugin import Plugin
-from protocols.router import Router
-from protocols.tool import Tool
+from nexus_ai_harness.plugins.loops import AgenticLoop, ChatLoop
+from nexus_ai_harness.protocols.context_manager import ContextManager
+from nexus_ai_harness.protocols.hook import Hook
+from nexus_ai_harness.protocols.loop import Loop
+from nexus_ai_harness.protocols.model import Model
+from nexus_ai_harness.protocols.plugin import Plugin
+from nexus_ai_harness.protocols.router import Router
+from nexus_ai_harness.protocols.tool import Tool
 from tests.conftest import RecordingTool, ScriptedModel
 
 
@@ -196,8 +196,8 @@ def test_describe_registry_empty_when_no_requires():
 
 
 def test_concrete_class_requirement_needs_the_exact_plugin():
-    from plugins.guards import BudgetGuard
-    from plugins.hooks import CostCounter, IterationCounter
+    from nexus_ai_harness.plugins.guards import BudgetGuard
+    from nexus_ai_harness.plugins.hooks import CostCounter, IterationCounter
 
     # BudgetGuard requires the concrete CostCounter; a different hook won't satisfy it.
     with pytest.raises(MissingDependencyError) as exc:
@@ -209,8 +209,8 @@ def test_concrete_class_requirement_needs_the_exact_plugin():
 
 
 def test_concrete_class_requirement_matches_subclass():
-    from plugins.guards import BudgetGuard
-    from plugins.hooks import CostCounter
+    from nexus_ai_harness.plugins.guards import BudgetGuard
+    from nexus_ai_harness.plugins.hooks import CostCounter
 
     class TieredCostCounter(CostCounter):
         pass
@@ -225,8 +225,8 @@ def test_base_requirement_matches_any_subclass():
 
 
 def test_memory_tools_require_a_memory_store(tmp_path):
-    from plugins.memory import FileMemoryStore
-    from plugins.tools import Recall
+    from nexus_ai_harness.plugins.memory import FileMemoryStore
+    from nexus_ai_harness.plugins.tools import Recall
 
     # Recall declares requires=(MemoryStore,): validation flags a missing store.
     with pytest.raises(MissingDependencyError) as exc:
@@ -238,7 +238,7 @@ def test_memory_tools_require_a_memory_store(tmp_path):
 
 
 def test_default_harness_validates(tmp_path):
-    from plugins import default_harness
+    from nexus_ai_harness.plugins import default_harness
 
     # The default harness wires every required hook and model, so validation passes.
     h = default_harness(ScriptedModel(Response(text="x")), memory_dir=str(tmp_path))

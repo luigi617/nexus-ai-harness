@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import asyncio
 
-from core.response import Response
-from plugins.loops import AgenticLoop
-from plugins.routers import LLMRouter, StickyRouter
-from protocols.model import Model
-from protocols.router import Router
+from nexus_ai_harness.core.response import Response
+from nexus_ai_harness.plugins.loops import AgenticLoop
+from nexus_ai_harness.plugins.routers import LLMRouter, StickyRouter
+from nexus_ai_harness.protocols.model import Model
+from nexus_ai_harness.protocols.router import Router
 from tests.conftest import make_ctx
 
 
@@ -131,7 +131,7 @@ class RecordingDecider(Model):
 
 
 def test_route_extracts_last_user_task_and_builds_decider_request():
-    from core.message import Message
+    from nexus_ai_harness.core.message import Message
 
     fast = FakeModel("fast", "cheap tasks")
     smart = FakeModel("smart", "hard tasks")

@@ -2,18 +2,18 @@ from __future__ import annotations
 
 import pytest
 
-from core.events import MessageAdded
-from core.message import Message
-from core.run import RunState
-from core.spawn import SpawnState
-from plugins.persistence import (
+from nexus_ai_harness.core.events import MessageAdded
+from nexus_ai_harness.core.message import Message
+from nexus_ai_harness.core.run import RunState
+from nexus_ai_harness.core.spawn import SpawnState
+from nexus_ai_harness.plugins.persistence import (
     AutoSave,
     FileSessionStore,
     resume,
     session_from_dict,
     snapshot_from_ctx,
 )
-from protocols.session_store import SessionStore
+from nexus_ai_harness.protocols.session_store import SessionStore
 from tests.conftest import make_ctx
 
 
@@ -243,7 +243,7 @@ def test_save_preserves_prior_snapshot_when_serialization_fails(tmp_path):
 
 def test_autosave_writes_on_session_ended(tmp_path):
     # AutoSave triggers on SessionEnded too — the end-of-run final snapshot.
-    from core.events import SessionEnded
+    from nexus_ai_harness.core.events import SessionEnded
 
     s = store(tmp_path)
     ctx = make_ctx(s, AutoSave())

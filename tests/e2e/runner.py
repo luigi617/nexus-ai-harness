@@ -6,14 +6,19 @@ from dataclasses import dataclass, field
 from typing import Any
 from unittest import mock
 
-from core.events import Event, ResponseReceived, ToolCallCompleted, ToolCallDenied
-from core.message import Message
-from core.response import Response
-from core.run import RunState
-from core.spawn import SpawnState
-from harness import NexusAIHarness
-from harness.session import Session
-from plugins.models import (
+from nexus_ai_harness.core.events import (
+    Event,
+    ResponseReceived,
+    ToolCallCompleted,
+    ToolCallDenied,
+)
+from nexus_ai_harness.core.message import Message
+from nexus_ai_harness.core.response import Response
+from nexus_ai_harness.core.run import RunState
+from nexus_ai_harness.core.spawn import SpawnState
+from nexus_ai_harness.harness import NexusAIHarness
+from nexus_ai_harness.harness.session import Session
+from nexus_ai_harness.plugins.models import (
     AnthropicModel,
     BedrockModel,
     DeepSeekModel,
@@ -26,10 +31,10 @@ from plugins.models import (
     QwenModel,
     XAIModel,
 )
-from protocols.context import Context
-from protocols.hook import Hook
-from protocols.model import Model
-from protocols.tool import Tool
+from nexus_ai_harness.protocols.context import Context
+from nexus_ai_harness.protocols.hook import Hook
+from nexus_ai_harness.protocols.model import Model
+from nexus_ai_harness.protocols.tool import Tool
 from tests.e2e.harnesses import build_harness
 from tests.e2e.spec import Spec
 

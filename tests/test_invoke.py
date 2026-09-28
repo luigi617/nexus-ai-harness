@@ -7,7 +7,7 @@ import threading
 
 import pytest
 
-from core.invoke import call
+from nexus_ai_harness.core.invoke import call
 
 
 def test_async_fn_is_awaited_on_the_loop():

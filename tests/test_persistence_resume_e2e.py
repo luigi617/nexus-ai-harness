@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import asyncio
 
-from core.response import Response
-from harness import NexusAIHarness
-from harness.session import Session
-from plugins.loops import AgenticLoop
-from plugins.persistence import FileSessionStore, resume
-from plugins.persistence.autosave import AutoSave
+from nexus_ai_harness.core.response import Response
+from nexus_ai_harness.harness import NexusAIHarness
+from nexus_ai_harness.harness.session import Session
+from nexus_ai_harness.plugins.loops import AgenticLoop
+from nexus_ai_harness.plugins.persistence import FileSessionStore, resume
+from nexus_ai_harness.plugins.persistence.autosave import AutoSave
 from tests.conftest import ScriptedModel
 
 

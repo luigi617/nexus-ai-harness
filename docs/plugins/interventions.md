@@ -1,24 +1,23 @@
 # Interventions
 
-External control over a running agent, applied at a safe checkpoint (before the
-loop's next iteration) — never mid-flight.
-
-## Two mechanisms, different scopes
-
-| | Scope | How |
-|---|---|---|
-| **Interrupt** | Whole tree (root → subagents) | Shared signal; `fork` passes it to children; every loop checks it before its next iteration. |
-| **Interventions** (`InjectMessage`, …) | Root session only | Per-session inbox; `fork` gives children a fresh empty one; the loop drains and applies each. |
+Interventions let you steer or stop an agent while it's running. They take effect
+at a safe point — between iterations of the loop — never in the middle of a step.
 
 ```python
+import asyncio
+from nexus_ai_harness.harness import Session
+from nexus_ai_harness.plugins.interventions import InjectMessage
+
 session = Session()
 task = asyncio.create_task(harness.run("do the big task", session=session))
-session.submit(InjectMessage("prioritize correctness over speed"))  # steer next turn
-session.interrupt()                                                  # or stop the whole tree
+
+session.submit(InjectMessage("prioritize correctness over speed"))  # steer the next turn
+session.interrupt()                                                 # stop the run
 ```
 
-<!-- TODO:
-- The Intervention protocol: apply(ctx), sync or async; not a registered plugin.
-- Session.interrupt() / clear_interrupt() / interrupted; submit() / take_interventions().
-- Adding a new intervention type (Pause, SwapModel, ...): just implement apply(ctx).
--->
+## Two ways to intervene
+
+- **Inject a message** — add guidance the agent reads on its next turn, without
+  stopping it. Applies to the session you submit it to.
+- **Interrupt** — stop the run. Interrupting the main agent also stops any
+  subagents it spawned.

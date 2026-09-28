@@ -13,11 +13,11 @@ from benchmarks.core.benchmark import Benchmark, Episode
 from benchmarks.core.config import BenchmarkConfig
 from benchmarks.core.registry import register
 from benchmarks.core.task import Score, Task
-from harness import NexusAIHarness
-from harness.result import RunResult
-from harness.session import Session
-from plugins.loops import ChatLoop
-from protocols.model import Model
+from nexus_ai_harness.harness import NexusAIHarness
+from nexus_ai_harness.harness.result import RunResult
+from nexus_ai_harness.harness.session import Session
+from nexus_ai_harness.plugins.loops import ChatLoop
+from nexus_ai_harness.protocols.model import Model
 
 _INSTRUCTION = (
     "Complete the following Python function. Return the full function "
