@@ -35,6 +35,18 @@ class ResponseReceived(Event):
 
 
 @dataclass
+class ModelCallFailed(Event):
+    """A model call raised; ``attempts`` counts requests made, if known.
+
+    The call may be a router's or context manager's, so this can arrive without
+    a preceding ``ModelCallStarted``.
+    """
+
+    error: Exception
+    attempts: int | None = None
+
+
+@dataclass
 class MessageAdded(Event):
     message: Message
 
@@ -90,6 +102,6 @@ class SessionEnded(Event):
 
 @dataclass
 class LoopStopped(Event):
-    """The loop terminated; reason distinguishes how (completed, interrupted, guard)."""
+    """The loop terminated; reason says how (e.g. completed, guard, model_error)."""
 
     reason: str

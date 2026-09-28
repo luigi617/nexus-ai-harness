@@ -1,0 +1,4 @@
+{
+  "id": 37,
+  "description": "Model backends now retry rate limits, 5xx responses, and dropped connections with backoff (honoring Retry-After) and raise typed ModelAPIError/RateLimitError/ContextLengthExceeded errors, and the built-in loops end a run with stop_reason \"model_error\" instead of raising when a model call still fails; Bedrock now uses botocore's standard retry mode, overriding AWS_MAX_ATTEMPTS/AWS_RETRY_MODE."
+}

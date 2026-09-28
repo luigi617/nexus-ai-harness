@@ -22,6 +22,7 @@ from benchmarks.suites.bfcl import (
     _params_match,
 )
 from benchmarks.suites.tau_bench import TauState, _respond
+from nexus_ai_harness.core.errors import ModelAPIError
 from nexus_ai_harness.core.response import Response
 from nexus_ai_harness.harness import NexusAIHarness
 from nexus_ai_harness.harness.result import RunResult
@@ -29,7 +30,7 @@ from nexus_ai_harness.harness.session import Session
 from nexus_ai_harness.plugins.loops import ChatLoop
 from nexus_ai_harness.protocols.lifecycle import Lifecycle
 from nexus_ai_harness.protocols.plugin import Plugin
-from tests.conftest import ScriptedModel, tau2_importable
+from tests.conftest import FailingModel, ScriptedModel, tau2_importable
 
 
 def _attempt(task_id, run_index, passed, *, cost=0.0, error=None) -> Attempt:
@@ -197,6 +198,44 @@ def test_runner_isolates_grader_errors():
     (attempt,) = report.attempts
     assert attempt.error is not None
     assert not attempt.passed
+    assert report.error_rate == 1.0
+
+
+def test_runner_counts_model_failures_as_errored_attempts():
+    # The loop ends a failed model call with a RunResult; an outage must still
+    # show up in error_rate rather than as a wrong answer.
+    model = FailingModel(ModelAPIError("HTTP 503: overloaded", status=503))
+    report = asyncio.run(Runner(_EchoBenchmark(), model, k=2).run())
+    assert report.error_rate == 1.0
+    for attempt in report.attempts:
+        assert attempt.error == "stopped: model error: HTTP 503: overloaded"
+        assert attempt.score.detail == {"error": "model_error"}
+
+
+def test_runner_stops_a_conversation_after_a_model_failure():
+    replies: list[str] = []
+
+    class _Convo(Benchmark):
+        name = "_convo_fail"
+        description = "test double"
+
+        def load_tasks(self, *, limit=None):
+            return [Task(task_id="c1", prompt="hi")]
+
+        def build_harness(self, task, model, session):
+            def on_user_turn(agent_output):
+                replies.append(agent_output)
+                return "again"
+
+            harness = NexusAIHarness().use(ChatLoop()).use(model)
+            return Episode(harness, task.prompt, on_user_turn=on_user_turn)
+
+        def grade(self, task, result: RunResult) -> Score:
+            return Score(passed=True)
+
+    model = FailingModel(ModelAPIError("down"), Response(text="turn"))
+    report = asyncio.run(Runner(_Convo(), model, k=1, max_user_turns=5).run())
+    assert replies == ["turn"]  # the failed turn is not relayed to the user
     assert report.error_rate == 1.0
 
 

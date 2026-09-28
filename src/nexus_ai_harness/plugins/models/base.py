@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 
 from nexus_ai_harness.core.message import Message
 from nexus_ai_harness.core.response import Response
+from nexus_ai_harness.plugins.models.retry import RetryPolicy, abort_when
 from nexus_ai_harness.protocols.context import Context
 from nexus_ai_harness.protocols.model import Model
 from nexus_ai_harness.protocols.tool import Tool
@@ -20,6 +21,11 @@ class BaseModel(Model):
     ``api_key_env``; they implement :meth:`_generate`. Common construction
     (key/base-url resolution, ``.env`` loading, params) and cost accounting
     live here. Keys are read only from configuration — never hardcoded.
+
+    Transient request failures are retried with exponential backoff: pass
+    ``max_retries`` to change only the retry count, or ``retry`` for full control
+    (backoff, jitter, and injectable sleep/clock). ``max_retries=0`` disables it.
+    Retrying stops once the run is interrupted or the awaiting task is cancelled.
     """
 
     provider: str = ""
@@ -37,6 +43,8 @@ class BaseModel(Model):
         base_url: str | None = None,
         max_tokens: int = 1024,
         timeout: float = 60.0,
+        max_retries: int | None = None,
+        retry: RetryPolicy | None = None,
         **params,
     ) -> None:
         self.name = model
@@ -49,11 +57,14 @@ class BaseModel(Model):
         )
         self.max_tokens = max_tokens
         self.timeout = timeout
+        self.retry = RetryPolicy.resolve(retry, max_retries)
 
     def complete(
         self, history: list[Message], tools: list[Tool], ctx: Context
     ) -> Response:
-        return self._generate(history, tools)
+        # Stop retrying once the run is interrupted: nobody will read the reply.
+        with abort_when(lambda: bool(getattr(ctx, "interrupted", False))):
+            return self._generate(history, tools)
 
     def _cost(self, usage: dict) -> float:
         input_price, output_price = self.pricing.get(self.name, (0.0, 0.0))

@@ -36,7 +36,11 @@ class OpenAICompatibleModel(BaseModel):
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
         response = post_json(
-            f"{self.base_url}/chat/completions", payload, headers, self.timeout
+            f"{self.base_url}/chat/completions",
+            payload,
+            headers,
+            self.timeout,
+            retry=self.retry,
         )
         parsed = self._parse(response)
         parsed.cost = self._cost(parsed.usage)

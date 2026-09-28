@@ -11,6 +11,7 @@ from nexus_ai_harness.plugins.models.minimax import MiniMaxModel
 from nexus_ai_harness.plugins.models.openai import OpenAIModel
 from nexus_ai_harness.plugins.models.openai_compatible import OpenAICompatibleModel
 from nexus_ai_harness.plugins.models.qwen import QwenModel
+from nexus_ai_harness.plugins.models.retry import RetryPolicy
 from nexus_ai_harness.plugins.models.xai import XAIModel
 
 __all__ = [
@@ -25,5 +26,6 @@ __all__ = [
     "OpenAICompatibleModel",
     "OpenAIModel",
     "QwenModel",
+    "RetryPolicy",
     "XAIModel",
 ]

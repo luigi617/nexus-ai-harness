@@ -9,7 +9,7 @@ from nexus_ai_harness.plugins.loops import AgenticLoop
 from nexus_ai_harness.protocols.hook import Hook
 from nexus_ai_harness.protocols.lifecycle import Lifecycle
 from nexus_ai_harness.protocols.plugin import Plugin
-from tests.conftest import ScriptedModel
+from tests.conftest import FailingModel, ScriptedModel
 
 
 class SessionRecorder(Hook):
@@ -211,3 +211,13 @@ def test_result_exposes_run_state(tmp_path):
     assert result.stop_reason == "completed"
     # cost is reachable via the returned session's typed state
     assert result.session.state(CostState).total == 0.0
+
+
+def test_model_error_returns_a_result_and_still_ends_the_session():
+    rec = SessionRecorder()
+    model = FailingModel(RuntimeError("down"))
+    h = NexusAIHarness().use(AgenticLoop()).use(model).use(rec)
+    result = h.run_sync("q")
+    assert result.stop_reason == "model_error"
+    assert result.output == "stopped: model error: down"
+    assert rec.events == ["SessionStarted", "SessionEnded"]
