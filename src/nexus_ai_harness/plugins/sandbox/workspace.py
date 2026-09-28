@@ -41,7 +41,8 @@ class WorkspaceSandbox(Sandbox, Lifecycle):
 
     * macOS: a ``sandbox-exec`` profile.
     * Linux: ``bwrap`` (bubblewrap) with a read-only ``/``, writable binds of
-      the root and scratch dir, a private ``/tmp``, and an unshared network.
+      the root and scratch dir, private empty ``/tmp`` and ``/run`` (hiding host
+      files and Unix sockets there), and an unshared network.
 
     When no backend is usable (Linux without a working ``bwrap``, other
     platforms) the command still runs with ``cwd`` at the root, a scrubbed
@@ -53,7 +54,8 @@ class WorkspaceSandbox(Sandbox, Lifecycle):
     Scope of confinement, by design:
 
     * Isolation narrows *writes* and network only — *reads* are not
-      restricted (denying them would break loading the program's own binary), so
+      restricted (denying them would break loading the program's own binary),
+      apart from the directories the Linux backend masks, so
       callers who must prevent exfiltration should also restrict which commands
       may run via ``allowed_commands``/``denied_commands``.
     * Command policy matches ``argv[0]`` (and its basename); it does not see
@@ -260,6 +262,9 @@ class WorkspaceSandbox(Sandbox, Lifecycle):
 
     def _wrap(self, argv: list[str]) -> list[str]:
         """Wrap ``argv`` with the selected isolation backend."""
+        # A backend may bind the scratch dir, so it must exist even after stop()
+        # or a host tmp cleaner removed it; otherwise every command would fail.
+        self._tmpdir.mkdir(parents=True, exist_ok=True)
         return self._isolation.wrap(argv, self._spec())
 
     def _spec(self) -> IsolationSpec:

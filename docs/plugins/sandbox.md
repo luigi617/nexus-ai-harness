@@ -27,8 +27,9 @@ Where an isolation backend is available, the kernel also enforces:
   scratch folder exposed as `$TMPDIR`.
 - **No network**, unless you pass `allow_network=True`.
 
-Reads are not restricted. To stop a command from reading and leaking files,
-limit which commands may run.
+Reads are not restricted, except that the Linux backend hides some host
+folders (see below). To stop a command from reading and leaking files, limit
+which commands may run.
 
 ## Isolation backends
 
@@ -37,11 +38,46 @@ The backend is picked automatically for the platform:
 | Platform | Backend | How it isolates |
 |---|---|---|
 | macOS | `sandbox-exec` | A Seatbelt profile that denies writes and network. |
-| Linux | `bubblewrap` | `bwrap` with a read-only `/`, writable binds of the root and scratch folder, a private `/tmp`, fresh `/dev` and `/proc`, and no network. |
+| Linux | `bubblewrap` | `bwrap` with a read-only `/`, writable binds of the root and scratch folder, private empty `/tmp` and `/run`, fresh `/dev` and `/proc`, separate PID and IPC namespaces, and no network. |
 
 On Linux, install bubblewrap (for example `apt install bubblewrap`). It also
-needs unprivileged user namespaces, which some containers disable. The sandbox
-checks that `bwrap` actually works before choosing it.
+needs unprivileged user namespaces, which some containers disable. On Ubuntu
+24.04 and later, AppArmor may block them for `bwrap` unless a profile allows
+it. The sandbox checks that `bwrap` actually works before choosing it.
+
+### Hidden folders on Linux
+
+A read-only mount does not stop a program from connecting to a Unix socket
+file. A reachable socket for D-Bus, Docker, or an ssh agent would let a command
+ask a host service to write files or open connections for it. So the Linux
+backend replaces these folders with private, empty ones:
+
+- `/tmp`, which also gives commands a writable scratch `/tmp` that is thrown
+  away afterwards;
+- `/run`, and `/var/run` when it is a real folder rather than a link to `/run`;
+- `$XDG_RUNTIME_DIR`, when it lives somewhere else.
+
+Host files in those folders are invisible to commands, not just read-only. The
+workspace root and `$TMPDIR` stay visible even when they live under `/tmp`.
+Links at the top of `/run` that point elsewhere, such as NixOS's
+`/run/current-system`, are recreated so programs reached through them still
+run.
+
+If a command needs something from a hidden folder, such as a virtualenv under
+`/tmp`, expose it read-only:
+
+```python
+from nexus_ai_harness.plugins.sandbox import BubblewrapBackend, WorkspaceSandbox
+
+WorkspaceSandbox(
+    "./workspace",
+    isolation=BubblewrapBackend(expose=["/tmp/venv"]),
+)
+```
+
+Unix sockets in other places, such as your home folder or `/var/lib`, are still
+reachable. If that matters, deny the programs that use them with
+`denied_commands`, or plug in a stricter backend.
 
 Check which backend is in use:
 
