@@ -27,10 +27,11 @@ dev = [
 benchmarks = [
     "tau-bench @ git+https://github.com/sierra-research/tau-bench",
     "tau2 @ git+https://github.com/sierra-research/tau2-bench ; python_version >= '3.12' and python_version < '3.14'",
-    "datasets",
-    "swebench",
-    "docker",
-    "pyyaml",
+    "websockets>=13.0 ; python_version >= '3.12' and python_version < '3.14'",
+    "swebench==5.0.2",
+    "datasets>=3.0.0",
+    "docker>=7.0.0",
+    "pyyaml>=6.0",
 ]
 
 [tool.setuptools.packages.find]
