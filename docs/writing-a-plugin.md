@@ -37,7 +37,7 @@ There are two ways to observe or wrap the agent without owning its parts.
 
 As it runs, the harness emits events such as `ModelCallStarted`,
 `ResponseReceived`, `ToolCallCompleted`, and `SessionEnded`. Implement `Hook` to
-watch them — useful for logging, tracing, or metrics:
+watch them. This is useful for logging, tracing, or metrics:
 
 ```python
 class Reporter(Hook):
@@ -61,13 +61,13 @@ class TimeModel(Interceptor):
     def after(self, ctx: Context) -> None: ...   # always runs, even on error
 ```
 
-`before` and `after` are for observation — they don't see the call's arguments
-or return value. Both may be `def` or `async def`.
+`before` and `after` are for observation only; they don't see the call's
+arguments or return value. Both may be `def` or `async def`.
 
 ## Owning resources with a lifecycle
 
-If your plugin holds a resource — a connection, client, or background task —
-subclass `Lifecycle` to open it once and close it reliably:
+If your plugin holds a resource, such as a connection, client, or background
+task, subclass `Lifecycle` to open it once and close it reliably:
 
 ```python
 class DbTool(Tool, Lifecycle):
@@ -88,6 +88,6 @@ async with harness:        # start on enter, stop on exit
 
 ## Removing a plugin
 
-`harness.unuse(plugin)` removes a plugin and everything it registered — its event
-subscriptions and interceptors — and stops it if it has a lifecycle. Removing a
+`harness.unuse(plugin)` removes a plugin and everything it registered (its event
+subscriptions and interceptors), and stops it if it has a lifecycle. Removing a
 plugin that was never registered does nothing.

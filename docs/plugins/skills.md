@@ -17,8 +17,8 @@ for skill in load_skills("~/.nexus-ai-harness/skills"):   # skills from SKILL.md
     harness.use(skill)
 ```
 
-Give skills names that don't clash with your other tools — they share the same
-tool namespace and go through the same permission checks.
+Give skills names that don't clash with your other tools, since they share the
+same tool namespace and go through the same permission checks.
 
 ## Writing a skill
 

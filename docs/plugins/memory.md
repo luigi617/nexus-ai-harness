@@ -15,9 +15,9 @@ Pass a path to store memories elsewhere: `FileMemoryStore("./my-memory")`.
 
 ## The tools
 
-- **`remember`** — save a note.
-- **`recall`** — search saved notes.
-- **`forget`** — delete a note.
+- **`remember`**: save a note.
+- **`recall`**: search saved notes.
+- **`forget`**: delete a note.
 
 The default harness includes memory already, so you only wire it up when
 building your own.

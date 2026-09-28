@@ -9,7 +9,7 @@ The coding conventions for this repo.
 - `mypy` must pass. Annotate public function signatures; prefer `X | None` over
   `Optional[X]`.
 - Start every module with `from __future__ import annotations`. Nothing may
-  precede the imports — a file must not begin with a module docstring or a
+  precede the imports: a file must not begin with a module docstring or a
   comment.
 
 ## Imports
@@ -33,23 +33,23 @@ The one-line rule: **comments say _why_; they never restate the code.**
   If a comment only restates the line below it, delete it.
 - **One line maximum.** A comment is a single line. If an operation seems to
   need a paragraph to explain, that is a signal to extract a well-named function
-  or simplify — do that instead of writing a longer comment.
+  or simplify. Do that instead of writing a longer comment.
 - **Comment only the non-obvious.** If you would have to explain it at code
   review, comment it; otherwise leave it out. Don't comment self-evident code.
 - **Inline format.** Start an inline comment at least two spaces after the code,
   then `#` and one space.
 
 ```python
-# Good — intent the reader can't infer from the code:
+# Good: intent the reader can't infer from the code:
 child_session._interrupt = self._session._interrupt  # interrupting root stops subagents
 
-# Bad — restates the code:
+# Bad: restates the code:
 i += 1  # increment i by one
 ```
 
 ## Docstrings
 
-A docstring describes **what a component does and how to use it** — enough for a
+A docstring describes **what a component does and how to use it**, enough for a
 reader to use it without reading its body. It does not expose internal
 implementation details. Use a docstring, not a comment, for a public contract.
 
@@ -71,16 +71,16 @@ docstring that would only repeat the name, and skip them for test modules,
   voice and keep it consistent within a file. A `@property` uses a noun phrase
   (`"""The resolved model."""`).
 
-### Sections — functions and methods
+### Sections: functions and methods
 
 Use these headings (each ending in a colon) when they apply:
 
-- `Args:` — each parameter by name; include the type only if it isn't
+- `Args:` lists each parameter by name; include the type only if it isn't
   annotated; list variadics as `*args` / `**kwargs`.
-- `Returns:` (or `Yields:` for generators) — describe the semantics of the
+- `Returns:` (or `Yields:` for generators) describes the semantics of the
   value. Omit it when the function only returns `None`, or when the summary
   already states what is returned.
-- `Raises:` — exceptions that are part of the interface. Do **not** document
+- `Raises:` lists exceptions that are part of the interface. Do **not** document
   exceptions raised only when the API is used incorrectly.
 
 ```python
@@ -99,7 +99,7 @@ def route(self, history: list[Message], ctx: Context) -> Model:
     """
 ```
 
-### Sections — classes
+### Sections: classes
 
 - Start with a one-line summary of what an *instance* represents. Don't state
   that it is a class.

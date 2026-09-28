@@ -13,8 +13,8 @@ harness.use(LLMRouter())        # choose a model per turn
 
 ## Built-in routers
 
-- **`LLMRouter`** — asks a model to choose the best model for the current turn.
-- **`StickyRouter`** — wraps another router, decides once on the first turn, and
+- **`LLMRouter`**: asks a model to choose the best model for the current turn.
+- **`StickyRouter`**: wraps another router, decides once on the first turn, and
   reuses that choice for the rest of the run.
 
 ```python

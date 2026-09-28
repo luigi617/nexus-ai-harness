@@ -1,7 +1,7 @@
 # Interventions
 
 Interventions let you steer or stop an agent while it's running. They take effect
-at a safe point — between iterations of the loop — never in the middle of a step.
+at a safe point, between iterations of the loop, never in the middle of a step.
 
 ```python
 import asyncio
@@ -17,7 +17,7 @@ session.interrupt()                                                 # stop the r
 
 ## Two ways to intervene
 
-- **Inject a message** — add guidance the agent reads on its next turn, without
+- **Inject a message**: add guidance the agent reads on its next turn, without
   stopping it. Applies to the session you submit it to.
-- **Interrupt** — stop the run. Interrupting the main agent also stops any
+- **Interrupt**: stop the run. Interrupting the main agent also stops any
   subagents it spawned.

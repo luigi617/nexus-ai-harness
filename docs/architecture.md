@@ -30,7 +30,7 @@ This lets a fleet of agents share the same model, permissions, and telemetry
 while keeping their own memory or tools. Subagent work stays isolated from the
 parent, but stopping the parent also stops its subagents.
 
-## Sync or async — your choice
+## Sync or async, your choice
 
 Any plugin method may be written as `def` or `async def`; the harness runs it
 correctly either way. Use `harness.run(...)` from async code or
@@ -38,6 +38,6 @@ correctly either way. Use `harness.run(...)` from async code or
 
 ## Per-session state
 
-A plugin can keep state that lives for one session with `ctx.state(cls)` — for
+A plugin can keep state that lives for one session with `ctx.state(cls)`, for
 example a token counter or a per-run setting. State is scoped to the session, so
 it never leaks between runs.

@@ -1,14 +1,14 @@
 # Evaluators
 
 An evaluator scores agent output against questions you define and returns typed
-answers — a yes/no, a chosen option, or a rubric score — each with a confidence.
+answers (a yes/no, a chosen option, or a rubric score), each with a confidence.
 Use it to grade runs or gate decisions instead of parsing free-form model text.
 
 ## Ask three kinds of question
 
-- **`noul`** — a yes/no question, scored 0–1.
-- **`choice`** — pick one option from a set you describe.
-- **`score`** — rate against an ordered rubric of levels.
+- **`noul`**: a yes/no question, scored 0 to 1.
+- **`choice`**: pick one option from a set you describe.
+- **`score`**: rate against an ordered rubric of levels.
 
 ## Usage
 

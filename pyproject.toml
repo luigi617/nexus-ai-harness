@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "nexus-ai-harness"
 dynamic = ["version"]
-description = "An AI harness"
+description = "A plugin-based harness for building LLM agents"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { file = "LICENSE" }
