@@ -103,16 +103,16 @@ def test_parse_no_frontmatter_uses_stem_and_zero_created_at(tmp_path):
     assert item.created_at == 0.0
 
 
-def test_parse_unterminated_header_does_not_raise(tmp_path):
+def test_parse_unterminated_header_keeps_whole_file_as_body(tmp_path):
     s = store(tmp_path)
     (tmp_path / "unterminated.md").write_text(
         "---\nid: foo\nmore body", encoding="utf-8"
     )
     item = s.get("unterminated")
-    # No closing '---': frontmatter unparsed, id=stem, created_at=0.0, body empty.
+    # No closing '---': not frontmatter, so nothing is dropped from the body.
     assert item is not None
     assert item.id == "unterminated"
-    assert item.text == ""
+    assert item.text == "---\nid: foo\nmore body"
     assert item.created_at == 0.0
 
 
@@ -185,17 +185,12 @@ def test_search_recency_breaks_ties_on_equal_hits(tmp_path, monkeypatch):
     assert [h.text for h in hits] == ["python rules", "python rocks"]
 
 
-def test_search_uses_substring_counts(tmp_path):
-    # 'java' matches inside 'javascript' (substring); more occurrences score higher.
+def test_search_matches_whole_words_only(tmp_path):
+    # 'java' must not match inside 'javascript'.
     s = store(tmp_path)
-    s.save("java once")  # 'java'.count == 1
-    s.save("javascript javascript everywhere")  # 'java' substring counted twice
-    hits = s.search("java")
-    assert hits[0].text == "javascript javascript everywhere"
-    assert {h.text for h in hits} == {
-        "java once",
-        "javascript javascript everywhere",
-    }
+    s.save("java once")
+    s.save("javascript javascript everywhere")
+    assert [h.text for h in s.search("java")] == ["java once"]
 
 
 # --- path traversal is rejected ------------------------------------------
@@ -357,3 +352,327 @@ def test_recall_treats_bool_limit_as_invalid():
     store = _RecordingStore()
     Recall().run({"query": "x", "limit": True}, make_ctx(store))
     assert store.forwarded_limit == 5
+
+
+# --- round-trip-safe format ----------------------------------------------
+
+
+def test_body_with_delimiter_lines_cannot_inject_header(tmp_path):
+    s = store(tmp_path)
+    text = "---\nid: evil\ncreated_at: 1\n---\nreal body\n---\ntail"
+    item = s.save(text)
+    loaded = FileMemoryStore(tmp_path).get(item.id)
+    assert loaded is not None
+    assert loaded.text == text
+    assert loaded.id == item.id
+    assert loaded.created_at == item.created_at
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["  padded  ", "\n\nleading blank lines", "trailing newlines\n\n", "a\r\nb", ""],
+)
+def test_text_round_trips_verbatim(tmp_path, text):
+    s = store(tmp_path)
+    item = s.save(text)
+    assert item.text == text
+    assert FileMemoryStore(tmp_path).get(item.id).text == text
+
+
+def test_serialized_file_quotes_id_and_marks_format(tmp_path):
+    s = store(tmp_path)
+    item = s.save("body", id="mem_1")
+    raw = (tmp_path / "mem_1.md").read_text(encoding="utf-8")
+    assert raw == (
+        f'---\nid: "mem_1"\ncreated_at: {item.created_at!r}\nformat: 2\n---\nbody\n'
+    )
+
+
+def test_filename_is_authoritative_over_header_id(tmp_path):
+    (tmp_path / "real.md").write_text(
+        "---\nid: other\ncreated_at: 5\n---\nbody", encoding="utf-8"
+    )
+    item = store(tmp_path).get("real")
+    assert item is not None
+    assert item.id == "real"
+    assert item.created_at == 5.0
+
+
+def test_legacy_file_still_loads(tmp_path):
+    # Exactly what the pre-format-2 serializer wrote, with a '---' line in the body.
+    (tmp_path / "mem_old.md").write_text(
+        "---\nid: mem_old\ncreated_at: 1700000000.0\n---\nfirst\n---\nsecond\n",
+        encoding="utf-8",
+    )
+    item = store(tmp_path).get("mem_old")
+    assert item is not None
+    assert item.text == "first\n---\nsecond"
+    assert item.created_at == 1700000000.0
+
+
+def test_legacy_crlf_file_is_normalized(tmp_path):
+    (tmp_path / "win.md").write_bytes(
+        b"---\r\nid: win\r\ncreated_at: 3.0\r\n---\r\n  line one\r\nline two\r\n"
+    )
+    item = store(tmp_path).get("win")
+    assert item is not None
+    assert item.text == "line one\nline two"
+    assert item.created_at == 3.0
+
+
+def test_resaving_legacy_file_keeps_created_at(tmp_path):
+    (tmp_path / "mem_old.md").write_text(
+        "---\nid: mem_old\ncreated_at: 42.0\n---\nold\n", encoding="utf-8"
+    )
+    s = store(tmp_path)
+    item = s.save("new", id="mem_old")
+    assert item.created_at == 42.0
+    assert FileMemoryStore(tmp_path).get("mem_old").text == "new"
+
+
+def test_non_utf8_file_is_skipped(tmp_path):
+    s = store(tmp_path)
+    good = s.save("fine")
+    (tmp_path / "binary.md").write_bytes(b"\xff\xfe\x00junk")
+    assert s.get("binary") is None
+    assert [i.id for i in s.all()] == [good.id]
+
+
+@pytest.mark.parametrize("bad", ["", " ", "\t\n", "a\nb", "nul\x00"])
+def test_blank_or_control_char_ids_are_rejected(tmp_path, bad):
+    s = store(tmp_path)
+    with pytest.raises(ValueError):
+        s.save("x", id=bad)
+    with pytest.raises(ValueError):
+        s.get(bad)
+    with pytest.raises(ValueError):
+        s.delete(bad)
+    assert list(tmp_path.glob("*.md")) == []
+
+
+# --- atomic, locked writes -----------------------------------------------
+
+
+def test_failed_replace_keeps_original_and_cleans_temp(tmp_path, monkeypatch):
+    import nexus_ai_harness.plugins.memory.file as filemod
+
+    s = store(tmp_path)
+    item = s.save("original")
+
+    def boom(src, dst):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(filemod.os, "replace", boom)
+    with pytest.raises(OSError):
+        s.save("replacement", id=item.id)
+    monkeypatch.undo()
+    assert FileMemoryStore(tmp_path).get(item.id).text == "original"
+    assert list(tmp_path.glob("*.tmp")) == []
+
+
+def test_save_leaves_no_temp_or_lock_entries_in_listing(tmp_path):
+    s = store(tmp_path)
+    s.save("one")
+    s.save("two")
+    assert list(tmp_path.glob("*.tmp")) == []
+    assert len(s.all()) == 2
+
+
+def test_writes_take_exclusive_flock(tmp_path, monkeypatch):
+    import nexus_ai_harness.plugins.memory.file as filemod
+
+    calls = []
+
+    class FakeFcntl:
+        LOCK_EX = 2
+
+        @staticmethod
+        def flock(fd, op):
+            calls.append(op)
+
+    monkeypatch.setattr(filemod, "_FCNTL", FakeFcntl)
+    s = store(tmp_path)
+    item = s.save("x")
+    s.delete(item.id)
+    assert calls == [FakeFcntl.LOCK_EX, FakeFcntl.LOCK_EX]
+    assert (tmp_path / ".lock").exists()
+
+
+def test_flock_failure_degrades_to_unlocked_write(tmp_path, monkeypatch):
+    import nexus_ai_harness.plugins.memory.file as filemod
+
+    class BrokenFcntl:
+        LOCK_EX = 2
+
+        @staticmethod
+        def flock(fd, op):
+            raise OSError("flock unsupported")
+
+    monkeypatch.setattr(filemod, "_FCNTL", BrokenFcntl)
+    s = store(tmp_path)
+    assert s.get(s.save("still saved").id).text == "still saved"
+
+
+def test_works_without_fcntl(tmp_path, monkeypatch):
+    import nexus_ai_harness.plugins.memory.file as filemod
+
+    monkeypatch.setattr(filemod, "_FCNTL", None)
+    s = store(tmp_path)
+    item = s.save("no fcntl")
+    assert s.get(item.id).text == "no fcntl"
+    assert s.delete(item.id) is True
+
+
+def test_concurrent_threads_never_observe_partial_files(tmp_path):
+    import threading
+
+    s = store(tmp_path)
+    item = s.save("seed")
+    values = {"seed"} | {f"value {i} " + "x" * (i * 500) for i in range(20)}
+    errors = []
+
+    def writer(i):
+        try:
+            FileMemoryStore(tmp_path).save(f"value {i} " + "x" * (i * 500), item.id)
+        except Exception as exc:  # pragma: no cover - surfaced below
+            errors.append(exc)
+
+    def reader():
+        reader_store = FileMemoryStore(tmp_path)
+        for _ in range(50):
+            got = reader_store.get(item.id)
+            if got is None or got.text not in values:
+                errors.append(AssertionError(f"partial read: {got!r}"))
+
+    threads = [threading.Thread(target=writer, args=(i,)) for i in range(20)]
+    threads += [threading.Thread(target=reader) for _ in range(3)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert errors == []
+    assert s.get(item.id).text in values
+    assert list(tmp_path.glob("*.tmp")) == []
+
+
+def _save_many_in_process(directory: str, worker: int) -> None:
+    s = FileMemoryStore(directory)
+    for i in range(10):
+        s.save(f"worker {worker} fact {i}")
+        s.save(f"worker {worker} shared {i}", id="shared")
+
+
+def test_concurrent_processes_do_not_corrupt_store(tmp_path):
+    import multiprocessing
+
+    mp = multiprocessing.get_context("spawn")
+    procs = [
+        mp.Process(target=_save_many_in_process, args=(str(tmp_path), w))
+        for w in range(3)
+    ]
+    for p in procs:
+        p.start()
+    for p in procs:
+        p.join(timeout=60)
+        assert p.exitcode == 0
+    s = store(tmp_path)
+    texts = {i.text for i in s.all()}
+    assert {f"worker {w} fact {i}" for w in range(3) for i in range(10)} <= texts
+    assert s.get("shared").text.startswith("worker ")
+    assert len(s.all()) == 31
+    assert list(tmp_path.glob("*.tmp")) == []
+
+
+# --- search cache --------------------------------------------------------
+
+
+def _count_parses(monkeypatch):
+    original = FileMemoryStore._parse
+    calls = []
+
+    def counting(path):
+        calls.append(path.name)
+        return original(path)
+
+    monkeypatch.setattr(FileMemoryStore, "_parse", staticmethod(counting))
+    return calls
+
+
+def test_repeated_search_does_not_reparse_unchanged_files(tmp_path, monkeypatch):
+    s = store(tmp_path)
+    for i in range(3):
+        s.save(f"cached fact {i}")
+    calls = _count_parses(monkeypatch)
+    s.search("cached")
+    s.search("fact")
+    s.all()
+    assert calls == []
+
+
+def test_cache_picks_up_edits_from_another_instance(tmp_path):
+    s = store(tmp_path)
+    item = s.save("old wording")
+    assert s.search("old")
+    other = FileMemoryStore(tmp_path)
+    other.save("new phrasing entirely", id=item.id)
+    assert s.search("old") == []
+    assert [h.text for h in s.search("phrasing")] == ["new phrasing entirely"]
+    other.delete(item.id)
+    assert s.all() == []
+    assert s.get(item.id) is None
+
+
+def test_returned_items_do_not_alias_the_cache(tmp_path):
+    s = store(tmp_path)
+    item = s.save("immutable")
+    s.all()[0].text = "mutated"
+    s.search("immutable")[0].text = "mutated"
+    item.text = "mutated"
+    assert s.get(item.id).text == "immutable"
+
+
+# --- search scoring ------------------------------------------------------
+
+
+def test_search_is_case_insensitive_and_ignores_punctuation(tmp_path):
+    s = store(tmp_path)
+    s.save("User prefers Dark-Mode, always.")
+    assert [h.text for h in s.search("dark MODE")] == [
+        "User prefers Dark-Mode, always."
+    ]
+
+
+def test_search_rare_terms_outweigh_common_ones(tmp_path, monkeypatch):
+    _monotonic_time(monkeypatch)
+    s = store(tmp_path)
+    s.save("rust is fast")
+    for i in range(5):
+        s.save(f"python note {i}")
+    s.save("python python here")  # newest, repeats the common term
+    hits = s.search("python rust")
+    assert hits[0].text == "rust is fast"
+
+
+def test_search_ties_break_by_id_when_created_at_equal(tmp_path, monkeypatch):
+    import nexus_ai_harness.plugins.memory.file as filemod
+
+    monkeypatch.setattr(filemod.time, "time", lambda: 1.0)
+    s = store(tmp_path)
+    s.save("same text", id="b")
+    s.save("same text", id="a")
+    s.save("same text", id="c")
+    assert [h.id for h in s.search("text")] == ["a", "b", "c"]
+    assert [h.id for h in s.all()] == ["a", "b", "c"]
+
+
+def test_search_punctuation_only_query_matches_nothing(tmp_path):
+    s = store(tmp_path)
+    s.save("something")
+    assert s.search("!!!") == []
+
+
+def test_search_non_positive_limit_returns_empty(tmp_path):
+    s = store(tmp_path)
+    s.save("match me")
+    assert s.search("match", limit=0) == []
+    assert s.search("match", limit=-1) == []
