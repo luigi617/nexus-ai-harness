@@ -14,6 +14,11 @@ class SessionStore(Plugin):
     session to a JSON-safe dict before :meth:`save` and rehydrates one from the
     dict :meth:`load` returns. Implementations persist as JSON only (never
     pickle) and confine any per-session file path by ``session_id``.
+
+    A store keeps snapshots verbatim and is agnostic to their format: the
+    snapshot carries its own schema ``version``, and upgrading an older one is
+    done by the reader after :meth:`load`, not by the store. Branching a session
+    is likewise built on :meth:`load` and :meth:`save`, so any store supports it.
     """
 
     @abstractmethod

@@ -1,9 +1,17 @@
 from __future__ import annotations
 
-import contextlib
+import warnings
 from typing import ClassVar
 
-from nexus_ai_harness.core.events import Event, MessageAdded, SessionEnded
+from nexus_ai_harness.core.events import (
+    Event,
+    IterationCompleted,
+    IterationStarted,
+    MessageAdded,
+    SessionEnded,
+    SessionSaveFailed,
+)
+from nexus_ai_harness.core.persistable import PersistenceWarning
 from nexus_ai_harness.core.spawn import SpawnState
 from nexus_ai_harness.plugins.persistence.file import snapshot_from_ctx
 from nexus_ai_harness.protocols.context import Context
@@ -13,11 +21,16 @@ from nexus_ai_harness.protocols.session_store import SessionStore
 
 
 class AutoSave(Hook):
-    """Persist the running session whenever its state meaningfully changes.
+    """Persist the running session at loop boundaries so it can be resumed.
 
-    On every message added and when the session ends, the current session
-    snapshot is written to the registered :class:`SessionStore`, so an
-    interrupted run can be resumed from its last saved point.
+    By default a snapshot is written to the registered :class:`SessionStore`
+    when a loop iteration starts or completes, but only if a message was added
+    since the last save, and always when the session ends. Saving at iteration
+    boundaries rather than on every message keeps I/O proportional to the
+    number of turns instead of the number of messages, and means a resumed
+    session never starts partway through an iteration. Pass
+    ``every_message=True`` to also save after each message, as earlier releases
+    did by default.
 
     Two invariants keep this side-channel from interfering with the run:
 
@@ -26,22 +39,57 @@ class AutoSave(Hook):
       pollute the store and burn I/O; the hook ignores any context whose
       :class:`~core.spawn.SpawnState` depth is non-zero, mirroring the e2e
       recorder's gate.
-    * A save is best-effort. :meth:`~protocols.context.Context.emit` dispatches
-      hooks without catching exceptions, so a raising ``save`` (disk full, an
-      unwritable directory, a non-serializable snapshot) would abort the whole
-      run. Persistence must never do that, so failures are swallowed.
+    * A failed save does not abort the run (unless ``strict``). It is not
+      hidden either: each failure raises a
+      :class:`~core.persistable.PersistenceWarning` and emits a
+      :class:`~core.events.SessionSaveFailed` event, and the session stays
+      pending so the next boundary retries it.
+
+    Args:
+        every_message: Also save after every added message.
+        strict: Re-raise save failures, aborting the run, instead of warning.
     """
 
     requires: ClassVar[tuple[type[Plugin], ...]] = (SessionStore,)
 
+    def __init__(self, *, every_message: bool = False, strict: bool = False) -> None:
+        self._every_message = every_message
+        self._strict = strict
+        self._unsaved: set[str] = set()  # session ids with messages not yet saved
+
     def on(self, event: Event, ctx: Context) -> None:
-        if not isinstance(event, MessageAdded | SessionEnded):
+        if not isinstance(
+            event, MessageAdded | IterationStarted | IterationCompleted | SessionEnded
+        ):
             return
         if ctx.state(SpawnState).depth != 0:  # ignore forked subagent sessions
             return
+        session_id = ctx.session_id
+        if isinstance(event, MessageAdded):
+            self._unsaved.add(session_id)
+            if self._every_message:
+                self._save(ctx)
+        elif isinstance(event, SessionEnded):
+            self._save(ctx)  # the final snapshot carries the run's stop reason
+            self._unsaved.discard(session_id)
+        elif session_id in self._unsaved:
+            self._save(ctx)
+
+    def _save(self, ctx: Context) -> None:
         store = ctx.get(SessionStore)
         if store is None:
             return
-        # Best-effort: a persistence failure must not crash the agent loop.
-        with contextlib.suppress(Exception):
-            store.save(ctx.session_id, snapshot_from_ctx(ctx))
+        session_id = ctx.session_id
+        try:
+            store.save(session_id, snapshot_from_ctx(ctx))
+        except Exception as exc:
+            if self._strict:
+                raise
+            warnings.warn(
+                f"AutoSave could not save session {session_id!r}: {exc!r}",
+                PersistenceWarning,
+                stacklevel=2,
+            )
+            ctx.emit(SessionSaveFailed(session_id, exc))
+            return
+        self._unsaved.discard(session_id)

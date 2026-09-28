@@ -3,11 +3,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from nexus_ai_harness.core.message import Message
+from nexus_ai_harness.core.persistable import persistable
 from nexus_ai_harness.protocols.context import Context
 from nexus_ai_harness.protocols.context_manager import ContextManager
 from nexus_ai_harness.protocols.model import Model
 
 
+@persistable("summarizing.summary")
 @dataclass
 class SummaryState:
     upto: int = 0

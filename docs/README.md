@@ -13,10 +13,10 @@
 - [Skills](plugins/skills.md): load task-specific instructions on demand.
 - [Evaluators](plugins/evaluators.md): structured scoring of agent runs.
 - [Interventions](plugins/interventions.md): steer or stop a running agent.
+- [Persistence](plugins/persistence.md): save, resume, and fork sessions.
 
 Other built-in plugins:
 
 - **Sandbox**: confine tool file access and commands to a workspace folder.
 - **Filesystem and shell tools**: `read_file`, `write_file`, `list_dir`, `shell`.
 - **MCP**: connect to MCP servers and use their tools.
-- **Persistence**: save a session and resume it later.

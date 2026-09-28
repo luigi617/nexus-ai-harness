@@ -15,6 +15,7 @@ from nexus_ai_harness.protocols.approver import Approver
 from nexus_ai_harness.protocols.context import Context
 from nexus_ai_harness.protocols.hook import Hook
 from nexus_ai_harness.protocols.interceptor import Interceptor
+from nexus_ai_harness.protocols.intervention import Intervention
 from nexus_ai_harness.protocols.plugin import Plugin
 
 T = TypeVar("T")
@@ -61,6 +62,16 @@ class RunContext(Context):
 
     def state(self, cls: type[T]) -> T:
         return self._session.state(cls)
+
+    @property
+    def parent_session_id(self) -> str | None:
+        return self._session.parent_id
+
+    def persisted_state(self) -> dict[str, dict]:
+        return self._session.persisted_state()
+
+    def pending_interventions(self) -> list[Intervention]:
+        return self._session.pending_interventions()
 
     async def apply_interventions(self) -> None:
         for intervention in self._session.take_interventions():
