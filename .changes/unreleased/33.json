@@ -1,0 +1,4 @@
+{
+  "id": 33,
+  "description": "Make the file memory store crash-safe with atomic, locked writes, keep note text exactly as saved, and rank recall results with whole-word BM25 search."
+}
