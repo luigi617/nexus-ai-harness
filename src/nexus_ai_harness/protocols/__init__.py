@@ -11,7 +11,12 @@ from nexus_ai_harness.protocols.lifecycle import Lifecycle
 from nexus_ai_harness.protocols.loop import Loop
 from nexus_ai_harness.protocols.model import Model
 from nexus_ai_harness.protocols.permission import Permission
-from nexus_ai_harness.protocols.sandbox import Sandbox, SandboxResult, SandboxViolation
+from nexus_ai_harness.protocols.sandbox import (
+    Sandbox,
+    SandboxResult,
+    SandboxViolation,
+    ShellResult,
+)
 from nexus_ai_harness.protocols.session_store import SessionStore
 from nexus_ai_harness.protocols.skill import Skill
 from nexus_ai_harness.protocols.tool import Tool
@@ -33,6 +38,7 @@ __all__ = [
     "SandboxResult",
     "SandboxViolation",
     "SessionStore",
+    "ShellResult",
     "Skill",
     "Tool",
     "ToolProvider",

@@ -2,19 +2,32 @@ from __future__ import annotations
 
 import os
 import shutil
-import subprocess
 import sys
 import tempfile
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from pathlib import Path
 
 from nexus_ai_harness.protocols.context import Context
 from nexus_ai_harness.protocols.lifecycle import Lifecycle
-from nexus_ai_harness.protocols.sandbox import Sandbox, SandboxResult, SandboxViolation
+from nexus_ai_harness.protocols.sandbox import (
+    Sandbox,
+    SandboxResult,
+    SandboxViolation,
+    ShellResult,
+)
+from nexus_ai_harness.services.process import TIMEOUT_RETURNCODE, run_process
+from nexus_ai_harness.services.shell import (
+    ShellInvocation,
+    default_interpreter,
+    scan_command,
+)
 
 # Exit code used when a command is killed for exceeding its timeout, matching
 # the conventional shell code for a process terminated by ``timeout(1)``.
-_TIMEOUT_RETURNCODE = 124
+_TIMEOUT_RETURNCODE = TIMEOUT_RETURNCODE
+
+_SHELL_NAMES = frozenset({"sh", "bash"})
+"""Interpreter names whose denial also disables :meth:`run_shell`."""
 
 
 class WorkspaceSandbox(Sandbox, Lifecycle):
@@ -38,8 +51,20 @@ class WorkspaceSandbox(Sandbox, Lifecycle):
       may run via ``allowed_commands``/``denied_commands``.
     * Command policy matches ``argv[0]`` (and its basename); it does not see
       through wrapper interpreters such as ``bash -c``/``python -c``.
+    * Shell strings (:meth:`run_shell`) are checked by statically scanning
+      them: every program in every pipeline, list, subshell, and compound
+      command is checked, looking through ``env``/``nohup``/``timeout``/
+      ``xargs``/``exec``/``command``/``find -exec``. Constructs whose programs
+      the scan cannot see (command or process substitution, ``eval``/``source``,
+      unquoted heredocs with expansions, arithmetic, a program name held in a
+      variable) are refused when an allowlist is set, as are variable
+      assignments (``PATH=...``, ``export``), and allowed otherwise, so a
+      denylist is a best-effort guard for shell strings. Policy matches names
+      only; it cannot tell what a name (or ``./name``) resolves to.
     * Subprocesses are confined via :meth:`run_command`; the ``resolve_path``
       check applies to the filesystem tools, not to arbitrary shell argv.
+    * A timeout kills the command's whole process group, so a shell's
+      children cannot outlive it.
 
     It is a :class:`~protocols.lifecycle.Lifecycle`: the private scratch dir it
     exposes as ``$TMPDIR`` is removed when the harness stops, so repeated tasks
@@ -141,10 +166,11 @@ class WorkspaceSandbox(Sandbox, Lifecycle):
         """Run ``argv`` confined to the root and capture its output.
 
         The command is validated by :meth:`check_command`, then run with
-        ``shell=False``, ``cwd`` set to the root, and a scrubbed minimal
-        environment. A timeout is converted into a :class:`SandboxResult` with a
-        non-zero return code rather than being raised, so callers get uniform
-        output.
+        ``shell=False``, ``cwd`` set to the root, a scrubbed minimal
+        environment, and standard input closed unless ``input`` is given. A
+        timeout kills the process group and is converted into a
+        :class:`SandboxResult` with ``timed_out`` set and a non-zero return code
+        rather than being raised, so callers get uniform output.
 
         Args:
             argv: The argument vector to execute; ``argv[0]`` is the program.
@@ -158,33 +184,102 @@ class WorkspaceSandbox(Sandbox, Lifecycle):
             SandboxViolation: If :meth:`check_command` rejects ``argv``.
         """
         self.check_command(argv)
-        command = self._wrap(argv)
-        try:
-            completed = subprocess.run(
-                command,
-                cwd=self._root,
-                env=self._env(),
-                input=input,
-                capture_output=True,
-                text=True,
-                errors="replace",  # non-UTF-8 output must not raise mid-capture
-                timeout=timeout,
-                shell=False,
-                check=False,
-            )
-        except subprocess.TimeoutExpired as exc:
-            stdout = exc.stdout if isinstance(exc.stdout, str) else ""
-            stderr = exc.stderr if isinstance(exc.stderr, str) else ""
+        result = self._execute(argv, timeout=timeout, input=input)
+        if result.timed_out:
             note = f"sandbox: command timed out after {timeout}s"
-            return SandboxResult(
-                returncode=_TIMEOUT_RETURNCODE,
-                stdout=stdout,
-                stderr=f"{stderr}\n{note}".strip(),
+            result.stderr = f"{result.stderr}\n{note}".strip()
+        return result
+
+    def check_shell(self, command: str) -> None:
+        """Validate a shell command string against the allowlist and denylist.
+
+        Every program the string runs that a static scan can identify is passed
+        to :meth:`check_command`. When an allowlist is configured, the string is
+        also refused if it can run code the scan cannot see (see the class
+        docs) or sets environment variables, since either could make an allowed
+        program run something else.
+
+        Args:
+            command: The shell command string.
+
+        Raises:
+            SandboxViolation: If any identified program is not permitted, or an
+                allowlist is set and the string cannot be fully verified.
+        """
+        scan = scan_command(command)
+        for program in scan.programs:
+            self.check_command([program])
+        if self._allowed is None:
+            return
+        if scan.opaque:
+            raise SandboxViolation(
+                "cannot verify shell command against the allowlist: "
+                f"{scan.opaque[0]}; simplify the command"
             )
-        return SandboxResult(
-            returncode=completed.returncode,
-            stdout=completed.stdout,
-            stderr=completed.stderr,
+        if scan.assignments:
+            # PATH, LD_PRELOAD, GIT_EXTERNAL_DIFF... can make a permitted program
+            # run arbitrary code, which would hollow out the allowlist.
+            raise SandboxViolation(
+                "setting environment variables is not permitted with a command "
+                f"allowlist: {scan.assignments[0]!r}"
+            )
+
+    def run_shell(
+        self,
+        command: str,
+        *,
+        timeout: float,
+        cwd: str | None = None,
+        env: Mapping[str, str | None] | None = None,
+    ) -> ShellResult:
+        """Run a shell command string confined to the root.
+
+        The string is validated by :meth:`check_shell` and run by ``bash`` (or
+        ``sh``) under the same confinement as :meth:`run_command`. The
+        interpreter itself needs no allowlist entry, since the programs it runs
+        are what the policy checks, but denying ``sh`` or ``bash`` disables
+        shell strings entirely. Standard error is merged into standard output.
+
+        Args:
+            command: The shell command string.
+            timeout: Mandatory wall-clock limit in seconds.
+            cwd: Directory to start in, confined to the root (default: root).
+            env: Variables to set (or unset, when ``None``) before running.
+
+        Returns:
+            The exit status, combined output, final confined cwd, and the
+            environment changes the command made.
+
+        Raises:
+            SandboxViolation: If the policy rejects the command or ``cwd``
+                escapes the root.
+        """
+        interpreter = default_interpreter()
+        names = {interpreter, os.path.basename(interpreter)} | _SHELL_NAMES
+        if names & self._denied:
+            raise SandboxViolation("shell commands are not permitted")
+        self.check_shell(command)
+        start = self.resolve_path(cwd) if cwd else self._root
+        invocation = ShellInvocation.build(
+            command, cwd=str(start), env=env, interpreter=interpreter
+        )
+        raw = self._execute(invocation.argv, timeout=timeout)
+        return invocation.parse(raw, confine=self.resolve_path, root=self._root)
+
+    def _execute(
+        self,
+        argv: list[str],
+        *,
+        timeout: float,
+        input: str | None = None,  # noqa: A002
+    ) -> SandboxResult:
+        """Run already-validated ``argv`` under the platform confinement."""
+        return run_process(
+            self._wrap(argv),
+            cwd=self._root,
+            env=self._env(),
+            timeout=timeout,
+            input=input,
         )
 
     # --- confinement helpers -------------------------------------------------

@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from abc import abstractmethod
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from nexus_ai_harness.protocols.plugin import Plugin
@@ -25,11 +26,31 @@ class SandboxResult:
         returncode: The process exit status; ``0`` conventionally means success.
         stdout: Captured standard output.
         stderr: Captured standard error.
+        timed_out: Whether the command was killed for exceeding its timeout.
     """
 
     returncode: int
     stdout: str
     stderr: str
+    timed_out: bool = False
+
+
+@dataclass
+class ShellResult(SandboxResult):
+    """The outcome of a shell command string run inside the sandbox.
+
+    Standard error is interleaved into ``stdout`` in the order it was written;
+    ``stderr`` only carries notes from the sandbox itself (such as a timeout).
+
+    Attributes:
+        cwd: The confined working directory the command finished in, or
+            ``None`` when it could not be observed (e.g. the command timed out).
+        env: Environment changes the command made, to carry into the next call:
+            a value to set, or ``None`` for a variable it unset.
+    """
+
+    cwd: str | None = None
+    env: dict[str, str | None] = field(default_factory=dict)
 
 
 class Sandbox(Plugin):
@@ -98,3 +119,35 @@ class Sandbox(Plugin):
         Raises:
             SandboxViolation: If :meth:`check_command` rejects ``argv``.
         """
+
+    def run_shell(
+        self,
+        command: str,
+        *,
+        timeout: float,
+        cwd: str | None = None,
+        env: Mapping[str, str | None] | None = None,
+    ) -> ShellResult:
+        """Run a shell command string (pipes, redirects, ``&&``) in the sandbox.
+
+        Optional: the default raises :class:`NotImplementedError`, so a sandbox
+        that only supports argv execution keeps working and callers fall back to
+        :meth:`run_command`. An implementation must apply its command policy to
+        every program the string runs that it can identify, and refuse strings
+        it cannot verify when that policy is an allowlist.
+
+        Args:
+            command: The shell command string, as the model wrote it.
+            timeout: Mandatory wall-clock limit in seconds.
+            cwd: Directory to start in, confined to the root (default: root).
+            env: Variables to set (or unset, when ``None``) before running.
+
+        Returns:
+            The exit status, combined output, and resulting cwd/env changes.
+
+        Raises:
+            SandboxViolation: If the policy rejects the command or ``cwd``
+                escapes the root.
+            NotImplementedError: If this sandbox cannot run shell strings.
+        """
+        raise NotImplementedError(f"{type(self).__name__} does not run shell strings")

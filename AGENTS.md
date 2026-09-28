@@ -29,6 +29,7 @@ confirm it against the doc or the source.
 | Working on on-demand instructions | [docs/plugins/skills.md](docs/plugins/skills.md) |
 | Working on structured scoring | [docs/plugins/evaluators.md](docs/plugins/evaluators.md) |
 | Steering or stopping a running agent | [docs/plugins/interventions.md](docs/plugins/interventions.md) |
+| Working on filesystem, search, or shell tools | [docs/plugins/coding-tools.md](docs/plugins/coding-tools.md) |
 
 ## Project structure
 

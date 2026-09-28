@@ -24,7 +24,15 @@ from nexus_ai_harness.plugins.hooks import ElapsedTime, IterationCounter
 from nexus_ai_harness.plugins.loops import AgenticLoop
 from nexus_ai_harness.plugins.permissions import AutoApprove
 from nexus_ai_harness.plugins.sandbox import WorkspaceSandbox
-from nexus_ai_harness.plugins.tools import ListDir, ReadFile, Shell, WriteFile
+from nexus_ai_harness.plugins.tools import (
+    EditFile,
+    Glob,
+    Grep,
+    ListDir,
+    ReadFile,
+    Shell,
+    WriteFile,
+)
 from nexus_ai_harness.protocols.lifecycle import Lifecycle
 from nexus_ai_harness.protocols.model import Model
 from nexus_ai_harness.protocols.plugin import Plugin
@@ -45,12 +53,15 @@ class SWEBenchConfig(BenchmarkConfig):
         timeout_s: Per-task wall-clock limit, in seconds.
         allow_network: Whether the agent's host-side shell may reach the network
             (on by default so it can explore/build; grading always runs in Docker).
+        shell_max_timeout_s: The longest single shell command the agent may
+            request, in seconds (e.g. running a slow test suite).
     """
 
     dataset: str = "SWE-bench/SWE-bench_Verified"
     max_steps: int = 50
     timeout_s: float = 1800.0
     allow_network: bool = True
+    shell_max_timeout_s: float = 600.0
 
 
 @dataclass
@@ -135,8 +146,11 @@ class SWEBench(Benchmark):
             .use(WorkspaceSandbox(checkout, allow_network=self.config.allow_network))
             .use(ReadFile())
             .use(WriteFile())
+            .use(EditFile())
             .use(ListDir())
-            .use(Shell())
+            .use(Grep())
+            .use(Glob())
+            .use(Shell(max_timeout=self.config.shell_max_timeout_s))
             .use(_WorkspaceCleanup(workspace))  # stop() rmtrees after grading
         )
         return Episode(harness=harness, initial_input=_render_prompt(task))
@@ -260,7 +274,8 @@ def _render_prompt(task: Task) -> str:
     """Build the agent's instructions: fix the issue by editing the repo files."""
     return (
         "You are fixing a bug in a checked-out GitHub repository. The repository "
-        "root is your workspace root; use the tools to read, edit, and run files.\n\n"
+        "root is your workspace root; use the tools to search (grep, glob), read, "
+        "edit (edit_file for targeted changes), and run files (shell).\n\n"
         "Resolve the issue below by editing the repository's source files. Do NOT "
         "edit or add test files: the fix is graded by the project's own test "
         "suite, which is applied separately.\n\n"

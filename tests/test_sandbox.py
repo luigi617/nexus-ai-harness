@@ -244,3 +244,93 @@ def test_run_command_allows_writes_inside_root_on_macos(tmp_path):
     result = sandbox.run_command([sys.executable, "-c", script], timeout=30)
     assert result.returncode == 0
     assert target.read_text() == "ok"
+
+
+# --- shell strings --------------------------------------------------------
+
+
+def test_run_command_timeout_sets_timed_out(tmp_path):
+    sandbox = WorkspaceSandbox(tmp_path)
+    result = sandbox.run_command(
+        [sys.executable, "-c", "import time; time.sleep(5)"], timeout=0.2
+    )
+    assert result.timed_out
+    assert result.returncode == 124
+
+
+def test_run_command_closes_stdin_without_input(tmp_path):
+    sandbox = WorkspaceSandbox(tmp_path)
+    code = "import sys; sys.stdout.write(repr(sys.stdin.read()))"
+    result = sandbox.run_command([sys.executable, "-c", code], timeout=30)
+    assert result.stdout == "''"
+
+
+def test_check_shell_allowlist(tmp_path):
+    sandbox = WorkspaceSandbox(tmp_path, allowed_commands=["python", "pytest", "env"])
+    sandbox.check_shell("cd src && pytest -x 2>&1 > log.txt; echo done")
+    with pytest.raises(SandboxViolation, match="not in allowlist: 'tail'"):
+        sandbox.check_shell("pytest | tail")
+    with pytest.raises(SandboxViolation, match="cannot verify"):
+        sandbox.check_shell("python $(echo x)")
+    # A variable like PATH could make an allowed name run something else.
+    for command in ("PATH=. pytest", "export PATH=.; pytest", "env PATH=. python"):
+        with pytest.raises(SandboxViolation, match="environment variables"):
+            sandbox.check_shell(command)
+
+
+def test_check_shell_denylist_allows_assignments(tmp_path):
+    sandbox = WorkspaceSandbox(tmp_path, denied_commands=["rm"])
+    sandbox.check_shell("export MODE=test; FOO=1 python x.py")
+
+
+def test_check_shell_denylist(tmp_path):
+    sandbox = WorkspaceSandbox(tmp_path, denied_commands=["rm"])
+    sandbox.check_shell("ls | wc -l")
+    for command in ("ls; rm x", "find . -exec rm {} +", "xargs rm", "env A=1 rm"):
+        with pytest.raises(SandboxViolation, match="not permitted"):
+            sandbox.check_shell(command)
+
+
+def test_run_shell_returns_state(tmp_path):
+    sandbox = WorkspaceSandbox(tmp_path)
+    (sandbox.root / "sub").mkdir()
+    result = sandbox.run_shell("cd sub && export K=v && echo hi", timeout=30)
+    assert result.returncode == 0
+    assert result.stdout == "hi\n"
+    assert result.cwd == str(sandbox.root / "sub")
+    assert result.env == {"K": "v"}
+
+    again = sandbox.run_shell(
+        'echo "$K"; pwd -P', timeout=30, cwd=result.cwd, env=result.env
+    )
+    assert again.stdout.splitlines() == ["v", str(sandbox.root / "sub")]
+
+
+def test_run_shell_rejects_cwd_outside_root(tmp_path):
+    sandbox = WorkspaceSandbox(tmp_path / "root")
+    with pytest.raises(SandboxViolation):
+        sandbox.run_shell("true", timeout=30, cwd=str(tmp_path))
+
+
+def test_protocol_run_shell_defaults_to_not_implemented(tmp_path):
+    class ArgvOnly(Sandbox):
+        def resolve_path(self, path):
+            return tmp_path
+
+        def check_command(self, argv):
+            return None
+
+        def run_command(self, argv, *, timeout, input=None):  # noqa: A002
+            return SandboxResult(0, "", "")
+
+    with pytest.raises(NotImplementedError):
+        ArgvOnly().run_shell("ls", timeout=1)
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="macOS sandbox-exec only")
+def test_run_shell_confines_writes_on_macos(tmp_path):
+    sandbox = WorkspaceSandbox(tmp_path / "root")
+    target = tmp_path / "outside.txt"
+    result = sandbox.run_shell(f"echo x > {target}", timeout=30)
+    assert result.returncode != 0
+    assert not target.exists()
