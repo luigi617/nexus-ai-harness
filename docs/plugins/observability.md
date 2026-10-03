@@ -62,8 +62,11 @@ Model and tool calls each emit a started and a completed event that share a
 | `ToolCallCompleted` | `call`, `result`, `call_id`, `duration`, `error` |
 
 Durations are in seconds, measured with `time.perf_counter()`. `error` is the
-exception a tool raised, or `None`. Generated `call_id`s are excluded from event
-equality, so two events built from the same arguments still compare equal.
+exception a tool raised, or `None`. On `ModelCallStarted` and `ToolCallStarted`,
+the generated `call_id` is excluded from event equality, so two events built
+from the same arguments still compare equal; `ModelCallCompleted` and
+`ToolCallCompleted` have no such exclusion and compare on all fields, including
+`call_id` and `duration`.
 
 Every model call goes through `services.model_call.timed_complete`, which emits
 the started/completed pair. That includes the auxiliary calls made by

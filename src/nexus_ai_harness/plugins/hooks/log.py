@@ -32,11 +32,6 @@ class LoggingHook(Hook):
     Records go to the ``"nexus_ai_harness.events"`` logger unless another is
     given; like every harness logger it is silent until the application
     configures logging. A tool call that raised is logged at ``WARNING``.
-
-    Args:
-        logger: The logger to write to.
-        level: The level for ordinary events.
-        include_content: Whether to log conversation text and tool arguments.
     """
 
     def __init__(
@@ -46,6 +41,13 @@ class LoggingHook(Hook):
         level: int = logging.INFO,
         include_content: bool = False,
     ) -> None:
+        """Initialize the hook.
+
+        Args:
+            logger: The logger to write to.
+            level: The level for ordinary events.
+            include_content: Whether to log conversation text and tool arguments.
+        """
         self._logger = logger or logging.getLogger(EVENT_LOGGER)
         self._level = level
         self._include_content = include_content
