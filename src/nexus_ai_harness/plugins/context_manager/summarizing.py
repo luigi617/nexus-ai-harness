@@ -6,6 +6,7 @@ from nexus_ai_harness.core.message import Message
 from nexus_ai_harness.protocols.context import Context
 from nexus_ai_harness.protocols.context_manager import ContextManager
 from nexus_ai_harness.protocols.model import Model
+from nexus_ai_harness.services.model_call import timed_complete
 
 
 @dataclass
@@ -113,7 +114,7 @@ class SummarizingContextManager(ContextManager):
         ]
         try:
             # Summarization is a plain completion with no tools to offer.
-            response = await ctx.invoke(model.complete, request, [], ctx)
+            response = await timed_complete(model, request, [], ctx)
         except Exception:
             return None
         text = (response.text or "").strip()

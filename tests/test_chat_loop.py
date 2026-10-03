@@ -145,7 +145,12 @@ def test_chat_loop_emits_only_call_response_and_message_events():
     ctx = make_ctx(ScriptedModel(Response(text="hi")), rec)
     asyncio.run(ChatLoop().run(ctx))
     kinds = {type(e).__name__ for e in rec.events}
-    assert kinds == {"ModelCallStarted", "ResponseReceived", "MessageAdded"}
+    assert kinds == {
+        "ModelCallStarted",
+        "ModelCallCompleted",
+        "ResponseReceived",
+        "MessageAdded",
+    }
     # unlike AgenticLoop, ChatLoop emits no LoopStopped / IterationStarted
     assert not any(isinstance(e, (LoopStopped, IterationStarted)) for e in rec.events)
 

@@ -13,6 +13,7 @@
 - [Skills](plugins/skills.md): load task-specific instructions on demand.
 - [Evaluators](plugins/evaluators.md): structured scoring of agent runs.
 - [Interventions](plugins/interventions.md): steer or stop a running agent.
+- [Observability](plugins/observability.md): logging, call timing, and usage totals.
 - [Sandbox](plugins/sandbox.md): confine file access and commands, with OS
   isolation on macOS and Linux.
 

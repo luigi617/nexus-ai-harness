@@ -3,6 +3,7 @@ from __future__ import annotations
 from nexus_ai_harness.core.events import (
     IterationStarted,
     MessageAdded,
+    ModelCallCompleted,
     ResponseReceived,
 )
 from nexus_ai_harness.core.response import Response
@@ -29,6 +30,43 @@ def test_cost_counter_accumulates():
     h.on(ResponseReceived(Response(cost=0.1)), ctx)
     h.on(ResponseReceived(Response(cost=0.25)), ctx)
     assert abs(ctx.state(CostState).total - 0.35) < 1e-9
+
+
+def test_cost_counter_accumulates_token_usage():
+    ctx = make_ctx()
+    h = CostCounter()
+    h.on(
+        ResponseReceived(Response(usage={"input_tokens": 10, "output_tokens": 3})), ctx
+    )
+    h.on(ResponseReceived(Response(usage={"input_tokens": 5, "output_tokens": 2})), ctx)
+    h.on(ResponseReceived(Response()), ctx)  # a backend that reports no usage
+    state = ctx.state(CostState)
+    assert (state.input_tokens, state.output_tokens) == (15, 5)
+
+
+def test_cost_counter_counts_a_response_once_across_both_events():
+    ctx = make_ctx()
+    h = CostCounter()
+    response = Response(cost=0.2, usage={"input_tokens": 4, "output_tokens": 1})
+    h.on(ModelCallCompleted("mcall_1", response, 0.1), ctx)
+    h.on(ResponseReceived(response), ctx)  # the loop's echo of the same response
+    state = ctx.state(CostState)
+    assert (state.total, state.input_tokens, state.output_tokens) == (0.2, 4, 1)
+
+
+def test_cost_counter_counts_an_auxiliary_model_call():
+    ctx = make_ctx()
+    h = CostCounter()
+    # A summarizer call emits ModelCallCompleted with no ResponseReceived.
+    h.on(ModelCallCompleted("mcall_1", Response(cost=0.3), 0.1), ctx)
+    h.on(ResponseReceived(Response(cost=0.1)), ctx)
+    assert abs(ctx.state(CostState).total - 0.4) < 1e-9
+
+
+def test_cost_state_is_reexported_from_core():
+    from nexus_ai_harness.core.run import CostState as CoreCostState
+
+    assert CostState is CoreCostState
 
 
 def test_cost_counter_ignores_other_events():
