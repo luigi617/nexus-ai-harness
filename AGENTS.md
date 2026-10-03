@@ -30,6 +30,7 @@ confirm it against the doc or the source.
 | Working on logging, events, or usage metrics | [docs/plugins/observability.md](docs/plugins/observability.md) |
 | Working on structured scoring | [docs/plugins/evaluators.md](docs/plugins/evaluators.md) |
 | Steering or stopping a running agent | [docs/plugins/interventions.md](docs/plugins/interventions.md) |
+| Working on the sandbox or OS isolation | [docs/plugins/sandbox.md](docs/plugins/sandbox.md) |
 
 ## Project structure
 
