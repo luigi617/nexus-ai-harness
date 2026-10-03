@@ -35,3 +35,17 @@ jobs:
       - run: pip install uv
       - run: uv pip install --system --resolution lowest-direct -e . --group dev
       - run: pytest
+
+  sandbox-bwrap:
+    name: Sandbox (bubblewrap)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+      - run: sudo apt-get update && sudo apt-get install -y bubblewrap
+      # Ubuntu 24.04+ AppArmor blocks unprivileged user namespaces, which bwrap needs.
+      - run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+      # Run the whole suite under real bwrap; the bwrap tests fail, not skip, here.
+      - run: pytest
+        env:
+          NEXUS_TEST_REQUIRE_BWRAP: "1"
