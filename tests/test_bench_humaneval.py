@@ -10,6 +10,7 @@ import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from types import SimpleNamespace
 from typing import ClassVar
 
 import pytest
@@ -621,6 +622,17 @@ def test_grade_reports_kernel_confinement():
 @_MACOS_SANDBOX
 def test_macos_sandbox_is_kernel_confined():
     assert human_eval.kernel_confined("sandbox") is True
+
+
+@pytest.mark.parametrize("enforced", [True, False])
+def test_kernel_confined_sandbox_mirrors_select_backend(monkeypatch, enforced):
+    # Covers platforms (e.g. Linux with bubblewrap) without needing one in CI.
+    monkeypatch.setattr(
+        human_eval,
+        "select_backend",
+        lambda _mode: SimpleNamespace(enforced=enforced),
+    )
+    assert human_eval.kernel_confined("sandbox") is enforced
 
 
 def test_unconfined_sandbox_resolution_warns(monkeypatch, caplog):

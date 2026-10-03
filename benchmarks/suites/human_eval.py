@@ -27,7 +27,7 @@ from nexus_ai_harness.harness import NexusAIHarness
 from nexus_ai_harness.harness.result import RunResult
 from nexus_ai_harness.harness.session import Session
 from nexus_ai_harness.plugins.loops import ChatLoop
-from nexus_ai_harness.plugins.sandbox import WorkspaceSandbox
+from nexus_ai_harness.plugins.sandbox import WorkspaceSandbox, select_backend
 from nexus_ai_harness.protocols.lifecycle import Lifecycle
 from nexus_ai_harness.protocols.model import Model
 from nexus_ai_harness.protocols.sandbox import Sandbox, SandboxViolation
@@ -487,8 +487,9 @@ def kernel_confined(isolation: str) -> bool:
     """Whether ``isolation`` confines file writes and network in the kernel.
 
     Docker always does. ``sandbox`` does only where :class:`WorkspaceSandbox`
-    has a kernel backend (today macOS ``sandbox-exec``); elsewhere it applies
-    just resource limits and a scrubbed environment. ``none`` never does.
+    has a kernel backend for the auto-selected isolation backend (macOS
+    ``sandbox-exec``, Linux ``bubblewrap``); elsewhere it applies just resource
+    limits and a scrubbed environment. ``none`` never does.
 
     Args:
         isolation: A concrete mode from :func:`resolve_isolation`.
@@ -496,7 +497,8 @@ def kernel_confined(isolation: str) -> bool:
     if isolation == "docker":
         return True
     if isolation == "sandbox":
-        return sys.platform == "darwin" and shutil.which("sandbox-exec") is not None
+        # Mirrors the backend WorkspaceSandbox itself auto-selects.
+        return select_backend("auto").enforced
     return False
 
 
