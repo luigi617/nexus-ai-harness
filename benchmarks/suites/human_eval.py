@@ -45,8 +45,10 @@ logger = logging.getLogger(__name__)
 #: Isolation modes accepted by ``HumanEvalConfig.isolation``.
 ISOLATION_MODES = ("auto", "docker", "sandbox", "none")
 
-# Docker rejects a --memory below 6 MiB, so it is the floor for both backends.
-_MIN_MEMORY_MB = 6
+# Docker's cgroup --memory accepts as little as 6 MiB, but sandbox mode's
+# RLIMIT_AS caps virtual address space, and CPython needs well above that just
+# to start: 6 MiB fails before the program runs; 64 MiB leaves real headroom.
+_MIN_MEMORY_MB = 64
 
 
 class IsolationError(RuntimeError):
@@ -74,8 +76,10 @@ class HumanEvalConfig(BenchmarkConfig):
             and a scrubbed environment. ``"none"`` is the unconfined legacy
             subprocess, for debugging only.
         memory_limit_mb: Address-space (sandbox) or cgroup memory (docker) cap
-            in MiB, at least 6; ``None`` leaves memory unlimited. Silently
-            skipped where the OS cannot enforce it (``RLIMIT_AS`` on macOS).
+            in MiB, at least 64 (sandbox mode's ``RLIMIT_AS`` needs well above
+            Docker's own 6 MiB floor just to start the interpreter); ``None``
+            leaves memory unlimited. Silently skipped where the OS cannot
+            enforce it (``RLIMIT_AS`` on macOS).
         max_file_size_mb: Largest file the child may write, in MiB, at least 1;
             ``None`` leaves it unlimited.
         max_processes: Extra processes (non-negative) the child may spawn;

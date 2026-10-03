@@ -284,6 +284,14 @@ def test_sandbox_child_memory_is_capped():
     )
 
 
+@pytest.mark.skipif(not sys.platform.startswith("linux"), reason="RLIMIT_AS on Linux")
+def test_sandbox_child_starts_at_minimum_memory_limit():
+    # The floor must leave the interpreter itself enough address space to boot;
+    # a too-low floor fails before the program runs at all.
+    minimum = ResourceLimits(memory_mb=human_eval._MIN_MEMORY_MB)
+    assert _run_check("pass\n", timeout=10, limits=minimum) is True
+
+
 def test_sandbox_child_environment_is_scrubbed(monkeypatch):
     monkeypatch.setenv("HUMANEVAL_TEST_SECRET", "hunter2")
     program = "import os\nassert 'HUMANEVAL_TEST_SECRET' not in os.environ\n"
@@ -444,7 +452,7 @@ def test_shipped_yaml_humaneval_section_builds(name):
         ("timeout_s", "0"),
         ("timeout_s", "-1"),
         ("memory_limit_mb", "0"),
-        ("memory_limit_mb", "5"),
+        ("memory_limit_mb", "63"),
         ("max_file_size_mb", "0"),
         ("max_processes", "-1"),
     ],
@@ -457,9 +465,9 @@ def test_config_rejects_out_of_range_limits(key, value):
 def test_config_accepts_boundary_limits():
     bench = get_benchmark(
         "humaneval",
-        {"memory_limit_mb": "6", "max_file_size_mb": "1", "max_processes": "0"},
+        {"memory_limit_mb": "64", "max_file_size_mb": "1", "max_processes": "0"},
     )
-    assert bench.config.memory_limit_mb == 6
+    assert bench.config.memory_limit_mb == 64
 
 
 def test_grade_inside_event_loop_runs_off_the_loop():

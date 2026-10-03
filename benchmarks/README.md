@@ -145,8 +145,9 @@ YAML file (see `benchmarks.example.yaml`):
   The mode is resolved once per run, when the first harness is built and off
   the event loop, so a Docker probe or pull doesn't stall other attempts.
   Checks also run on a worker thread.
-- `memory_limit_mb` — memory cap in MiB (default 1024, minimum 6, which is
-  Docker's floor; `none` for unlimited).
+- `memory_limit_mb` — memory cap in MiB (default 1024, minimum 64 — sandbox
+  mode's `RLIMIT_AS` needs well above Docker's own 6 MiB floor just to start
+  the interpreter; `none` for unlimited).
 - `max_file_size_mb` — largest file the code may write, in MiB (default 16,
   minimum 1; `none` for unlimited).
 - `max_processes` — extra processes the code may spawn (default 0, must not be
