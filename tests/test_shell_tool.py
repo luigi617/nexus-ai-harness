@@ -9,6 +9,7 @@ import pytest
 
 from nexus_ai_harness.plugins.sandbox import WorkspaceSandbox
 from nexus_ai_harness.plugins.tools import Shell
+from nexus_ai_harness.plugins.tools import shell as shell_module
 from nexus_ai_harness.plugins.tools.shell import (
     _DEFAULT_TIMEOUT,
     _MAX_TIMEOUT,
@@ -331,6 +332,44 @@ def test_shell_parallel_call_does_not_clobber_cwd(tmp_path, monkeypatch):
     shell.run({"command": "cd sub"}, ctx)
     slow.join(10)
     assert ctx.state(ShellState).cwd == str((tmp_path / "sub").resolve())
+
+
+def test_shell_concurrent_cd_resolves_by_issue_order_not_finish_order(
+    tmp_path, monkeypatch
+):
+    # Two calls that both cd elsewhere race on finish order; the call issued
+    # later must win even if it finishes first, so an earlier call that is
+    # merely slow to finish can't clobber a more recent move.
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "slow_target").mkdir()
+    (tmp_path / "fast_target").mkdir()
+    ctx = make_ctx()
+    shell = Shell()
+    slow = threading.Thread(
+        target=shell.run,
+        args=({"command": "sleep 1 && cd slow_target"}, ctx),
+        daemon=True,
+    )
+    slow.start()
+    time.sleep(0.2)
+    shell.run({"command": "cd fast_target"}, ctx)  # issued second, finishes first
+    slow.join(10)
+    assert ctx.state(ShellState).cwd == str((tmp_path / "fast_target").resolve())
+
+
+def test_shell_persisted_env_caps_variable_count(tmp_path, monkeypatch):
+    # Only each value's size was capped before; an uncapped variable count
+    # would make the re-embedded argv grow without bound over a long session.
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(shell_module, "_MAX_ENV_VARS", 3)
+    ctx = make_ctx()
+    shell = Shell()
+    for i in range(5):
+        shell.run({"command": f"export V{i}=x"}, ctx)
+    env = ctx.state(ShellState).env
+    assert len(env) <= 3
+    assert "V0" not in env
+    assert "V4" in env
 
 
 @pytest.mark.parametrize(

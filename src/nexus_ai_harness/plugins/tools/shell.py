@@ -3,6 +3,7 @@ from __future__ import annotations
 import math
 import os
 import shlex
+import threading
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import ClassVar
@@ -31,6 +32,9 @@ _MAX_OUTPUT = 30_000
 _SAFE_ENV_KEYS = ("PATH", "HOME", "LANG", "LC_ALL", "LC_CTYPE", "TMPDIR")
 """The only environment variables handed to an unsandboxed subprocess."""
 
+_MAX_ENV_VARS = 256
+"""Cap on distinct persisted variables, so a session's argv stays bounded."""
+
 
 @dataclass
 class ShellState:
@@ -40,10 +44,18 @@ class ShellState:
         cwd: The confined absolute directory the next command starts in, or
             ``None`` for the root.
         env: Variables the model set (a value) or unset (``None``) so far.
+        seq: Ticket counter; each call claims the next value when it starts.
+        cwd_seq: The ticket of the call that last set ``cwd``, so a call
+            issued earlier can't clobber one issued later that finishes first.
     """
 
     cwd: str | None = None
     env: dict[str, str | None] = field(default_factory=dict)
+    seq: int = 0
+    cwd_seq: int = 0
+    lock: threading.Lock = field(
+        default_factory=threading.Lock, repr=False, compare=False
+    )
 
 
 def _truncate(text: str, limit: int = _MAX_OUTPUT) -> str:
@@ -70,6 +82,19 @@ def _truncate(text: str, limit: int = _MAX_OUTPUT) -> str:
 def _scrubbed_env() -> dict[str, str]:
     """Return a minimal environment for an unsandboxed subprocess."""
     return {k: os.environ[k] for k in _SAFE_ENV_KEYS if k in os.environ}
+
+
+def _apply_env_changes(
+    env: dict[str, str | None], changes: dict[str, str | None]
+) -> None:
+    """Merge ``changes`` into ``env``, then drop the oldest entries over the cap.
+
+    Every call re-embeds all of ``env`` in its argv, so an unbounded variable
+    count would eventually make the command line too long to exec.
+    """
+    env.update(changes)
+    while len(env) > _MAX_ENV_VARS:
+        env.pop(next(iter(env)))
 
 
 def _coerce_timeout(
@@ -176,7 +201,10 @@ class Shell(Tool):
             arguments.get("timeout"), self.default_timeout, self.max_timeout
         )
         state = ctx.state(ShellState)
-        started = state.cwd
+        with state.lock:
+            started = state.cwd
+            ticket = state.seq
+            state.seq += 1
         env = dict(state.env) if self.persist_env else None
         sandbox: Sandbox | None = ctx.get(Sandbox)
         result: SandboxResult
@@ -194,13 +222,20 @@ class Shell(Tool):
 
         moved = ""
         if isinstance(result, ShellResult):
-            # Update only on a change, so a parallel call that stayed put can't
-            # overwrite the cwd another call moved to; env is already a diff.
-            if result.cwd is not None and result.cwd != (started or str(base)):
-                moved = f"\n(cwd is now {display(Path(result.cwd), base)})"
-                state.cwd = None if result.cwd == str(base) else result.cwd
-            if self.persist_env:
-                state.env.update(result.env)
+            with state.lock:
+                # A call only overwrites cwd if its ticket is at least as new as
+                # the last one applied, so a call issued earlier can't clobber a
+                # later one just because its own command happened to finish last.
+                if (
+                    result.cwd is not None
+                    and result.cwd != (started or str(base))
+                    and ticket >= state.cwd_seq
+                ):
+                    moved = f"\n(cwd is now {display(Path(result.cwd), base)})"
+                    state.cwd = None if result.cwd == str(base) else result.cwd
+                    state.cwd_seq = ticket
+                if self.persist_env:
+                    _apply_env_changes(state.env, result.env)
         return self._format(result, timeout) + moved
 
     @staticmethod

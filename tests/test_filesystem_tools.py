@@ -472,6 +472,26 @@ def test_read_and_edit_refuse_a_fifo(tmp_path):
     assert EditFile().run(edit, ctx).startswith("error: not a regular")
 
 
+@pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="needs FIFOs")
+def test_write_refuses_a_fifo_instead_of_blocking(tmp_path):
+    os.mkfifo(tmp_path / "pipe")
+    ctx = make_ctx(WorkspaceSandbox(tmp_path))
+    result = WriteFile().run({"path": "pipe", "content": "x"}, ctx)
+    assert result.startswith("error: not a regular")
+
+
+def test_edit_converts_a_new_newline_to_crlf_in_a_crlf_file(tmp_path, monkeypatch):
+    result, content = _edit(
+        tmp_path,
+        monkeypatch,
+        "one\r\ntwo\r\n",
+        old_string="one",
+        new_string="uno\ndos",
+    )
+    assert result.startswith("edited app.py: 1 replacement")
+    assert content == "uno\r\ndos\r\ntwo\r\n"
+
+
 def test_concurrent_edits_to_one_file_all_land(tmp_path):
     names = [f"v{n}" for n in range(16)]
     target = tmp_path / "m.py"

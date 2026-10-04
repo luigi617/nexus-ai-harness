@@ -216,6 +216,7 @@ class WriteFile(Tool):
         content = str(arguments.get("content", ""))
         try:
             resolved = resolve(path, ctx)
+            _require_regular(resolved)
             resolved.parent.mkdir(parents=True, exist_ok=True)
             data = content.encode("utf-8")
             with _write_lock(resolved):
@@ -363,6 +364,9 @@ class EditFile(Tool):
                 # The model usually writes \n; match it against a CRLF file's lines.
                 old, new = _to_crlf(old), _to_crlf(new)
                 count = text.count(old)
+            elif crlf and "\n" in new:
+                # old matched as-is, but a bare \n in new would mix line endings.
+                new = _to_crlf(new)
             if count == 0:
                 raise _EditError(
                     f"{where}old_string not found in {path}; it must match the "
