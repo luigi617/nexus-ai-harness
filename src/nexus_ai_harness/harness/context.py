@@ -58,7 +58,18 @@ def _wants_invocation(interceptor: Interceptor, method: str) -> bool:
     wants_invocation = _wants_invocation_cache.get(key)
     if wants_invocation is None:
         override = getattr(interceptor, method)
-        wants_invocation = len(inspect.signature(override).parameters) > 1
+        # Only positional params distinguish the signatures; a **kwargs catch-all
+        # or a keyword-only extra on the old style must not count as the new one.
+        positional_kinds = (
+            inspect.Parameter.POSITIONAL_ONLY,
+            inspect.Parameter.POSITIONAL_OR_KEYWORD,
+        )
+        positional = [
+            p
+            for p in inspect.signature(override).parameters.values()
+            if p.kind in positional_kinds
+        ]
+        wants_invocation = len(positional) > 1
         _wants_invocation_cache[key] = wants_invocation
     return wants_invocation
 

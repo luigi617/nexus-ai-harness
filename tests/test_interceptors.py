@@ -484,6 +484,34 @@ def test_old_and_new_style_interceptors_fire_together():
     assert order == ["old-before", "new-before:go", "new-after:ok"]
 
 
+def test_old_style_override_with_kwargs_catchall_is_not_mistaken_for_new_style():
+    seen: list[Context] = []
+
+    class CatchAll(Interceptor):
+        target = _Widget
+
+        def before(self, ctx: Context, **kwargs: object) -> None:
+            seen.append(ctx)
+
+    ctx = _ctx_with(CatchAll())
+    asyncio.run(ctx.invoke(_Widget().go))
+    assert seen == [ctx]
+
+
+def test_old_style_override_with_keyword_only_default_is_not_mistaken_for_new_style():
+    seen: list[Context] = []
+
+    class WithExtra(Interceptor):
+        target = _Widget
+
+        def before(self, ctx: Context, *, extra: object = None) -> None:
+            seen.append(ctx)
+
+    ctx = _ctx_with(WithExtra())
+    asyncio.run(ctx.invoke(_Widget().go))
+    assert seen == [ctx]
+
+
 def test_invoke_does_not_mark_interceptor_or_non_model_errors():
     model = ScriptedModel(Response(text="x"))
     ctx = _ctx_with(model, _FailingBefore())
