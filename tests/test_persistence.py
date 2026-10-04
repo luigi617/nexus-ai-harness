@@ -402,8 +402,8 @@ def test_autosave_retries_after_a_failed_save(tmp_path):
 # --- schema versioning ------------------------------------------------------
 
 
-def test_versionless_v1_snapshot_still_loads(tmp_path):
-    # Files written before versioning existed are treated as v1 and migrated.
+def test_versionless_snapshot_still_loads(tmp_path):
+    # A file saved without a "version" key defaults to version 1, the current one.
     s = store(tmp_path)
     legacy = {
         "id": "sess_old",
@@ -419,12 +419,9 @@ def test_versionless_v1_snapshot_still_loads(tmp_path):
     assert session.state(RunState).stop_reason == "completed"
 
 
-def test_migrate_upgrades_v1_to_current():
+def test_migrate_stamps_version_on_an_already_current_snapshot():
     out = migrate({"id": "s", "history": []})
     assert out["version"] == SCHEMA_VERSION
-    assert out["state"] == {}
-    assert out["interventions"] == []
-    assert out["parent_id"] is None
 
 
 def test_newer_snapshot_version_fails_loudly(tmp_path):
@@ -445,7 +442,7 @@ def test_snapshot_version_error_is_a_value_error():
 
 
 def test_migrations_chain_to_current(monkeypatch):
-    # A future v3 only needs a bumped SCHEMA_VERSION plus one registered step.
+    # A future v2 only needs a bumped SCHEMA_VERSION plus one registered step.
     monkeypatch.setattr(schema, "SCHEMA_VERSION", SCHEMA_VERSION + 1)
     monkeypatch.setitem(
         schema._MIGRATIONS, SCHEMA_VERSION, lambda d: {**d, "added": True}
@@ -453,7 +450,6 @@ def test_migrations_chain_to_current(monkeypatch):
     out = schema.migrate({"id": "s", "history": []})  # starts at v1
     assert out["version"] == SCHEMA_VERSION + 1
     assert out["added"] is True
-    assert out["state"] == {}  # the v1 -> v2 step ran too
 
 
 def test_missing_migration_step_fails_loudly(monkeypatch):
@@ -462,7 +458,8 @@ def test_missing_migration_step_fails_loudly(monkeypatch):
         schema.migrate({"version": SCHEMA_VERSION, "history": []})
 
 
-def test_register_migration_rejects_duplicates():
+def test_register_migration_rejects_duplicates(monkeypatch):
+    monkeypatch.setitem(schema._MIGRATIONS, 1, lambda d: d)
     with pytest.raises(ValueError, match="already registered"):
         register_migration(1)(lambda d: d)
 

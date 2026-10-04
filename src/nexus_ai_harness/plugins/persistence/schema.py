@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 1
 """The snapshot format version this release writes and the newest it can read."""
 
 Migration = Callable[[dict], dict]
@@ -83,16 +83,5 @@ def migrate(data: dict) -> dict:
             raise SnapshotVersionError(f"no migration from snapshot version {version}")
         out = step(out)
         version += 1
-        out["version"] = version
+    out["version"] = version
     return out
-
-
-@register_migration(1)
-def _v1_to_v2(data: dict) -> dict:
-    # v2 added fork lineage, persisted plugin state, and pending interventions.
-    return {
-        **data,
-        "parent_id": data.get("parent_id"),
-        "state": data.get("state", {}),
-        "interventions": data.get("interventions", []),
-    }

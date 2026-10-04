@@ -121,7 +121,7 @@ A snapshot is a JSON object:
 
 ```json
 {
-  "version": 2,
+  "version": 1,
   "id": "sess_...",
   "parent_id": null,
   "history": [{"role": "user", "content": "hi", "id": "msg_...", "...": "..."}],
@@ -131,11 +131,12 @@ A snapshot is a JSON object:
 }
 ```
 
-Files without a `version` come from before versioning and load as version 1.
-When it loads, a snapshot is upgraded step by step to the current
-`SCHEMA_VERSION` using the registered migrations. A snapshot newer than this
-release supports raises `SnapshotVersionError`, a `ValueError`, instead of
-quietly dropping data it doesn't understand.
+Files without a `version` key load as version 1, the current one. When it
+loads, a snapshot is upgraded step by step to the current `SCHEMA_VERSION`
+using the registered migrations. A snapshot newer than this release supports
+raises `SnapshotVersionError`, a `ValueError`, instead of quietly dropping data
+it doesn't understand. No format change has shipped yet, so there are no
+registered migrations.
 
 To change the format, bump `SCHEMA_VERSION` in
 `plugins/persistence/schema.py` and register a migration from the previous
@@ -144,8 +145,8 @@ version:
 ```python
 from nexus_ai_harness.plugins.persistence import register_migration
 
-@register_migration(2)
-def _v2_to_v3(data: dict) -> dict:
+@register_migration(1)
+def _v1_to_v2(data: dict) -> dict:
     return {**data, "new_field": data.get("new_field", [])}
 ```
 
