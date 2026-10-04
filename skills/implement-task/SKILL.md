@@ -61,8 +61,11 @@ git checkout -b <short-descriptive-branch-name>
 - Match existing patterns in neighboring files under `core/`, `protocols/`,
   `plugins/`, `services/`, `harness/`, or `graph/` — whichever layer the task
   touches.
-- Add or update tests under `tests/` for any behavior change (required by
-  `AGENTS.md`).
+- Favor the choice that scales and extends without a rewrite: depend on a
+  protocol instead of a concrete plugin when the next variant is plausible,
+  avoid hard-coded limits/assumptions, and watch for hot paths that degrade
+  badly as data or usage grows. This is a tiebreaker, not license to add
+  speculative abstractions — see the next bullet.
 - Keep the diff scoped to the task — no speculative abstractions or unrelated
   cleanup.
 
@@ -88,9 +91,13 @@ change:
 
 - Does it actually solve the stated task, with no leftover TODOs or
   half-finished branches of logic?
+- Any bugs or potential issues: edge cases, error paths that swallow
+  failures, race conditions, unvalidated boundary input?
 - Does every changed public API have a docstring per `docs/code-style.md`?
 - Are protocols depended on instead of concrete plugins where that seam
   exists?
+- Will this hold up if usage/data grows or the next similar case needs
+  adding — or does it need a rewrite then?
 - Will you need a changelog fragment (next step covers this)?
 - Rerun `pytest` once more after any fix-ups from this review.
 
