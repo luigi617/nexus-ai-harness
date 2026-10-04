@@ -43,13 +43,24 @@ def _overrides(interceptor: Interceptor, method: str) -> bool:
     return getattr(type(interceptor), method) is not getattr(Interceptor, method)
 
 
-def _wants_invocation(override: Callable[..., Any]) -> bool:
-    """Whether a ``before``/``after`` override expects invocation metadata.
+_wants_invocation_cache: dict[tuple[type, str], bool] = {}
+
+
+def _wants_invocation(interceptor: Interceptor, method: str) -> bool:
+    """Whether ``interceptor``'s override of ``method`` expects invocation metadata.
 
     Distinguishes the current signature from the single-argument
-    ``before(ctx)`` / ``after(ctx)`` one kept working for compatibility.
+    ``before(ctx)`` / ``after(ctx)`` one kept working for compatibility. Cached
+    per (interceptor class, method name) since every call hits this and the
+    signature can't change at runtime.
     """
-    return len(inspect.signature(override).parameters) > 1
+    key = (type(interceptor), method)
+    wants_invocation = _wants_invocation_cache.get(key)
+    if wants_invocation is None:
+        override = getattr(interceptor, method)
+        wants_invocation = len(inspect.signature(override).parameters) > 1
+        _wants_invocation_cache[key] = wants_invocation
+    return wants_invocation
 
 
 class RunContext(Context):
@@ -122,7 +133,7 @@ class RunContext(Context):
             invocation = None
         else:
             interceptors = self._registry.interceptors_for(plugin)
-            invocation = Invocation(plugin, fn.__name__, args, kwargs)
+            invocation = Invocation(plugin, fn.__name__, args, dict(kwargs))
         result: Any = None
         error: BaseException | None = None
         # Only entered interceptors get an after, avoiding unpaired teardown.
@@ -131,7 +142,7 @@ class RunContext(Context):
             for interceptor in interceptors:
                 if _overrides(interceptor, "before"):
                     assert invocation is not None  # interceptors implies a plugin
-                    if _wants_invocation(interceptor.before):
+                    if _wants_invocation(interceptor, "before"):
                         await call(interceptor.before, invocation, self)
                     else:
                         await call(interceptor.before, self)
@@ -151,7 +162,7 @@ class RunContext(Context):
                 continue
             try:
                 assert invocation is not None  # entered implies a plugin
-                if _wants_invocation(interceptor.after):
+                if _wants_invocation(interceptor, "after"):
                     await call(interceptor.after, invocation, outcome, self)
                 else:
                     await call(interceptor.after, self)

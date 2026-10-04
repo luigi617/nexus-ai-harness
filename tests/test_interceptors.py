@@ -414,6 +414,22 @@ def test_before_receives_passed_through_args_and_kwargs():
     assert seen[0].kwargs == {"b": 2}
 
 
+def test_mutating_invocation_kwargs_in_before_does_not_affect_the_call():
+    class Adder(Plugin):
+        async def add(self, a: int, b: int = 0) -> int:
+            return a + b
+
+    class Mutating(Interceptor):
+        target = Adder
+
+        def before(self, invocation: Invocation, ctx: Context) -> None:
+            invocation.kwargs["b"] = 999
+
+    ctx = _ctx_with(Mutating())
+    result = asyncio.run(ctx.invoke(Adder().add, 1, b=2))
+    assert result == 3
+
+
 def test_after_receives_the_returned_result():
     outcomes: list[InvocationOutcome] = []
 
