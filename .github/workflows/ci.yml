@@ -11,7 +11,7 @@ concurrency:
 
 jobs:
   test:
-    name: Tests
+    name: Tests (Linux)
     runs-on: ubuntu-latest
     timeout-minutes: 10
     strategy:
@@ -62,8 +62,16 @@ jobs:
 
   min-version:
     name: Min Version
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 10
+    # Harmless on Linux/macOS; on Windows it works around tau-bench's setup.py
+    # failing to decode under the non-UTF-8 default locale (see test-windows).
+    env:
+      PYTHONUTF8: "1"
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
