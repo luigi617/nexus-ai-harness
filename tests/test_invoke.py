@@ -7,7 +7,7 @@ import threading
 
 import pytest
 
-from nexus_ai_harness.core.invoke import call
+from nexus_ai_harness.core.invoke import call, offload_cancelled
 
 
 def test_async_fn_is_awaited_on_the_loop():
@@ -139,3 +139,29 @@ def test_call_treats_a_class_as_a_thread_offloaded_factory():
 
     result = asyncio.run(call(Widget))
     assert isinstance(result, Widget)
+
+
+def test_offload_cancelled_is_none_outside_an_offloaded_call():
+    assert offload_cancelled() is None
+
+
+def test_offloaded_fn_sees_its_awaiting_task_cancelled():
+    seen: list[bool | None] = []
+    running, released = threading.Event(), threading.Event()
+
+    def work() -> None:
+        seen.append(offload_cancelled())
+        running.set()
+        released.wait(5)
+        seen.append(offload_cancelled())
+
+    async def main() -> None:
+        task = asyncio.ensure_future(call(work))
+        await asyncio.to_thread(running.wait, 5)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        released.set()
+
+    asyncio.run(main())
+    assert seen == [False, True]

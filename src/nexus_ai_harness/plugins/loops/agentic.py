@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import asyncio
 
+from nexus_ai_harness.core.errors import failure_attempts, is_model_failure
 from nexus_ai_harness.core.events import (
     IterationCompleted,
     IterationStarted,
     LoopStopped,
+    ModelCallFailed,
     ResponseReceived,
 )
 from nexus_ai_harness.core.message import Message
@@ -23,6 +25,17 @@ from nexus_ai_harness.services.tool_runner import ToolRunner
 
 
 class AgenticLoop(Loop):
+    """Calls the model and runs its tool calls until it answers without any.
+
+    Every exit sets ``RunState.stop_reason``: ``"completed"``, ``"interrupted"``,
+    ``"guard: <reason>"``, or ``"model_error"``. A model call that still fails
+    after the backend's own retries, whether made by this loop, a ``Router``, or
+    a ``ContextManager``, ends the run like a guard stop: it emits
+    ``ModelCallFailed`` and ``LoopStopped`` and returns a ``"stopped: ..."`` text,
+    so the caller gets a ``RunResult`` instead of an exception. Errors that are
+    not model failures, such as a raising interceptor, still propagate.
+    """
+
     requires = (Model,)
 
     async def run(self, ctx: Context) -> str:
@@ -52,18 +65,35 @@ class AgenticLoop(Loop):
                 ctx.emit(LoopStopped(reason))
                 return f"stopped: {decision.reason}"
 
-            history = ctx.history
-            for cm in ctx.all(ContextManager):  # middleware chain
-                history = await ctx.invoke(cm.process, history, ctx)
-            model = (
-                await ctx.invoke(router.route, history, ctx)
-                if router
-                else ctx.get(Model)
-            )
-            if model is None:
-                raise LookupError("no model registered")
-            # Hand the model exactly the tools the runner can dispatch.
-            response = await timed_complete(model, history, available, ctx)
+            try:
+                history = ctx.history
+                for cm in ctx.all(ContextManager):  # middleware chain
+                    history = await ctx.invoke(cm.process, history, ctx)
+                model = (
+                    await ctx.invoke(router.route, history, ctx)
+                    if router
+                    else ctx.get(Model)
+                )
+                if model is None:
+                    raise LookupError("no model registered")
+                # Hand the model exactly the tools the runner can dispatch.
+                response = await timed_complete(model, history, available, ctx)
+            except Exception as exc:
+                # A failed model call, wherever made, mustn't crash the run.
+                if not is_model_failure(exc):
+                    raise
+                ctx.emit(ModelCallFailed(exc, failure_attempts(exc)))
+                # A retry sequence cut short by an interrupt is an interrupt.
+                interrupted = ctx.interrupted
+                reason = "interrupted" if interrupted else "model_error"
+                ctx.state(RunState).stop_reason = reason
+                ctx.emit(IterationCompleted(i))
+                ctx.emit(LoopStopped(reason))
+                return (
+                    "stopped: interrupted"
+                    if interrupted
+                    else f"stopped: model error: {exc}"
+                )
             ctx.emit(ResponseReceived(response))
             ctx.add_message(
                 Message(

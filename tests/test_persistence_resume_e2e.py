@@ -2,8 +2,6 @@ from __future__ import annotations
 
 import asyncio
 
-import pytest
-
 from nexus_ai_harness.core.message import Message
 from nexus_ai_harness.core.response import Response
 from nexus_ai_harness.harness import NexusAIHarness
@@ -161,15 +159,15 @@ class _FailingModel(Model):
 
 
 def test_chat_loop_input_survives_a_failing_model_call(tmp_path):
-    # ChatLoop emits no iteration events, and a raising loop never reaches
-    # SessionEnded; the user's input must still be on disk.
+    # ChatLoop ends the run with model_error rather than raising, but the
+    # model-call-boundary autosave must still have the user's input on disk.
     store = FileSessionStore(tmp_path)
     harness = (
         NexusAIHarness().use(ChatLoop()).use(_FailingModel()).use(store).use(AutoSave())
     )
     session = Session()
-    with pytest.raises(RuntimeError, match="model API down"):
-        harness.run_sync("important user input", session=session)
+    result = harness.run_sync("important user input", session=session)
+    assert result.stop_reason == "model_error"
     saved = store.load(session.id)
     assert saved is not None
     assert [m["content"] for m in saved["history"]] == ["important user input"]

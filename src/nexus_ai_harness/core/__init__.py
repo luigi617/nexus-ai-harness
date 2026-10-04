@@ -1,5 +1,10 @@
 from __future__ import annotations
 
+from nexus_ai_harness.core.errors import (
+    ContextLengthExceeded,
+    ModelAPIError,
+    RateLimitError,
+)
 from nexus_ai_harness.core.events import (
     ApprovalRequested,
     Event,
@@ -8,6 +13,7 @@ from nexus_ai_harness.core.events import (
     LoopStopped,
     MessageAdded,
     ModelCallCompleted,
+    ModelCallFailed,
     ModelCallStarted,
     ResponseReceived,
     SessionEnded,
@@ -26,6 +32,7 @@ from nexus_ai_harness.core.response import Response
 
 __all__ = [
     "ApprovalRequested",
+    "ContextLengthExceeded",
     "Event",
     "GuardDecision",
     "IterationCompleted",
@@ -33,11 +40,14 @@ __all__ = [
     "LoopStopped",
     "Message",
     "MessageAdded",
+    "ModelAPIError",
     "ModelCallCompleted",
+    "ModelCallFailed",
     "ModelCallStarted",
     "PermissionDecision",
     "PermissionVerdict",
     "PersistenceWarning",
+    "RateLimitError",
     "Response",
     "ResponseReceived",
     "SessionEnded",

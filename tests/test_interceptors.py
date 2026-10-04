@@ -4,6 +4,7 @@ import asyncio
 
 import pytest
 
+from nexus_ai_harness.core.errors import is_model_failure
 from nexus_ai_harness.core.response import Response
 from nexus_ai_harness.harness.context import RunContext
 from nexus_ai_harness.harness.harness import NexusAIHarness
@@ -347,3 +348,39 @@ def test_invoke_preserves_primary_cause_and_appends_teardown_at_tail():
         asyncio.run(ctx.invoke(widget.work))
     assert isinstance(excinfo.value.__context__, KeyError)  # primary cause kept
     assert isinstance(excinfo.value.__context__.__context__, RuntimeError)  # teardown
+
+
+# --- model failure marking --------------------------------------------------
+
+
+class _RaisingModel(Model):
+    def complete(self, history, tools, ctx):
+        raise ValueError("provider down")
+
+
+class _FailingBefore(Interceptor):
+    target = Model
+
+    def before(self, ctx: Context) -> None:
+        raise ValueError("before failed")
+
+
+def test_invoke_marks_errors_raised_by_a_model_method():
+    model = _RaisingModel()
+    ctx = _ctx_with()
+    with pytest.raises(ValueError) as excinfo:
+        asyncio.run(ctx.invoke(model.complete, [], [], ctx))
+    assert is_model_failure(excinfo.value)
+
+
+def test_invoke_does_not_mark_interceptor_or_non_model_errors():
+    model = ScriptedModel(Response(text="x"))
+    ctx = _ctx_with(model, _FailingBefore())
+    with pytest.raises(ValueError) as excinfo:
+        asyncio.run(ctx.invoke(model.complete, [], [], ctx))
+    assert not is_model_failure(excinfo.value)
+
+    widget = _CtxWidget()
+    with pytest.raises(ValueError) as excinfo:
+        asyncio.run(_ctx_with().invoke(widget.work))
+    assert not is_model_failure(excinfo.value)
