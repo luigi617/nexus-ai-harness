@@ -1,4 +1,0 @@
-{
-  "id": 39,
-  "description": "Add coding tools for agents working in a repository: edit_file for exact-string edits, grep and glob for code search, ranged and line-numbered read_file, and a shell that supports pipes and redirects and remembers its working directory and environment between calls."
-}

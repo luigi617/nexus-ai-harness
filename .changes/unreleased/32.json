@@ -1,4 +1,0 @@
-{
-  "id": 32,
-  "description": "Enforce sandbox isolation on Linux with bubblewrap, add pluggable isolation backends with isolation/require_isolation options, and warn when commands run without OS isolation."
-}

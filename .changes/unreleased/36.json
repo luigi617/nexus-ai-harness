@@ -1,4 +1,0 @@
-{
-  "id": 36,
-  "description": "Version session snapshots with migrations, persist opt-in plugin state and pending interventions, add session forking, and make AutoSave save at loop boundaries instead of every message (use AutoSave(every_message=True) for the old behavior); snapshot files are now owner-only."
-}
