@@ -26,6 +26,7 @@ from nexus_ai_harness.core.events import (
 )
 from nexus_ai_harness.core.guard import GuardDecision
 from nexus_ai_harness.core.ids import new_id
+from nexus_ai_harness.core.invocation import Invocation, InvocationOutcome
 from nexus_ai_harness.core.message import Message
 from nexus_ai_harness.core.permission import PermissionDecision, PermissionVerdict
 from nexus_ai_harness.core.persistable import PersistenceWarning, persistable
@@ -37,6 +38,8 @@ __all__ = [
     "ContextLengthExceeded",
     "Event",
     "GuardDecision",
+    "Invocation",
+    "InvocationOutcome",
     "IterationCompleted",
     "IterationStarted",
     "LoopStopped",

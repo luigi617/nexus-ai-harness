@@ -5,6 +5,7 @@ import asyncio
 import pytest
 
 from nexus_ai_harness.core.errors import is_model_failure
+from nexus_ai_harness.core.invocation import Invocation, InvocationOutcome
 from nexus_ai_harness.core.response import Response
 from nexus_ai_harness.harness.context import RunContext
 from nexus_ai_harness.harness.harness import NexusAIHarness
@@ -371,6 +372,100 @@ def test_invoke_marks_errors_raised_by_a_model_method():
     with pytest.raises(ValueError) as excinfo:
         asyncio.run(ctx.invoke(model.complete, [], [], ctx))
     assert is_model_failure(excinfo.value)
+
+
+# --- invocation metadata -----------------------------------------------
+
+
+def test_before_receives_invocation_metadata():
+    seen: list[Invocation] = []
+
+    class Inspecting(Interceptor):
+        target = _Widget
+
+        def before(self, invocation: Invocation, ctx: Context) -> None:
+            seen.append(invocation)
+
+    widget = _Widget()
+    ctx = _ctx_with(Inspecting())
+    asyncio.run(ctx.invoke(widget.go))
+    assert seen[0].plugin is widget
+    assert seen[0].method == "go"
+    assert seen[0].args == ()
+    assert seen[0].kwargs == {}
+
+
+def test_before_receives_passed_through_args_and_kwargs():
+    seen: list[Invocation] = []
+
+    class Adder(Plugin):
+        async def add(self, a: int, b: int = 0) -> int:
+            return a + b
+
+    class Inspecting(Interceptor):
+        target = Adder
+
+        def before(self, invocation: Invocation, ctx: Context) -> None:
+            seen.append(invocation)
+
+    ctx = _ctx_with(Inspecting())
+    asyncio.run(ctx.invoke(Adder().add, 1, b=2))
+    assert seen[0].args == (1,)
+    assert seen[0].kwargs == {"b": 2}
+
+
+def test_after_receives_the_returned_result():
+    outcomes: list[InvocationOutcome] = []
+
+    class Inspecting(Interceptor):
+        target = _Widget
+
+        def after(
+            self, invocation: Invocation, outcome: InvocationOutcome, ctx: Context
+        ) -> None:
+            outcomes.append(outcome)
+
+    ctx = _ctx_with(Inspecting())
+    asyncio.run(ctx.invoke(_Widget().go))
+    assert outcomes[0].result == "ok"
+    assert outcomes[0].error is None
+
+
+def test_after_receives_the_raised_exception():
+    outcomes: list[InvocationOutcome] = []
+
+    class Inspecting(Interceptor):
+        target = _Widget
+
+        def after(
+            self, invocation: Invocation, outcome: InvocationOutcome, ctx: Context
+        ) -> None:
+            outcomes.append(outcome)
+
+    ctx = _ctx_with(Inspecting())
+    with pytest.raises(ValueError):
+        asyncio.run(ctx.invoke(_Widget().boom))
+    assert outcomes[0].result is None
+    assert isinstance(outcomes[0].error, ValueError)
+
+
+def test_old_and_new_style_interceptors_fire_together():
+    order: list[str] = []
+
+    class NewStyle(Interceptor):
+        target = _Widget
+
+        def before(self, invocation: Invocation, ctx: Context) -> None:
+            order.append(f"new-before:{invocation.method}")
+
+        def after(
+            self, invocation: Invocation, outcome: InvocationOutcome, ctx: Context
+        ) -> None:
+            order.append(f"new-after:{outcome.result}")
+
+    ctx = _ctx_with(BeforeMark(_Widget, "old-before", order), NewStyle())
+    asyncio.run(ctx.invoke(_Widget().go))
+    assert order == ["old-before", "new-before:go", "new-after:ok"]
 
 
 def test_invoke_does_not_mark_interceptor_or_non_model_errors():
