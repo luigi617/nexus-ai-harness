@@ -803,7 +803,8 @@ def _denormalize_msys_path(path: str) -> str:
     match = _MSYS_DRIVE.match(path)
     if not match:
         return path
-    drive, rest = match.group(1), (match.group(2) or "").replace("/", "\\")
+    # Uppercase to match how Path.resolve() canonicalizes a Windows drive letter.
+    drive, rest = match.group(1).upper(), (match.group(2) or "").replace("/", "\\")
     return f"{drive}:{rest}" if rest else f"{drive}:\\"
 
 

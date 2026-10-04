@@ -3,8 +3,8 @@ from __future__ import annotations
 import os
 import time
 
-_REPLACE_ATTEMPTS = 8
-_REPLACE_DELAY = 0.02
+_REPLACE_ATTEMPTS = 20
+_REPLACE_DELAY = 0.025
 
 
 def replace_retrying(src: str | os.PathLike[str], dst: str | os.PathLike[str]) -> None:
