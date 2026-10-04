@@ -45,9 +45,7 @@ logger = logging.getLogger(__name__)
 #: Isolation modes accepted by ``HumanEvalConfig.isolation``.
 ISOLATION_MODES = ("auto", "docker", "sandbox", "none")
 
-# Docker's cgroup --memory accepts as little as 6 MiB, but sandbox mode's
-# RLIMIT_AS caps virtual address space, and CPython needs well above that just
-# to start: 6 MiB fails before the program runs; 64 MiB leaves real headroom.
+# RLIMIT_AS caps address space; CPython needs well above Docker's 6 MiB floor to start.
 _MIN_MEMORY_MB = 64
 
 
@@ -106,8 +104,7 @@ class HumanEvalConfig(BenchmarkConfig):
                 f"isolation: expected one of {list(ISOLATION_MODES)}, "
                 f"got {self.isolation!r}"
             )
-        # 0 and negatives mean different things per backend (RLIMIT_NPROC -1 is
-        # unlimited, --pids-limit 1 is not), so reject them outright.
+        # 0 and negatives mean different things per backend, so reject them outright.
         if not self.timeout_s > 0:
             raise ValueError(f"timeout_s: must be > 0, got {self.timeout_s!r}")
         _check_minimum("memory_limit_mb", self.memory_limit_mb, _MIN_MEMORY_MB)
@@ -263,8 +260,7 @@ def _assemble_program(prompt: str, completion: str, test: str, entry_point: str)
 
 # --- isolated execution of model-generated code ---------------------------
 
-# Runs inside the sandboxed child: applies the limits, then execs the real
-# program so the limits are inherited but the program never sees this wrapper.
+# Applies the limits, then execs the real program so it never sees this wrapper.
 _RLIMIT_BOOTSTRAP = """\
 import json, os, sys
 try:
@@ -286,13 +282,11 @@ if resource is not None:
 os.execv(sys.executable, [sys.executable, "-c", sys.argv[2]])
 """
 
-# Container start-up is not the program's time: the program itself is bounded
-# by timeout(1) inside the container, the host wait adds this much slack.
+# Grace added on top of the in-container timeout(1), to cover container start-up.
 _DOCKER_STARTUP_GRACE_S = 30.0
 # The in-container timeout(1) and python processes count against --pids-limit.
 _DOCKER_BASE_PIDS = 2
-# Exit codes docker run (125) and timeout(1) (125-127) use for their own
-# failures, e.g. a daemon error or an image without timeout(1).
+# Exit codes docker run/timeout(1) use for their own failures, not the program's.
 _DOCKER_INFRA_EXIT_CODES = frozenset({125, 126, 127})
 _DOCKER_PROBE_TIMEOUT_S = 15.0
 _DOCKER_PULL_TIMEOUT_S = 600.0
@@ -438,8 +432,7 @@ def _sandbox_argv(program: str, timeout: float, limits: ResourceLimits) -> list[
         return [sys.executable, "-c", program]
     nproc_base = 0
     if limits.processes:
-        # RLIMIT_NPROC is a per-user total, so "N extra" is the current count
-        # plus the child plus N; an unknown count falls back to the strict cap.
+        # RLIMIT_NPROC is a per-user total, so "N extra" means current count plus N.
         current = _user_task_count()
         nproc_base = current + 1 if current is not None else 0
     encoded = json.dumps(limits.rlimits(timeout, nproc_base=nproc_base))
@@ -532,8 +525,10 @@ def _run_in_docker(
     """Run in a throwaway, network-less, read-only container.
 
     Raises:
-        IsolationError: If docker or the in-container ``timeout`` failed
-            (exit 125-127) rather than the program.
+        IsolationError: If docker itself failed: it or the in-container
+            ``timeout`` exited 125-127, the host-side wait ran out (the
+            in-container kill should have already fired), or ``docker``
+            could not even be launched.
     """
     name = f"humaneval-{uuid.uuid4().hex[:12]}"
     command = _docker_command(name, image, program, timeout, limits)
@@ -544,12 +539,14 @@ def _run_in_docker(
             timeout=timeout + _DOCKER_STARTUP_GRACE_S,
             check=False,
         )
-    except subprocess.TimeoutExpired:
+    except subprocess.TimeoutExpired as exc:
         # Killing the docker CLI leaves the container running; remove it by name.
         _docker(["rm", "-f", name], timeout=_DOCKER_PROBE_TIMEOUT_S)
-        return False
-    except OSError:
-        return False
+        raise IsolationError(
+            f"docker run exceeded the host timeout of {exc.timeout}s"
+        ) from exc
+    except OSError as exc:
+        raise IsolationError(f"failed to launch docker: {exc}") from exc
     if completed.returncode in _DOCKER_INFRA_EXIT_CODES:
         stderr = completed.stderr.decode(errors="replace").strip()
         raise IsolationError(

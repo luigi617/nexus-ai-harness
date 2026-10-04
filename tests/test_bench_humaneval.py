@@ -559,6 +559,24 @@ def test_docker_program_exit_codes_score_normally(monkeypatch, code, passed):
     assert _run_check("pass\n", timeout=5, isolation="docker") is passed
 
 
+def test_docker_host_timeout_raises_instead_of_failing(monkeypatch):
+    def run(command, **kwargs):
+        raise subprocess.TimeoutExpired(cmd=command, timeout=kwargs["timeout"])
+
+    monkeypatch.setattr(human_eval.subprocess, "run", run)
+    with pytest.raises(human_eval.IsolationError, match="host timeout"):
+        _run_check("pass\n", timeout=5, isolation="docker", docker_image="img")
+
+
+def test_docker_launch_failure_raises_instead_of_failing(monkeypatch):
+    def run(command, **_kwargs):
+        raise OSError("docker not found")
+
+    monkeypatch.setattr(human_eval.subprocess, "run", run)
+    with pytest.raises(human_eval.IsolationError, match="failed to launch docker"):
+        _run_check("pass\n", timeout=5, isolation="docker", docker_image="img")
+
+
 def test_runner_records_docker_infra_failure_as_error(monkeypatch):
     monkeypatch.setattr(human_eval, "resolve_isolation", lambda *_: "docker")
     bench = _SingleTaskHumanEval(HumanEvalConfig(isolation="docker"))
