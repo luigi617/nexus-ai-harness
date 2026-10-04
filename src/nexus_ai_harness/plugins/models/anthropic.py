@@ -34,6 +34,7 @@ class AnthropicModel(BaseModel):
         "claude-sonnet-4-5-20250929": (3.0, 15.0),
         "claude-sonnet-4-6": (3.0, 15.0),
         "claude-sonnet-5": (2.0, 10.0),
+        "claude-sonnet-5-5": (2.0, 10.0),
     }
     descriptions: ClassVar[dict[str, str]] = {
         "claude-fable-5": "Claude model for creative writing, analysis, and controlled",
@@ -51,6 +52,7 @@ class AnthropicModel(BaseModel):
         "claude-sonnet-4-5-20250929": "Balanced Claude model for coding, analysis, age",
         "claude-sonnet-4-6": "Claude workhorse for coding agents, careful analysis, an",
         "claude-sonnet-5": "Everyday Claude agent model for coding, planning, browsing",
+        "claude-sonnet-5-5": "Fast Claude model for everyday coding, agents, and knowledge work",  # noqa: E501
     }
 
     def _generate(self, history: list[Message], tools: list[Tool]) -> Response:

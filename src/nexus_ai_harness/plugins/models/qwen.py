@@ -46,16 +46,19 @@ class QwenModel(OpenAICompatibleModel):
         "qwen3.5-27b": (0.3, 2.4),
         "qwen3.5-35b-a3b": (0.25, 2.0),
         "qwen3.5-397b-a17b": (0.6, 3.6),
+        "qwen3.5-flash": (0.1, 0.4),
         "qwen3.5-plus": (0.4, 2.4),
         "qwen3.6-27b": (0.6, 3.6),
         "qwen3.6-35b-a3b": (0.248, 1.485),
         "qwen3.6-flash": (0.1875, 1.125),
         "qwen3.6-max-preview": (1.3, 7.8),
         "qwen3.6-plus": (0.5, 3.0),
+        "qwen3.7-flash": (0.03, 0.13),
         "qwen3.7-max": (2.5, 7.5),
-        "qwen3.7-plus": (0.5, 3.0),
+        "qwen3.7-plus": (0.4, 1.6),
         "qwen3.8-flash": (0.15, 0.47),
         "qwen3.8-max": (2.0, 6.0),
+        "qwen3.8-omni-flash": (0.15, 0.47),
         "qwq-plus": (0.8, 2.4),
     }
     descriptions: ClassVar[dict[str, str]] = {
@@ -94,15 +97,18 @@ class QwenModel(OpenAICompatibleModel):
         "qwen3.5-27b": "Qwen vision-language model for visual reasoning, documents, an",
         "qwen3.5-35b-a3b": "Qwen vision-language model for visual reasoning, documents",
         "qwen3.5-397b-a17b": "Large open Qwen multimodal MoE for visual agents and lon",
+        "qwen3.5-flash": "Qwen vision-language model for visual reasoning, documents, and agent tasks",  # noqa: E501
         "qwen3.5-plus": "Qwen vision-language model for visual reasoning, documents, a",
         "qwen3.6-27b": "Qwen vision-language model for visual reasoning, documents, an",
         "qwen3.6-35b-a3b": "Open multimodal Qwen MoE for local agents that need vision",
         "qwen3.6-flash": "Qwen vision-language model for visual reasoning, documents,",
         "qwen3.6-max-preview": "Flagship Qwen model for complex reasoning, coding, and",
         "qwen3.6-plus": "Earlier Qwen multimodal workhorse for million-token agent and",
+        "qwen3.7-flash": "Lightweight multimodal Qwen model for high-throughput text, image, and video tasks",  # noqa: E501
         "qwen3.7-max": "Qwen frontier model tuned for agent frameworks, coding assista",
         "qwen3.7-plus": "Multimodal Qwen workhorse for long-context agents, visual inp",
         "qwen3.8-flash": "Qwen vision-language model for visual reasoning, documents,",
         "qwen3.8-max": "2.4-trillion-parameter MoE flagship for coding, professional w",
+        "qwen3.8-omni-flash": "Qwen omni model for text, vision, audio, and multimodal agent tasks",  # noqa: E501
         "qwq-plus": "Qwen reasoning model for deliberate problem solving, math, and coding",  # noqa: E501
     }

@@ -139,9 +139,10 @@ def test_parse_tolerates_null_content_and_bad_json_args():
 
 
 def test_cost_uses_pricing_table():
-    m = OpenAIModel(model="gpt-4o-mini")
+    mid, (pin, pout) = next(iter(OpenAIModel.pricing.items()))
+    m = OpenAIModel(model=mid)
     cost = m._cost({"input_tokens": 1_000_000, "output_tokens": 1_000_000})
-    assert abs(cost - (0.15 + 0.6)) < 1e-9
+    assert abs(cost - (pin + pout)) < 1e-9
 
 
 def test_cost_zero_for_unknown_model():
@@ -193,7 +194,8 @@ _CANNED = {
 def test_generate_routes_to_chat_completions_with_auth_and_params(monkeypatch):
     captured = _patch_post_json(monkeypatch, _CANNED)
 
-    model = OpenAIModel(model="gpt-4o-mini", api_key="sk-test", temperature=0.3)
+    mid, (pin, pout) = next(iter(OpenAIModel.pricing.items()))
+    model = OpenAIModel(model=mid, api_key="sk-test", temperature=0.3)
     tool = _tool()
     result = model._generate([Message(role="user", content="hi")], [tool])
 
@@ -203,13 +205,13 @@ def test_generate_routes_to_chat_completions_with_auth_and_params(monkeypatch):
     assert captured["headers"]["Authorization"] == "Bearer sk-test"
 
     payload = captured["payload"]
-    assert payload["model"] == "gpt-4o-mini"
+    assert payload["model"] == mid
     assert payload["max_tokens"] == 1024
     assert payload["messages"] == [{"role": "user", "content": "hi"}]
     assert payload["temperature"] == 0.3  # **self.params merged
     assert payload["tools"] == [OpenAIModel._tool_spec(tool)]
 
-    assert abs(result.cost - (0.15 + 0.6)) < 1e-9
+    assert abs(result.cost - (pin + pout)) < 1e-9
 
 
 def test_generate_subclass_routes_to_its_base_url(monkeypatch):
@@ -270,20 +272,19 @@ def test_direct_openai_compatible_uses_overridden_base_url(monkeypatch):
 
 
 def test_thin_provider_descriptions_populated():
-    assert (
-        DeepSeekModel(model="deepseek-chat").description == "general-purpose chat model"
-    )
-    assert (
-        DeepSeekModel(model="deepseek-reasoner").description
-        == "reasoning-optimized model"
-    )
-    assert XAIModel(model="grok-4").description == "xAI flagship reasoning model"
-
-
-def test_openai_pricing_yields_expected_cost():
-    m = OpenAIModel(model="gpt-4o")
-    cost = m._cost({"input_tokens": 1_000_000, "output_tokens": 1_000_000})
-    assert abs(cost - (2.5 + 10.0)) < 1e-9
+    for cls in (
+        OpenAIModel,
+        DeepSeekModel,
+        MiniMaxModel,
+        QwenModel,
+        GLMModel,
+        GroqModel,
+        XAIModel,
+    ):
+        assert cls.descriptions, f"{cls.provider} has no description entries"
+        for mid, desc in cls.descriptions.items():
+            assert desc, f"{cls.provider}:{mid} has an empty description"
+            assert cls(model=mid).description == desc
 
 
 # --- _to_messages and _parse edge cases ----------------------------------

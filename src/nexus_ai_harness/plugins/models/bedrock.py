@@ -59,6 +59,7 @@ class BedrockModel(BaseModel):
         "anthropic.claude-sonnet-4-5-20250929-v1:0": (3.0, 15.0),
         "anthropic.claude-sonnet-4-6": (3.3, 16.5),
         "anthropic.claude-sonnet-5": (2.0, 10.0),
+        "anthropic.claude-sonnet-5-5": (2.0, 10.0),
         "apac.amazon.nova-lite-v1:0": (0.063, 0.252),
         "apac.amazon.nova-micro-v1:0": (0.037, 0.148),
         "apac.amazon.nova-pro-v1:0": (0.84, 3.36),
@@ -92,6 +93,7 @@ class BedrockModel(BaseModel):
         "eu.anthropic.claude-sonnet-4-5-20250929-v1:0": (3.3, 16.5),
         "eu.anthropic.claude-sonnet-4-6": (3.3, 16.5),
         "eu.anthropic.claude-sonnet-5": (2.2, 11.0),
+        "eu.anthropic.claude-sonnet-5-5": (2.2, 11.0),
         "eu.mistral.pixtral-large-2502-v1:0": (2.0, 6.0),
         "global.amazon.nova-2-lite-v1:0": (0.3, 2.5),
         "global.anthropic.claude-fable-5": (10.0, 50.0),
@@ -107,6 +109,7 @@ class BedrockModel(BaseModel):
         "global.anthropic.claude-sonnet-4-5-20250929-v1:0": (3.0, 15.0),
         "global.anthropic.claude-sonnet-4-6": (3.0, 15.0),
         "global.anthropic.claude-sonnet-5": (2.0, 10.0),
+        "global.anthropic.claude-sonnet-5-5": (2.0, 10.0),
         "global.moonshotai.kimi-k3": (3.0, 15.0),
         "global.openai.gpt-5.6-luna": (0.2, 1.2),
         "global.openai.gpt-5.6-sol": (4.0, 20.0),
@@ -114,12 +117,17 @@ class BedrockModel(BaseModel):
         "global.openai.gpt-6-astra": (10.0, 50.0),
         "global.openai.gpt-6-luna": (0.1, 0.5),
         "global.openai.gpt-6-sol": (2.0, 10.0),
+        "global.openai.gpt-6.1-sol": (2.0, 10.0),
         "global.xai.grok-4.6": (2.0, 6.0),
+        "global.xai.grok-4.7": (2.0, 6.0),
         "google.gemma-3-12b-it": (0.09, 0.29),
         "google.gemma-3-27b-it": (0.23, 0.38),
         "google.gemma-4-26b-a4b": (0.13, 0.4),
         "google.gemma-4-31b": (0.14, 0.4),
         "google.gemma-4-e2b": (0.04, 0.08),
+        "in.anthropic.claude-haiku-4-5-20251001-v1:0": (1.1, 5.5),
+        "in.anthropic.claude-opus-5": (5.5, 27.5),
+        "in.anthropic.claude-sonnet-5": (2.2, 11.0),
         "in.openai.gpt-5.6-luna": (0.22, 1.32),
         "in.openai.gpt-5.6-terra": (2.2, 13.2),
         "jp.amazon.nova-2-lite-v1:0": (0.396, 3.311),
@@ -162,6 +170,7 @@ class BedrockModel(BaseModel):
         "openai.gpt-6-astra": (11.0, 55.0),
         "openai.gpt-6-luna": (0.11, 0.55),
         "openai.gpt-6-sol": (2.2, 11.0),
+        "openai.gpt-6.1-sol": (2.2, 11.0),
         "openai.gpt-oss-120b": (0.15, 0.6),
         "openai.gpt-oss-120b-1:0": (0.15, 0.6),
         "openai.gpt-oss-20b": (0.07, 0.3),
@@ -196,6 +205,7 @@ class BedrockModel(BaseModel):
         "us.anthropic.claude-sonnet-4-5-20250929-v1:0": (3.3, 16.5),
         "us.anthropic.claude-sonnet-4-6": (3.3, 16.5),
         "us.anthropic.claude-sonnet-5": (2.2, 11.0),
+        "us.anthropic.claude-sonnet-5-5": (2.2, 11.0),
         "us.deepseek.r1-v1:0": (1.35, 5.4),
         "us.meta.llama3-1-70b-instruct-v1:0": (0.72, 0.72),
         "us.meta.llama3-1-8b-instruct-v1:0": (0.22, 0.22),
@@ -210,9 +220,11 @@ class BedrockModel(BaseModel):
         "us.openai.gpt-6-astra": (11.0, 55.0),
         "us.openai.gpt-6-luna": (0.11, 0.55),
         "us.openai.gpt-6-sol": (2.2, 11.0),
+        "us.openai.gpt-6.1-sol": (2.2, 11.0),
         "us.writer.palmyra-x4-v1:0": (2.5, 10.0),
         "us.writer.palmyra-x5-v1:0": (0.6, 6.0),
         "us.xai.grok-4.6": (2.2, 6.6),
+        "us.xai.grok-4.7": (2.2, 6.6),
         "writer.palmyra-x4-v1:0": (2.5, 10.0),
         "writer.palmyra-x5-v1:0": (0.6, 6.0),
         "xai.grok-4.3": (1.25, 2.5),
@@ -239,6 +251,7 @@ class BedrockModel(BaseModel):
         "anthropic.claude-sonnet-4-5-20250929-v1:0": "Balanced Claude model for coding, analysis, agent workflows, and cost control",  # noqa: E501
         "anthropic.claude-sonnet-4-6": "Claude workhorse for coding agents, careful analysis, and production cost control",  # noqa: E501
         "anthropic.claude-sonnet-5": "Everyday Claude agent model for coding, planning, browsing, and general work",  # noqa: E501
+        "anthropic.claude-sonnet-5-5": "Fast Claude model for everyday coding, agents, and knowledge work",  # noqa: E501
         "apac.amazon.nova-lite-v1:0": "Efficient model for low-latency assistance, extraction, and routine automation",  # noqa: E501
         "apac.amazon.nova-micro-v1:0": "Efficient model for low-latency assistance, extraction, and routine automation",  # noqa: E501
         "apac.amazon.nova-pro-v1:0": "Flagship model for demanding analysis, coding, and production agent workflows",  # noqa: E501
@@ -272,6 +285,7 @@ class BedrockModel(BaseModel):
         "eu.anthropic.claude-sonnet-4-5-20250929-v1:0": "Balanced Claude model for coding, analysis, agent workflows, and cost control",  # noqa: E501
         "eu.anthropic.claude-sonnet-4-6": "Claude workhorse for coding agents, careful analysis, and production cost control",  # noqa: E501
         "eu.anthropic.claude-sonnet-5": "Everyday Claude agent model for coding, planning, browsing, and general work",  # noqa: E501
+        "eu.anthropic.claude-sonnet-5-5": "Fast Claude model for everyday coding, agents, and knowledge work",  # noqa: E501
         "eu.mistral.pixtral-large-2502-v1:0": "Mistral vision-language model for image understanding and multimodal chat",  # noqa: E501
         "global.amazon.nova-2-lite-v1:0": "Multimodal reasoning model for visual analysis, planning, and tool use",  # noqa: E501
         "global.anthropic.claude-fable-5": "Claude model for creative writing, analysis, and controlled agent workflows",  # noqa: E501
@@ -287,6 +301,7 @@ class BedrockModel(BaseModel):
         "global.anthropic.claude-sonnet-4-5-20250929-v1:0": "Balanced Claude model for coding, analysis, agent workflows, and cost control",  # noqa: E501
         "global.anthropic.claude-sonnet-4-6": "Claude workhorse for coding agents, careful analysis, and production cost control",  # noqa: E501
         "global.anthropic.claude-sonnet-5": "Everyday Claude agent model for coding, planning, browsing, and general work",  # noqa: E501
+        "global.anthropic.claude-sonnet-5-5": "Fast Claude model for everyday coding, agents, and knowledge work",  # noqa: E501
         "global.moonshotai.kimi-k3": "Multimodal Kimi model with 1M context and toggleable max-effort thinking for long-horizon agent work",  # noqa: E501
         "global.openai.gpt-5.6-luna": "Cost-efficient GPT-5.6 model for fast, high-volume workloads",  # noqa: E501
         "global.openai.gpt-5.6-sol": "Frontier GPT-5.6 model for complex professional work, coding, and agentic workflows",  # noqa: E501
@@ -294,12 +309,17 @@ class BedrockModel(BaseModel):
         "global.openai.gpt-6-astra": "GPT-6 Astra is OpenAI's most capable model for complex reasoning, coding, computer use, research, and document creation.",  # noqa: E501
         "global.openai.gpt-6-luna": "OpenAI's most efficient model for focused, high-volume tasks",  # noqa: E501
         "global.openai.gpt-6-sol": "OpenAI model for complex coding and agentic workflows",  # noqa: E501
+        "global.openai.gpt-6.1-sol": "Near-Astra performance for complex coding, computer use, and professional work at a lower cost.",  # noqa: E501
         "global.xai.grok-4.6": "xAI's frontier model for long-running agents, coding, knowledge work, and visual projects",  # noqa: E501
+        "global.xai.grok-4.7": "xAI's frontier model for long-running agents, coding, knowledge work, and visual projects",  # noqa: E501
         "google.gemma-3-12b-it": "Open multimodal Gemma instruction model for multilingual text generation and image understanding",  # noqa: E501
         "google.gemma-3-27b-it": "Largest open Gemma 3 instruction model for multilingual text generation and visual understanding",  # noqa: E501
         "google.gemma-4-26b-a4b": "Open Gemma instruction model for efficient chat and self-hosted deployments",  # noqa: E501
         "google.gemma-4-31b": "Largest Gemma 4 instruction model for open, self-hosted chat and reasoning",  # noqa: E501
         "google.gemma-4-e2b": "Open Gemma instruction model for efficient chat and self-hosted deployments",  # noqa: E501
+        "in.anthropic.claude-haiku-4-5-20251001-v1:0": "Fast Claude model for responsive assistance, classification, and lightweight agents",  # noqa: E501
+        "in.anthropic.claude-opus-5": "Strongest Claude Opus model for coding, agents, and professional work",  # noqa: E501
+        "in.anthropic.claude-sonnet-5": "Everyday Claude agent model for coding, planning, browsing, and general work",  # noqa: E501
         "in.openai.gpt-5.6-luna": "Cost-efficient GPT-5.6 model for fast, high-volume workloads",  # noqa: E501
         "in.openai.gpt-5.6-terra": "Balanced GPT-5.6 model for capable, cost-efficient everyday work",  # noqa: E501
         "jp.amazon.nova-2-lite-v1:0": "Multimodal reasoning model for visual analysis, planning, and tool use",  # noqa: E501
@@ -342,6 +362,7 @@ class BedrockModel(BaseModel):
         "openai.gpt-6-astra": "GPT-6 Astra is OpenAI's most capable model for complex reasoning, coding, computer use, research, and document creation.",  # noqa: E501
         "openai.gpt-6-luna": "OpenAI's most efficient model for focused, high-volume tasks",  # noqa: E501
         "openai.gpt-6-sol": "OpenAI model for complex coding and agentic workflows",
+        "openai.gpt-6.1-sol": "Near-Astra performance for complex coding, computer use, and professional work at a lower cost.",  # noqa: E501
         "openai.gpt-oss-120b": "Open GPT reasoning model for self-hosted agents and controllable deployments",  # noqa: E501
         "openai.gpt-oss-120b-1:0": "Open GPT reasoning model for self-hosted agents and controllable deployments",  # noqa: E501
         "openai.gpt-oss-20b": "Open GPT reasoning model for self-hosted agents and controllable deployments",  # noqa: E501
@@ -376,6 +397,7 @@ class BedrockModel(BaseModel):
         "us.anthropic.claude-sonnet-4-5-20250929-v1:0": "Balanced Claude model for cod",
         "us.anthropic.claude-sonnet-4-6": "Claude workhorse for coding agents, careful",
         "us.anthropic.claude-sonnet-5": "Everyday Claude agent model for coding, plann",
+        "us.anthropic.claude-sonnet-5-5": "Fast Claude model for everyday coding, agents, and knowledge work",  # noqa: E501
         "us.deepseek.r1-v1:0": "Classic open reasoning model for transparent math, coding, and deliberate problem solving",  # noqa: E501
         "us.meta.llama3-1-70b-instruct-v1:0": "Open Llama instruction model for multilingual chat, reasoning, and coding",  # noqa: E501
         "us.meta.llama3-1-8b-instruct-v1:0": "Compact open Llama model for lightweight chat, drafting, and self-hosting",  # noqa: E501
@@ -390,9 +412,11 @@ class BedrockModel(BaseModel):
         "us.openai.gpt-6-astra": "GPT-6 Astra is OpenAI's most capable model for complex reasoning, coding, computer use, research, and document creation.",  # noqa: E501
         "us.openai.gpt-6-luna": "OpenAI's most efficient model for focused, high-volume tasks",  # noqa: E501
         "us.openai.gpt-6-sol": "OpenAI model for complex coding and agentic workflows",
+        "us.openai.gpt-6.1-sol": "Near-Astra performance for complex coding, computer use, and professional work at a lower cost.",  # noqa: E501
         "us.writer.palmyra-x4-v1:0": "Enterprise language model for workflow automation, coding, data analysis, and tool use",  # noqa: E501
         "us.writer.palmyra-x5-v1:0": "Reasoning model for deliberate analysis, multi-step problem solving, and tool use",  # noqa: E501
         "us.xai.grok-4.6": "xAI's frontier model for long-running agents, coding, knowledge work, and visual projects",  # noqa: E501
+        "us.xai.grok-4.7": "xAI's frontier model for long-running agents, coding, knowledge work, and visual projects",  # noqa: E501
         "writer.palmyra-x4-v1:0": "Enterprise language model for workflow automation, coding, data analysis, and tool use",  # noqa: E501
         "writer.palmyra-x5-v1:0": "Reasoning model for deliberate analysis, multi-step problem solving, and tool use",  # noqa: E501
         "xai.grok-4.3": "xAI's default Grok for chat, coding, agentic tools, and lower hallucination risk",  # noqa: E501
