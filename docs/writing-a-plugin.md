@@ -63,12 +63,19 @@ wrap all of its implementers, or to a concrete class to wrap just that one:
 ```python
 class TimeModel(Interceptor):
     target = Model                     # wrap every model call
-    def before(self, ctx: Context) -> None: ...
-    def after(self, ctx: Context) -> None: ...   # always runs, even on error
+    def before(self, invocation: Invocation, ctx: Context) -> None: ...
+    def after(
+        self, invocation: Invocation, outcome: InvocationOutcome, ctx: Context
+    ) -> None: ...                     # always runs, even on error
 ```
 
-`before` and `after` are for observation only; they don't see the call's
-arguments or return value. Both may be `def` or `async def`.
+`invocation` carries the plugin instance, the method name, and its arguments.
+`outcome` carries the returned value, or the raised exception when the call (or
+an earlier interceptor's `before`) failed. Both may be `def` or `async def`.
+Overriding the older `before(self, ctx)` / `after(self, ctx)` signature still
+works; the harness detects which signature an override uses by inspecting it.
+Interceptors must not mutate `invocation.args`, `invocation.kwargs`, or
+`outcome.result` — they're for observation, not for rewriting the call.
 
 ## Owning resources with a lifecycle
 

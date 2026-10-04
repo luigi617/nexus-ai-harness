@@ -6,6 +6,7 @@ from typing import Any, TypeVar
 
 from nexus_ai_harness.core.errors import mark_model_failure
 from nexus_ai_harness.core.events import Event, MessageAdded
+from nexus_ai_harness.core.invocation import Invocation, InvocationOutcome
 from nexus_ai_harness.core.invoke import call
 from nexus_ai_harness.core.message import Message
 from nexus_ai_harness.core.spawn import SpawnState
@@ -40,6 +41,37 @@ def _dispatch(handler: Callable[[Event, Any], Any], event: Event, ctx: Context) 
 def _overrides(interceptor: Interceptor, method: str) -> bool:
     """Whether ``interceptor`` overrides the given phase method of ``Interceptor``."""
     return getattr(type(interceptor), method) is not getattr(Interceptor, method)
+
+
+_wants_invocation_cache: dict[tuple[type, str], bool] = {}
+
+
+def _wants_invocation(interceptor: Interceptor, method: str) -> bool:
+    """Whether ``interceptor``'s override of ``method`` expects invocation metadata.
+
+    Distinguishes the current signature from the single-argument
+    ``before(ctx)`` / ``after(ctx)`` one kept working for compatibility. Cached
+    per (interceptor class, method name) since every call hits this and the
+    signature can't change at runtime.
+    """
+    key = (type(interceptor), method)
+    wants_invocation = _wants_invocation_cache.get(key)
+    if wants_invocation is None:
+        override = getattr(interceptor, method)
+        # Only positional params distinguish the signatures; a **kwargs catch-all
+        # or a keyword-only extra on the old style must not count as the new one.
+        positional_kinds = (
+            inspect.Parameter.POSITIONAL_ONLY,
+            inspect.Parameter.POSITIONAL_OR_KEYWORD,
+        )
+        positional = [
+            p
+            for p in inspect.signature(override).parameters.values()
+            if p.kind in positional_kinds
+        ]
+        wants_invocation = len(positional) > 1
+        _wants_invocation_cache[key] = wants_invocation
+    return wants_invocation
 
 
 class RunContext(Context):
@@ -107,9 +139,12 @@ class RunContext(Context):
 
     async def invoke(self, fn: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
         plugin = getattr(fn, "__self__", None)
-        interceptors = (
-            self._registry.interceptors_for(plugin) if plugin is not None else []
-        )
+        if plugin is None:
+            interceptors: list[Interceptor] = []
+            invocation = None
+        else:
+            interceptors = self._registry.interceptors_for(plugin)
+            invocation = Invocation(plugin, fn.__name__, args, dict(kwargs))
         result: Any = None
         error: BaseException | None = None
         # Only entered interceptors get an after, avoiding unpaired teardown.
@@ -117,7 +152,11 @@ class RunContext(Context):
         try:
             for interceptor in interceptors:
                 if _overrides(interceptor, "before"):
-                    await call(interceptor.before, self)
+                    assert invocation is not None  # interceptors implies a plugin
+                    if _wants_invocation(interceptor, "before"):
+                        await call(interceptor.before, invocation, self)
+                    else:
+                        await call(interceptor.before, self)
                 entered.append(interceptor)
             try:
                 result = await call(fn, *args, **kwargs)
@@ -127,12 +166,17 @@ class RunContext(Context):
                 raise
         except BaseException as exc:  # captured, re-raised once teardown is done
             error = exc
+        outcome = InvocationOutcome(result, error)
         after_error: BaseException | None = None
         for interceptor in entered:
             if not _overrides(interceptor, "after"):
                 continue
             try:
-                await call(interceptor.after, self)
+                assert invocation is not None  # entered implies a plugin
+                if _wants_invocation(interceptor, "after"):
+                    await call(interceptor.after, invocation, outcome, self)
+                else:
+                    await call(interceptor.after, self)
             except BaseException as exc:  # keep running the remaining ones
                 after_error = after_error or exc
         if error is not None:
