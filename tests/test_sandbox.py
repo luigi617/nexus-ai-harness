@@ -298,6 +298,34 @@ def test_check_shell_allowlist_refuses_loop_and_split_bypasses(tmp_path, command
         sandbox.check_shell(command)
 
 
+@pytest.mark.parametrize(
+    "command",
+    [
+        "declare -x PATH=/tmp/evil:$PATH; ls",
+        "local PATH=/tmp/evil; ls",
+        "typeset -x LD_PRELOAD=/tmp/evil.so; ls",
+        "readonly GIT_EXTERNAL_DIFF=/tmp/evil; ls",
+        "read -r PATH <<< /tmp/evil; ls",
+        "mapfile -t PATH <<< /tmp/evil; ls",
+    ],
+)
+def test_check_shell_allowlist_refuses_variable_setting_builtins(tmp_path, command):
+    sandbox = WorkspaceSandbox(
+        tmp_path,
+        allowed_commands=[
+            "ls",
+            "declare",
+            "local",
+            "typeset",
+            "readonly",
+            "read",
+            "mapfile",
+        ],
+    )
+    with pytest.raises(SandboxViolation):
+        sandbox.check_shell(command)
+
+
 def test_run_shell_allowlist_blocks_env_split_string(tmp_path):
     sandbox = WorkspaceSandbox(tmp_path, allowed_commands=["ls", "env"])
     with pytest.raises(SandboxViolation):

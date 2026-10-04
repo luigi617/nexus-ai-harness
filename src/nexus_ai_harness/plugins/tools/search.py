@@ -171,23 +171,53 @@ def compile_glob(pattern: str) -> re.Pattern[str]:
 
 
 def _walk(base: Path, confine_root: Path, pattern: str) -> Iterator[Path]:
-    """Yield regular files under ``base`` in sorted order, confined to the root.
+    """Yield regular files under ``base`` in full path sort order, confined to root.
 
-    Skips the :data:`SKIPPED_DIRS` (unless ``pattern`` names one), does not
-    descend into symlinked directories, and drops symlinked files whose target
-    lies outside ``confine_root``.
+    Skips the :data:`SKIPPED_DIRS` (unless ``pattern`` names one as a path
+    segment), does not descend into symlinked directories, and drops symlinked
+    files whose target lies outside ``confine_root``. Files and directories at
+    each level sort together the way their full paths would (a directory sorts
+    as if its name were followed by ``/``), so the stream is in true path
+    order and a caller may stop as soon as it has enough matches.
     """
-    for current, dirs, files in os.walk(base):
-        dirs[:] = sorted(d for d in dirs if d not in SKIPPED_DIRS or d in pattern)
-        for name in sorted(files):
-            path = Path(current) / name
-            if path.is_symlink():
-                target = path.resolve()
-                if not target.is_relative_to(confine_root) or not target.is_file():
+    named = re.split(r"[/{},]", pattern)
+
+    def visit(current: Path) -> Iterator[Path]:
+        try:
+            entries = sorted(os.scandir(current), key=_entry_sort_key)
+        except OSError:
+            return
+        for entry in entries:
+            try:
+                is_symlink = entry.is_symlink()
+                is_dir = entry.is_dir(follow_symlinks=False)
+            except OSError:
+                continue
+            path = Path(entry.path)
+            if is_symlink:
+                try:
+                    target = path.resolve()
+                except OSError:
                     continue
-            elif not _is_regular(path):
-                continue  # a FIFO would block the read forever
-            yield path
+                if target.is_relative_to(confine_root) and target.is_file():
+                    yield path
+            elif is_dir:
+                if entry.name in SKIPPED_DIRS and entry.name not in named:
+                    continue
+                yield from visit(path)
+            elif _is_regular(path):
+                yield path
+            # else: a FIFO or other non-regular file would block the read forever
+
+    yield from visit(base)
+
+
+def _entry_sort_key(entry: os.DirEntry[str]) -> str:
+    """Sort key matching full-path order: a directory sorts as ``name + "/"``."""
+    try:
+        return f"{entry.name}/" if entry.is_dir(follow_symlinks=False) else entry.name
+    except OSError:
+        return entry.name
 
 
 def _is_regular(path: Path) -> bool:
@@ -455,22 +485,26 @@ class Glob(Tool):
                 matcher = compile_glob(pattern)
             except re.error as exc:
                 return f"error: invalid glob: {exc}"
-            found = [
-                display(p, base)
-                for p in _walk(target, base, pattern)
-                if matcher.fullmatch(p.relative_to(target).as_posix())
-            ]
+            found: list[str] = []
+            capped = False
+            for p in _walk(target, base, pattern):
+                if not matcher.fullmatch(p.relative_to(target).as_posix()):
+                    continue
+                found.append(display(p, base))
+                if len(found) > max_results:
+                    capped = True
+                    break
         except SandboxViolation as exc:
             return f"error: {exc}"
         except OSError as exc:
             return f"error: {exc}"
         if not found:
             return "no files match"
-        found.sort()
         footer = None
-        if len(found) > max_results:
+        if capped:
+            found = found[:max_results]
             footer = (
-                f"... ({len(found) - max_results} more not shown; narrow the "
-                "pattern or raise max_results)"
+                f"... (stopped at max_results={max_results} files; there may be "
+                "more: narrow the pattern or raise max_results)"
             )
-        return _clip(found[:max_results], footer)
+        return _clip(found, footer)

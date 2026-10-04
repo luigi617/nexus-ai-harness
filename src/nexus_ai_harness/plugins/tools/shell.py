@@ -218,7 +218,11 @@ class Shell(Tool):
             argv = shlex.split(command)
             if not argv:
                 raise ValueError("empty command") from None
-            result = sandbox.run_command(argv, timeout=timeout)
+            try:
+                result = sandbox.run_command(argv, timeout=timeout)
+            except FileNotFoundError:
+                # Match the bash-wrapper path's shape for a missing program.
+                return SandboxResult(returncode=127, stdout="", stderr="")
             if result.timed_out:
                 # The header already reports the timeout; drop the duplicate note
                 # so every path shows the same shape.

@@ -202,7 +202,10 @@ class WorkspaceSandbox(Sandbox, Lifecycle):
             SandboxViolation: If the resolved path lands outside the root,
                 whether via ``..`` segments, an absolute path, or a symlink.
         """
-        candidate = (self._root / path).resolve()
+        try:
+            candidate = (self._root / path).resolve()
+        except ValueError as exc:  # e.g. an embedded NUL, which is not an OSError
+            raise SandboxViolation(f"invalid path: {path!r}: {exc}") from exc
         if not candidate.is_relative_to(self._root):
             raise SandboxViolation(f"path escapes sandbox root: {path!r}")
         return candidate

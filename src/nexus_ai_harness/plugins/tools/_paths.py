@@ -27,7 +27,10 @@ def confine(path: str, root: Path) -> Path:
     base = root.resolve()
     candidate = Path(path)
     combined = candidate if candidate.is_absolute() else base / candidate
-    resolved = combined.resolve()
+    try:
+        resolved = combined.resolve()
+    except ValueError as exc:  # e.g. an embedded NUL, which is not an OSError
+        raise SandboxViolation(f"invalid path: {path!r}: {exc}") from exc
     if not resolved.is_relative_to(base):  # is_relative_to is True when equal to base
         raise SandboxViolation(f"path escapes root: {path!r}")
     return resolved

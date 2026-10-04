@@ -72,6 +72,14 @@ def test_grep_glob_naming_a_junk_dir_searches_it(repo):
     assert result == "node_modules/hidden.py:1:def add(): pass"
 
 
+def test_grep_glob_substring_of_junk_dir_name_does_not_unskip_it(repo):
+    (repo / ".github").mkdir()
+    (repo / ".github" / "workflow.py").write_text("def add(): pass\n")
+    result = Grep().run({"pattern": "add", "glob": "**/.github/*.py"}, sandboxed(repo))
+    assert result == ".github/workflow.py:1:def add(): pass"
+    assert ".git/hidden.py" not in result
+
+
 def test_grep_case_insensitive_and_path(repo):
     ctx = sandboxed(repo)
     assert Grep().run({"pattern": "^add", "path": "README.md"}, ctx) == "no matches"
@@ -176,8 +184,31 @@ def test_glob_caps_results(repo):
         "f0.txt",
         "f1.txt",
         "f2.txt",
-        "... (7 more not shown; narrow the pattern or raise max_results)",
+        (
+            "... (stopped at max_results=3 files; there may be more: narrow "
+            "the pattern or raise max_results)"
+        ),
     ]
+
+
+def test_glob_caps_results_without_walking_whole_tree(repo, monkeypatch):
+    for i in range(4):
+        (repo / f"f{i}.txt").write_text("")
+    trap = repo / "zzz_trap"
+    trap.mkdir()
+    (trap / "late.txt").write_text("")
+
+    scanned: list[Path] = []
+    original_scandir = os.scandir
+
+    def tracking_scandir(path):
+        scanned.append(Path(path))
+        return original_scandir(path)
+
+    monkeypatch.setattr(os, "scandir", tracking_scandir)
+    result = Glob().run({"pattern": "*.txt", "max_results": 3}, sandboxed(repo))
+    assert "late.txt" not in result
+    assert trap not in scanned
 
 
 def test_glob_errors(repo):

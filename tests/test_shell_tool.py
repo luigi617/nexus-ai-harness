@@ -268,6 +268,8 @@ class _ArgvOnlySandbox(Sandbox):
     def run_command(self, argv, *, timeout, input=None) -> SandboxResult:  # noqa: A002
         self.check_command(argv)
         self.argvs.append(argv)
+        if argv[0] == "no_such_binary":
+            raise FileNotFoundError(2, "No such file or directory", argv[0])
         return SandboxResult(returncode=0, stdout="out", stderr="warn")
 
 
@@ -280,6 +282,14 @@ def test_sandbox_without_shell_support_falls_back_to_argv(tmp_path):
     assert result == "exit=0\nout\n[stderr]\nwarn"
     assert Shell().run({"command": "forbidden"}, ctx) == "error: nope"
     assert Shell().run({"command": "echo 'x"}, ctx).startswith("error:")
+
+
+def test_sandbox_without_shell_support_reports_127_for_missing_program(tmp_path):
+    sandbox = _ArgvOnlySandbox(tmp_path)
+    ctx = make_ctx(sandbox)
+
+    result = Shell().run({"command": "no_such_binary"}, ctx)
+    assert result.startswith("exit=127")
 
 
 class _NoShellWorkspace(WorkspaceSandbox):

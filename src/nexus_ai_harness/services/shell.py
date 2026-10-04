@@ -84,9 +84,24 @@ _INERT_BUILTINS = frozenset(
         "umask",
         "test",
         "[",
+        "declare",
+        "local",
+        "typeset",
+        "readonly",
+        "read",
+        "mapfile",
+        "readarray",
+        "getopts",
+        "unset",
     }
 )
 """Builtins that run no other program, so the policy need not check them."""
+
+_NAME_ASSIGNING_BUILTINS = frozenset({"declare", "local", "typeset", "readonly"})
+"""Builtins taking ``name`` or ``name=value`` operands, like ``export``."""
+
+_NAME_OPERAND_BUILTINS = frozenset({"read", "mapfile", "readarray", "getopts"})
+"""Builtins taking a bare variable ``name`` operand to assign into."""
 
 _CODE_BUILTINS = frozenset(
     {
@@ -144,10 +159,11 @@ class CommandScan:
             as a command substitution or a computed program name. Empty when
             ``programs`` is the complete set of programs the string runs.
         assignments: Variables the string sets (``NAME=value`` prefixes and
-            statements, ``export``, ``env NAME=value``, ``for NAME in``,
-            ``{NAME}>file``). A variable such as ``PATH`` or
-            ``GIT_EXTERNAL_DIFF`` can change what a permitted program executes,
-            so an allowlist may refuse these too.
+            statements, ``export``/``declare``/``local``/``typeset``/
+            ``readonly``, ``read``/``mapfile``/``readarray``/``getopts``,
+            ``env NAME=value``, ``for NAME in``, ``{NAME}>file``). A variable
+            such as ``PATH`` or ``GIT_EXTERNAL_DIFF`` can change what a
+            permitted program executes, so an allowlist may refuse these too.
         redirects: ``(operator, target)`` for each file redirection whose
             target is literal text, e.g. ``(">", "out.txt")``. Heredoc and
             here-string data and ``2>&1``-style descriptor copies are omitted;
@@ -557,6 +573,21 @@ def _check_inert(name: str, args: list[_Word], scan: CommandScan) -> None:
             if not _NAME.fullmatch(variable):
                 scan.opaque.append("'export' of a computed variable name")
             scan.assignments.append(variable)
+    elif name in _NAME_ASSIGNING_BUILTINS:
+        for arg in args:
+            if arg.text.startswith("-"):
+                continue
+            variable = arg.text.split("=", 1)[0]
+            if arg.dynamic or not _NAME.fullmatch(variable):
+                scan.opaque.append(f"'{name}' of a computed variable name")
+            scan.assignments.append(variable)
+    elif name in _NAME_OPERAND_BUILTINS:
+        for arg in args:
+            if arg.text.startswith("-"):
+                continue
+            if arg.dynamic or not _NAME.fullmatch(arg.text):
+                scan.opaque.append(f"'{name}' assigns to a computed variable name")
+            scan.assignments.append(arg.text)
 
 
 def _env_split_string(text: str) -> bool:

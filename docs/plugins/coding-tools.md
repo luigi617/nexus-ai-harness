@@ -114,8 +114,9 @@ and a program name stored in a variable or produced by a glob. The policy
 handles them like this:
 
 - **With an allowlist**, these constructs are refused. So is any command that
-  sets a variable, whether by `NAME=value`, `export`, a `for`/`select` loop
-  variable, or `{NAME}>file`, because a variable like `PATH` or
+  sets a variable, whether by `NAME=value`, `export`/`declare`/`local`/
+  `typeset`/`readonly`, `read`/`mapfile`/`readarray`/`getopts`, a `for`/
+  `select` loop variable, or `{NAME}>file`, because a variable like `PATH` or
   `GIT_EXTERNAL_DIFF` can make an allowed name run something else. Output
   redirections are checked too, because off macOS nothing else stops the shell
   itself from writing a file: a target must resolve inside the root, and

@@ -100,6 +100,20 @@ def test_path_escape_with_sandbox_returns_error(tmp_path):
     assert written.startswith("error:")
 
 
+def test_path_with_null_byte_returns_error_not_raise(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    ctx = make_ctx()
+
+    assert ReadFile().run({"path": "a\x00b"}, ctx).startswith("error:")
+
+
+def test_path_with_null_byte_returns_error_with_sandbox(tmp_path):
+    sandbox = WorkspaceSandbox(tmp_path)
+    ctx = make_ctx(sandbox)
+
+    assert ReadFile().run({"path": "a\x00b"}, ctx).startswith("error:")
+
+
 def test_read_numbers_lines_like_cat_n(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     (tmp_path / "f.py").write_text("a\n\n  b\r\nc")

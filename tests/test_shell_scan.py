@@ -30,7 +30,7 @@ def programs(command: str) -> list[str]:
         ("{ rm x; }", ["rm"]),
         ("if [ -f x ]; then cat x; else echo no; fi", ["cat"]),
         ("for f in *.py; do wc -l $f; done", ["wc"]),
-        ("while read -r l; do grep x; done < f", ["read", "grep"]),
+        ("while read -r l; do grep x; done < f", ["grep"]),
         ("! grep x f", ["grep"]),
         ("time -p make", ["make"]),
         ("function f { rm x; }", ["rm"]),
@@ -203,6 +203,25 @@ def test_run_process_closes_stdin_and_can_merge_stderr(tmp_path):
 )
 def test_loop_and_fd_variables_are_assignments(command, variable):
     assert variable in scan_command(command).assignments
+
+
+@pytest.mark.parametrize(
+    ("command", "variable"),
+    [
+        ("declare -x PATH=/tmp/evil:$PATH", "PATH"),
+        ("local PATH=/tmp/evil", "PATH"),
+        ("typeset -x LD_PRELOAD=/tmp/evil.so", "LD_PRELOAD"),
+        ("readonly GIT_EXTERNAL_DIFF=/tmp/evil", "GIT_EXTERNAL_DIFF"),
+        ("read -r PATH", "PATH"),
+        ("mapfile -t PATH", "PATH"),
+        ("readarray PATH", "PATH"),
+        ("getopts abc PATH", "PATH"),
+    ],
+)
+def test_assignment_builtins_are_assignments(command, variable):
+    scan = scan_command(command)
+    assert variable in scan.assignments
+    assert variable not in scan.programs
 
 
 @pytest.mark.parametrize(
