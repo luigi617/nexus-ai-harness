@@ -84,7 +84,15 @@ def test_default_harness_workspace_registers_sandbox_and_fs_tools(tmp_path):
     )
     assert isinstance(h._registry.get(Sandbox), WorkspaceSandbox)
     tool_names = {t.name for t in h._registry.all(Tool)}
-    assert {"read_file", "write_file", "list_dir", "shell"} <= tool_names
+    assert {
+        "read_file",
+        "write_file",
+        "edit_file",
+        "list_dir",
+        "grep",
+        "glob",
+        "shell",
+    } <= tool_names
 
 
 def test_default_harness_write_file_and_shell_are_not_auto_trusted(tmp_path):
@@ -108,7 +116,10 @@ def test_default_harness_write_file_and_shell_are_not_auto_trusted(tmp_path):
     verdict = lambda name: ask.check({"name": name}, ctx).verdict  # noqa: E731
     assert verdict("read_file") == PermissionVerdict.ALLOW
     assert verdict("list_dir") == PermissionVerdict.ALLOW
+    assert verdict("grep") == PermissionVerdict.ALLOW
+    assert verdict("glob") == PermissionVerdict.ALLOW
     assert verdict("write_file") == PermissionVerdict.ASK
+    assert verdict("edit_file") == PermissionVerdict.ASK
     assert verdict("shell") == PermissionVerdict.ASK
 
 
