@@ -136,7 +136,7 @@ class ReadFile(Tool):
             return self._read(resolved, offset, limit, numbered)
         except SandboxViolation as exc:
             return f"error: {exc}"
-        except OSError as exc:
+        except (OSError, ValueError) as exc:  # ValueError e.g. embedded NUL
             return f"error: {exc}"
 
     @staticmethod
@@ -224,7 +224,7 @@ class WriteFile(Tool):
                 resolved.write_bytes(data)
         except SandboxViolation as exc:
             return f"error: {exc}"
-        except OSError as exc:
+        except (OSError, ValueError) as exc:  # ValueError e.g. embedded NUL
             return f"error: {exc}"
         return f"wrote {len(data)} bytes to {resolved}"
 
@@ -311,7 +311,7 @@ class EditFile(Tool):
             return f"error: {exc}"
         except SandboxViolation as exc:
             return f"error: {exc}"
-        except OSError as exc:
+        except (OSError, ValueError) as exc:  # ValueError e.g. embedded NUL
             return f"error: {exc}"
         shown = display(resolved, root(ctx))
         noun = "replacement" if count == 1 else "replacements"
@@ -442,7 +442,7 @@ class ListDir(Tool):
             entries = sorted(resolved.iterdir(), key=lambda p: p.name)
         except SandboxViolation as exc:
             return f"error: {exc}"
-        except OSError as exc:
+        except (OSError, ValueError) as exc:  # ValueError e.g. embedded NUL
             return f"error: {exc}"
         if not entries:
             return "(empty)"
