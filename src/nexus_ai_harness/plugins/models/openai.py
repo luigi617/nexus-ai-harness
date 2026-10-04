@@ -44,6 +44,9 @@ class OpenAIModel(OpenAICompatibleModel):
         "gpt-6-astra": (10.0, 50.0),
         "gpt-6-luna": (0.1, 0.5),
         "gpt-6-sol": (2.0, 10.0),
+        "gpt-6.1-sol": (2.0, 10.0),
+        "gpt-daybreak-blue-latest": (4.0, 20.0),
+        "gpt-daybreak-red-latest": (12.5, 75.0),
         "o1": (15.0, 60.0),
         "o1-pro": (150.0, 600.0),
         "o3": (2.0, 8.0),
@@ -86,6 +89,9 @@ class OpenAIModel(OpenAICompatibleModel):
         "gpt-6-astra": "GPT-6 Astra is OpenAI's most capable model for complex reasoni",
         "gpt-6-luna": "OpenAI's most efficient model for focused, high-volume tasks",
         "gpt-6-sol": "OpenAI model for complex coding and agentic workflows",
+        "gpt-6.1-sol": "Near-Astra performance for complex coding, computer use, and professional work at a lower cost.",  # noqa: E501
+        "gpt-daybreak-blue-latest": "Alias for flagship general-purpose models with safeguards for defensive cybersecurity work",  # noqa: E501
+        "gpt-daybreak-red-latest": "Alias for advanced cybersecurity models for authorized vulnerability research and security testing",  # noqa: E501
         "o1": "O-series reasoning model for hard analysis, math, coding, and planning",
         "o1-pro": "O-series reasoning model for hard analysis, math, coding, and plann",
         "o3": "Deliberate o-series reasoner for hard math, coding, and multi-step anal",
