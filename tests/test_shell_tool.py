@@ -309,12 +309,18 @@ def test_shell_timeout_result_shape_fallback(tmp_path):
 @pytest.mark.parametrize("sandboxed", [False, True])
 def test_shell_background_job_returns_promptly(tmp_path, monkeypatch, sandboxed):
     monkeypatch.chdir(tmp_path)
-    ctx = make_ctx(WorkspaceSandbox(tmp_path)) if sandboxed else make_ctx()
+    sandbox = WorkspaceSandbox(tmp_path) if sandboxed else None
+    ctx = make_ctx(sandbox) if sandboxed else make_ctx()
     started = time.monotonic()
     result = Shell().run({"command": "sleep 30 & echo started", "timeout": 20}, ctx)
     assert time.monotonic() - started < 10
     assert result.startswith("exit=0\nstarted\n")
-    assert "redirect" in result
+    # Bubblewrap gives the command its own PID namespace, so the kernel kills
+    # the backgrounded sleep the moment the foreground shell exits - there's
+    # nothing left lingering to report. Elsewhere, the sleep outlives the
+    # shell and must be reaped explicitly.
+    if not (sandbox is not None and sandbox.isolation_level == "bubblewrap"):
+        assert "redirect" in result
 
 
 def test_shell_parallel_call_does_not_clobber_cwd(tmp_path, monkeypatch):

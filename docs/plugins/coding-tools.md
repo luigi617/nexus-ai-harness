@@ -88,7 +88,10 @@ A background job that still writes to the output (`server &`) would otherwise
 keep the call open until the timeout. Instead, once the command itself exits,
 the tool waits a second for remaining output and then stops the job, saying so
 in the result. To leave a process running, redirect its output:
-`server > server.log 2>&1 &`.
+`server > server.log 2>&1 &`. Under the bubblewrap backend, redirecting isn't
+enough: its own PID namespace kills every process in the sandbox, backgrounded
+or not, the moment the shell exits, so no command run through it outlives the
+call that started it.
 
 Parallel tool calls are safe. Edits to the same file are serialized, so both
 edits land. A shell call only updates the session's directory when it
