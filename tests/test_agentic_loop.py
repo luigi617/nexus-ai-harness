@@ -585,7 +585,8 @@ def test_llm_router_decider_failure_ends_with_model_error():
     assert ctx.state(RunState).stop_reason == "model_error"
     assert worker.calls == []
     kinds = [type(e).__name__ for e in log.events]
-    assert "ModelCallStarted" not in kinds  # the failing call was the router's
+    assert kinds.count("ModelCallStarted") == 1  # only the router's own call
+    assert "ModelCallCompleted" not in kinds  # it failed, so never completed
     assert kinds[-3:] == ["ModelCallFailed", "IterationCompleted", "LoopStopped"]
     assert log.events[-3] == ModelCallFailed(error, 4)
 

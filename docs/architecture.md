@@ -40,4 +40,5 @@ correctly either way. Use `harness.run(...)` from async code or
 
 A plugin can keep state that lives for one session with `ctx.state(cls)`, for
 example a token counter or a per-run setting. State is scoped to the session, so
-it never leaks between runs.
+it never leaks between runs. State isn't saved with the session unless its class
+opts in with `@persistable`; see [Persistence](plugins/persistence.md).

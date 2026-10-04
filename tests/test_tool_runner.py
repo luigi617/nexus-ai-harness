@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 
-from nexus_ai_harness.core.events import Event
+from nexus_ai_harness.core.events import Event, ToolCallCompleted, ToolCallStarted
+from nexus_ai_harness.core.message import Message
 from nexus_ai_harness.plugins.permissions import AllowList, DenyList
 from nexus_ai_harness.protocols.hook import Hook
 from nexus_ai_harness.protocols.tool import Tool
@@ -111,3 +113,80 @@ def test_call_missing_name_permissive_policy_hits_unknown_tool():
     msg, _ = run({"id": "1", "arguments": {}}, DenyList([]), rec)
     assert "unknown tool" in msg.content
     assert rec.events == ["ToolCallDenied"]
+
+
+class _EventSink(Hook):
+    def __init__(self) -> None:
+        self.events: list[Event] = []
+
+    def on(self, event: Event, ctx) -> None:
+        self.events.append(event)
+
+
+def test_started_and_completed_share_a_call_id_and_report_duration(monkeypatch):
+    import nexus_ai_harness.services.tool_runner as runner_mod
+
+    ticks = iter([10.0, 12.5])
+
+    class _FakeTime:
+        def perf_counter(self) -> float:
+            return next(ticks)
+
+    monkeypatch.setattr(runner_mod, "time", _FakeTime())
+    sink = _EventSink()
+    run(
+        {"name": "echo", "id": "1"},
+        AllowList(["echo"]),
+        sink,
+        tools=[RecordingTool("echo")],
+    )
+    started, completed = sink.events
+    assert isinstance(started, ToolCallStarted)
+    assert isinstance(completed, ToolCallCompleted)
+    assert started.call_id.startswith("tcall_")
+    assert completed.call_id == started.call_id
+    assert completed.duration == 2.5
+    assert completed.error is None
+
+
+def test_each_tool_call_gets_a_distinct_call_id():
+    sink = _EventSink()
+    ctx = make_ctx(AllowList(["echo"]), sink)
+    runner = ToolRunner([RecordingTool("echo")])
+    asyncio.run(runner.run({"name": "echo", "id": "1"}, ctx))
+    asyncio.run(runner.run({"name": "echo", "id": "2"}, ctx))
+    ids = {e.call_id for e in sink.events if isinstance(e, ToolCallStarted)}
+    assert len(ids) == 2
+
+
+def test_raising_tool_logs_traceback_and_keeps_model_message(caplog):
+    sink = _EventSink()
+    with caplog.at_level(logging.WARNING, logger="nexus_ai_harness"):
+        msg, _ = run(
+            {"name": "boom", "id": "1"},
+            AllowList(["boom"]),
+            sink,
+            tools=[_ExplodingTool()],
+        )
+    assert msg.content == "error: kaboom"  # unchanged string for the model
+    [record] = [r for r in caplog.records if r.levelno == logging.WARNING]
+    assert record.name == "nexus_ai_harness.services.tool_runner"
+    assert record.exc_info is not None and record.exc_info[0] is ValueError
+    completed = sink.events[-1]
+    assert isinstance(completed, ToolCallCompleted)
+    assert isinstance(completed.error, ValueError)
+    assert completed.duration >= 0
+
+
+def test_denied_tool_call_is_logged(caplog):
+    with caplog.at_level(logging.INFO, logger="nexus_ai_harness"):
+        run({"name": "echo", "id": "1"}, AllowList([]), tools=[RecordingTool("echo")])
+    assert any("denied" in r.getMessage() for r in caplog.records)
+
+
+def test_legacy_positional_construction_still_works():
+    call = {"name": "echo"}
+    started = ToolCallStarted(call)
+    completed = ToolCallCompleted(call, Message(role="tool"))
+    assert started.call_id
+    assert (completed.call_id, completed.duration, completed.error) == ("", 0.0, None)

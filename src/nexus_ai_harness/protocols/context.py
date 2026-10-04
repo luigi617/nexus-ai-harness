@@ -2,12 +2,15 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable
-from typing import Any, TypeVar
+from typing import TYPE_CHECKING, Any, TypeVar
 
 from nexus_ai_harness.core.events import Event
 from nexus_ai_harness.core.message import Message
 from nexus_ai_harness.core.subscription import Subscription
 from nexus_ai_harness.protocols.plugin import Plugin
+
+if TYPE_CHECKING:
+    from nexus_ai_harness.protocols.intervention import Intervention
 
 T = TypeVar("T")
 P = TypeVar("P", bound=Plugin)
@@ -30,6 +33,28 @@ class Context(ABC):
 
     @abstractmethod
     def state(self, cls: type[T]) -> T: ...
+
+    # Non-abstract so existing Context implementations keep working unchanged.
+
+    @property
+    def parent_session_id(self) -> str | None:
+        """The id of the session this one was forked from, or ``None``."""
+        return None
+
+    def persisted_state(self) -> dict[str, dict]:
+        """Return the session's persistable state, keyed by stable name.
+
+        See :func:`~core.persistable.persistable` for how state opts in. The
+        default reports no state.
+        """
+        return {}
+
+    def pending_interventions(self) -> list[Intervention]:
+        """Return queued interventions without consuming them.
+
+        The default reports none.
+        """
+        return []
 
     @abstractmethod
     def apply_interventions(self) -> Awaitable[None]: ...

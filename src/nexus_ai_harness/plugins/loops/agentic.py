@@ -8,7 +8,6 @@ from nexus_ai_harness.core.events import (
     IterationStarted,
     LoopStopped,
     ModelCallFailed,
-    ModelCallStarted,
     ResponseReceived,
 )
 from nexus_ai_harness.core.message import Message
@@ -21,6 +20,7 @@ from nexus_ai_harness.protocols.router import Router
 from nexus_ai_harness.protocols.tool import Tool
 from nexus_ai_harness.protocols.tool_provider import ToolProvider
 from nexus_ai_harness.services.guard_chain import GuardChain
+from nexus_ai_harness.services.model_call import timed_complete
 from nexus_ai_harness.services.tool_runner import ToolRunner
 
 
@@ -76,9 +76,8 @@ class AgenticLoop(Loop):
                 )
                 if model is None:
                     raise LookupError("no model registered")
-                ctx.emit(ModelCallStarted(list(history)))
                 # Hand the model exactly the tools the runner can dispatch.
-                response = await ctx.invoke(model.complete, history, available, ctx)
+                response = await timed_complete(model, history, available, ctx)
             except Exception as exc:
                 # A failed model call, wherever made, mustn't crash the run.
                 if not is_model_failure(exc):

@@ -12,10 +12,12 @@ from nexus_ai_harness.core.events import (
     IterationStarted,
     LoopStopped,
     MessageAdded,
+    ModelCallCompleted,
     ModelCallFailed,
     ModelCallStarted,
     ResponseReceived,
     SessionEnded,
+    SessionSaveFailed,
     SessionStarted,
     ToolCallCompleted,
     ToolCallDenied,
@@ -25,6 +27,7 @@ from nexus_ai_harness.core.guard import GuardDecision
 from nexus_ai_harness.core.ids import new_id
 from nexus_ai_harness.core.message import Message
 from nexus_ai_harness.core.permission import PermissionDecision, PermissionVerdict
+from nexus_ai_harness.core.persistable import PersistenceWarning, persistable
 from nexus_ai_harness.core.response import Response
 
 __all__ = [
@@ -38,17 +41,21 @@ __all__ = [
     "Message",
     "MessageAdded",
     "ModelAPIError",
+    "ModelCallCompleted",
     "ModelCallFailed",
     "ModelCallStarted",
     "PermissionDecision",
     "PermissionVerdict",
+    "PersistenceWarning",
     "RateLimitError",
     "Response",
     "ResponseReceived",
     "SessionEnded",
+    "SessionSaveFailed",
     "SessionStarted",
     "ToolCallCompleted",
     "ToolCallDenied",
     "ToolCallStarted",
     "new_id",
+    "persistable",
 ]

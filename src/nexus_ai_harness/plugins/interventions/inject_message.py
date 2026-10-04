@@ -3,10 +3,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from nexus_ai_harness.core.message import Message
+from nexus_ai_harness.core.persistable import persistable
 from nexus_ai_harness.protocols.context import Context
 from nexus_ai_harness.protocols.intervention import Intervention
 
 
+@persistable("interventions.inject_message")
 @dataclass
 class InjectMessage(Intervention):
     """Steer a running agent by adding a message before its next turn.

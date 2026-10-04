@@ -47,7 +47,13 @@ class Reporter(Hook):
 ```
 
 Register it with `.use(Reporter())`. See `core/events.py` for the full list of
-events.
+events. Model and tool calls emit paired started/completed events that share a
+`call_id` and carry a `duration`; see [Observability](plugins/observability.md).
+A plugin that calls a model itself should go through
+`services.model_call.timed_complete` so the call is timed, emitted, and counted.
+
+To log from a plugin, use a module logger (`logger = logging.getLogger(__name__)`)
+and never configure handlers or levels; that is the application's job.
 
 ### Run code before or after another plugin with an `Interceptor`
 
