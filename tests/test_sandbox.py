@@ -145,6 +145,7 @@ def test_resolve_path_accepts_root_itself(tmp_path):
     assert sandbox.resolve_path(".") == tmp_path.resolve()
 
 
+@pytest.mark.skipif(sys.platform != "darwin", reason="macOS sandbox-exec only")
 def test_profile_escapes_backslash_in_root(tmp_path):
     # A backslash is a legal path char; the SBPL profile must escape it (and any
     # quote) so the string literal can't terminate early or inject code.

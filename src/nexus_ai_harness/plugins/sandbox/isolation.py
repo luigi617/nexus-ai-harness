@@ -177,7 +177,9 @@ class BubblewrapBackend(IsolationBackend):
                 read-only inside the sandbox even though a mask hides them.
         """
         self.executable = executable
-        self.expose = tuple(str(path) for path in expose)
+        # bwrap only runs on Linux, so these must stay POSIX-style even if the
+        # host is Windows, where str(Path(...)) would use backslashes instead.
+        self.expose = tuple(Path(path).as_posix() for path in expose)
 
     def _resolve(self) -> str | None:
         return self.executable or shutil.which("bwrap")
@@ -250,6 +252,9 @@ def escaping_symlinks(masks: Sequence[str]) -> list[tuple[str, str]]:
                 target = os.readlink(entry.path)
             except OSError:
                 continue
+            # Windows prefixes an absolute symlink target with \\?\, which
+            # would otherwise defeat the plain-string comparison below.
+            target = target.removeprefix("\\\\?\\")
             resolved = os.path.normpath(os.path.join(mask, target))
             if not any(_is_within(resolved, other) for other in masks):
                 links.append((target, entry.path))
