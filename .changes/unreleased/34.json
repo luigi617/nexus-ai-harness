@@ -1,4 +1,0 @@
-{
-  "id": 34,
-  "description": "Add library logging, a ModelCallCompleted event with call ids and durations on model and tool call events, token and cost totals on RunResult (including summarizer and router calls), and an opt-in LoggingHook for structured event logs."
-}
