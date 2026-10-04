@@ -7,6 +7,7 @@ from nexus_ai_harness.core.errors import (
 )
 from nexus_ai_harness.core.events import (
     ApprovalRequested,
+    ContextCompacted,
     Event,
     IterationCompleted,
     IterationStarted,
@@ -32,6 +33,7 @@ from nexus_ai_harness.core.response import Response
 
 __all__ = [
     "ApprovalRequested",
+    "ContextCompacted",
     "ContextLengthExceeded",
     "Event",
     "GuardDecision",

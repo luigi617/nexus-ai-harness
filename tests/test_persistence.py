@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 import threading
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from pathlib import Path
 
 import pytest
@@ -490,7 +490,8 @@ def test_registered_state_roundtrips_and_unregistered_is_skipped():
     summary.upto, summary.text = 5, "recap"
     ctx.state(_EphemeralState).count = 9
     snap = snapshot_from_ctx(ctx)
-    assert snap["state"] == {"summarizing.summary": {"upto": 5, "text": "recap"}}
+    expected = asdict(SummaryState(upto=5, text="recap"))
+    assert snap["state"] == {"summarizing.summary": expected}
     session = session_from_dict(snap)
     assert session.state(SummaryState) == SummaryState(upto=5, text="recap")
     assert session.state(_EphemeralState).count == 0  # not opted in
@@ -528,7 +529,8 @@ def test_state_whose_to_dict_raises_is_skipped_and_history_still_saved(tmp_path)
     saved = s.load(ctx.session_id)
     assert saved is not None
     assert [m["content"] for m in saved["history"]] == ["hi"]
-    assert saved["state"] == {"summarizing.summary": {"upto": 0, "text": "recap"}}
+    expected = asdict(SummaryState(text="recap"))
+    assert saved["state"] == {"summarizing.summary": expected}
 
 
 def test_state_whose_from_dict_raises_falls_back_to_default():

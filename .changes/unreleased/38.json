@@ -1,0 +1,4 @@
+{
+  "id": 38,
+  "description": "Budget the context by tokens (default_harness now compacts above 100k estimated tokens), fall back to dropping or truncating turns instead of sending an over-budget history when summarization fails, merge the summary into the first user message to keep role alternation, and add the ContextCompacted event and TokenEstimator protocol."
+}

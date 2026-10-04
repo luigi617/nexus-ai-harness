@@ -223,4 +223,4 @@ def test_resumed_summarizer_reuses_the_saved_summary(tmp_path):
     # Only the reply was requested: the restored summary was reused, not rebuilt.
     assert len(second.calls) == 1
     contents = [m.content for m in second.calls[0]]
-    assert "[Conversation summary so far]\nRECAP-1" in contents
+    assert any("[Conversation summary so far]\nRECAP-1" in c for c in contents)
