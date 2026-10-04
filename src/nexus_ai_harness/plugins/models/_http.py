@@ -17,8 +17,7 @@ from nexus_ai_harness.plugins.models.retry import (
     wait_before_retry,
 )
 
-# Failures of the connection itself; a retry may succeed. Other HTTPExceptions,
-# such as InvalidURL, fail identically every time and are raised at once.
+# Connection failures may succeed on retry; InvalidURL and the like never do.
 _TRANSPORT_ERRORS = (
     urllib.error.URLError,
     TimeoutError,

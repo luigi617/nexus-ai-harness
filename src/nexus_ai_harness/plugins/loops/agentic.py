@@ -80,8 +80,7 @@ class AgenticLoop(Loop):
                 # Hand the model exactly the tools the runner can dispatch.
                 response = await ctx.invoke(model.complete, history, available, ctx)
             except Exception as exc:
-                # Like a tool error, a failed model call (here, in a router, or in
-                # a context manager) must not crash the run; other errors do.
+                # A failed model call, wherever made, mustn't crash the run.
                 if not is_model_failure(exc):
                     raise
                 ctx.emit(ModelCallFailed(exc, failure_attempts(exc)))
