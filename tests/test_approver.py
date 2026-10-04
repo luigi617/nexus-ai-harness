@@ -49,6 +49,7 @@ def test_console_shows_provenance_in_prompt(monkeypatch):
     assert "subagent depth=2" in seen[0]
 
 
+@pytest.mark.flaky(reruns=2, reruns_delay=0.3)
 def test_console_serializes_concurrent_prompts(monkeypatch):
     ctx = make_ctx()
     ap = ConsoleApprover()
@@ -72,6 +73,7 @@ def test_console_serializes_concurrent_prompts(monkeypatch):
     assert max_live == 1  # lock serialized the prompts
 
 
+@pytest.mark.flaky(reruns=2, reruns_delay=0.3)
 def test_console_concurrent_same_tool_prompts_once(monkeypatch):
     # Concurrent asks for one tool must prompt once: 2nd hits the always fast-path.
     ctx = make_ctx()
