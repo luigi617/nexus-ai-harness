@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import shlex
 import sys
 import threading
 import time
@@ -18,6 +19,7 @@ from nexus_ai_harness.plugins.tools.shell import (
     _truncate,
 )
 from nexus_ai_harness.protocols.sandbox import Sandbox, SandboxResult, SandboxViolation
+from nexus_ai_harness.services.shell import _denormalize_msys_path
 from tests.conftest import make_ctx
 
 
@@ -112,7 +114,10 @@ def test_shell_cwd_outside_root_is_reset(tmp_path, monkeypatch):
     assert "outside the workspace" in result
     assert ctx.state(ShellState).cwd is None
     pwd = shell.run({"command": "pwd -P"}, ctx)
-    assert pwd.strip().endswith(str(tmp_path.resolve()))
+    # pwd -P is the command's own output, not our tracked state: under Git
+    # Bash on Windows it reports its own MSYS form (/c/...) regardless.
+    last_line = _denormalize_msys_path(pwd.strip().splitlines()[-1])
+    assert last_line == str(tmp_path.resolve())
 
 
 def test_shell_env_persists_across_calls(tmp_path, monkeypatch):
@@ -179,6 +184,11 @@ def test_shell_timeout_kills_pipeline_children(tmp_path, monkeypatch, sandboxed)
     assert time.monotonic() - started < 10
 
 
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="Windows has no process-group kill; a hard-killed bash can still "
+    "finish writing the state trailer before it dies",
+)
 def test_shell_timeout_does_not_update_cwd(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     (tmp_path / "sub").mkdir()
@@ -418,7 +428,10 @@ def test_shell_non_utf8_output_does_not_crash(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     ctx = make_ctx()
     script = "import sys; sys.stdout.buffer.write(b'\\xff\\xfe\\x00bad')"
-    result = Shell().run({"command": f"{sys.executable} -c {script!r}"}, ctx)
+    # sys.executable on Windows contains backslashes, which bash would
+    # otherwise interpret as escapes; shlex.quote keeps it one literal word.
+    executable = shlex.quote(sys.executable)
+    result = Shell().run({"command": f"{executable} -c {script!r}"}, ctx)
     assert result.startswith("exit=0")
     assert "bad" in result
 

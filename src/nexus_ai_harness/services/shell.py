@@ -769,6 +769,7 @@ class ShellInvocation:
         if not found:  # the trailer was cut short; trust none of it
             cwd_line, env_blob = "", ""
         cwd_line = cwd_line.strip("\n")
+        cwd_line = _denormalize_msys_path(cwd_line)
         try:
             # An empty or malformed line means ``pwd`` failed: the cwd is unknown.
             cwd = str(confine(cwd_line)) if cwd_line and "\0" not in cwd_line else None
@@ -786,6 +787,25 @@ class ShellInvocation:
             cwd=cwd,
             env=_env_changes(before, _parse_env(env_blob)),
         )
+
+
+_MSYS_DRIVE = re.compile(r"^/([A-Za-z])(/.*)?$")
+
+
+def _denormalize_msys_path(path: str) -> str:
+    r"""Rewrite a Git Bash ``/c/...`` path to native ``C:\...`` on Windows.
+
+    The driver runs under Git Bash there, whose ``pwd -P`` reports MSYS-style
+    paths; everything else resolving a cwd expects a native Windows path.
+    """
+    if os.name != "nt":
+        return path
+    match = _MSYS_DRIVE.match(path)
+    if not match:
+        return path
+    # Uppercase to match how Path.resolve() canonicalizes a Windows drive letter.
+    drive, rest = match.group(1).upper(), (match.group(2) or "").replace("/", "\\")
+    return f"{drive}:{rest}" if rest else f"{drive}:\\"
 
 
 def _parse_env(blob: str) -> dict[str, str]:

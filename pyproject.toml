@@ -27,6 +27,9 @@ Changelog = "https://github.com/luigi617/nexus-ai-harness/blob/main/CHANGELOG.md
 [dependency-groups]
 dev = [
     "pytest==9.1.1",
+    "pytest-cov==7.1.0",
+    "pytest-rerunfailures==16.7",
+    "pytest-repeat==0.9.4",
     "ruff==0.16.4",
     "mypy==2.3.1",
     { include-group = "benchmarks" },
@@ -55,6 +58,10 @@ where = ["src"]
 testpaths = ["tests"]
 
 pythonpath = ["src", "."]
+
+# Registered so -p no:rerunfailures (which the concurrency-repeat job uses to
+# see every failure, not just the ones that survive a retry) doesn't warn.
+markers = ["flaky: rerun on failure (provided by pytest-rerunfailures)"]
 
 [tool.ruff]
 line-length = 88

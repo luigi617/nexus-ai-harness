@@ -14,6 +14,7 @@ from nexus_ai_harness.plugins.tools._text import count_breaks, iter_lines, split
 from nexus_ai_harness.protocols.context import Context
 from nexus_ai_harness.protocols.sandbox import SandboxViolation
 from nexus_ai_harness.protocols.tool import Tool
+from nexus_ai_harness.services.fs import replace_retrying
 
 # Kept under their historical private names for callers that imported them.
 _confine = confine
@@ -135,7 +136,7 @@ class ReadFile(Tool):
             return self._read(resolved, offset, limit, numbered)
         except SandboxViolation as exc:
             return f"error: {exc}"
-        except OSError as exc:
+        except (OSError, ValueError) as exc:  # ValueError e.g. embedded NUL
             return f"error: {exc}"
 
     @staticmethod
@@ -223,7 +224,7 @@ class WriteFile(Tool):
                 resolved.write_bytes(data)
         except SandboxViolation as exc:
             return f"error: {exc}"
-        except OSError as exc:
+        except (OSError, ValueError) as exc:  # ValueError e.g. embedded NUL
             return f"error: {exc}"
         return f"wrote {len(data)} bytes to {resolved}"
 
@@ -310,7 +311,7 @@ class EditFile(Tool):
             return f"error: {exc}"
         except SandboxViolation as exc:
             return f"error: {exc}"
-        except OSError as exc:
+        except (OSError, ValueError) as exc:  # ValueError e.g. embedded NUL
             return f"error: {exc}"
         shown = display(resolved, root(ctx))
         noun = "replacement" if count == 1 else "replacements"
@@ -408,7 +409,7 @@ def _atomic_write(path: Path, data: bytes) -> None:
         with os.fdopen(fd, "wb") as handle:
             handle.write(data)
         os.chmod(tmp, mode)
-        os.replace(tmp, path)
+        replace_retrying(tmp, path)
     except BaseException:
         with contextlib.suppress(OSError):
             os.unlink(tmp)
@@ -441,7 +442,7 @@ class ListDir(Tool):
             entries = sorted(resolved.iterdir(), key=lambda p: p.name)
         except SandboxViolation as exc:
             return f"error: {exc}"
-        except OSError as exc:
+        except (OSError, ValueError) as exc:  # ValueError e.g. embedded NUL
             return f"error: {exc}"
         if not entries:
             return "(empty)"

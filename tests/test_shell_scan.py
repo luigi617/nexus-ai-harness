@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import sys
 import time
 from pathlib import Path
@@ -8,7 +9,14 @@ import pytest
 
 from nexus_ai_harness.protocols.sandbox import SandboxResult, SandboxViolation
 from nexus_ai_harness.services.process import TIMEOUT_RETURNCODE, run_process
-from nexus_ai_harness.services.shell import ShellInvocation, scan_command
+from nexus_ai_harness.services.shell import (
+    ShellInvocation,
+    default_interpreter,
+    scan_command,
+)
+
+_SH = [default_interpreter(), "-c"]
+"""The real shell, not a hardcoded /bin/sh that doesn't exist on Windows."""
 
 
 def programs(command: str) -> list[str]:
@@ -94,9 +102,7 @@ def test_scan_reports_what_it_cannot_see(command, reason):
 
 
 def _run(invocation: ShellInvocation, cwd: Path, timeout: float = 10):
-    return run_process(
-        invocation.argv, cwd=cwd, env={"PATH": "/usr/bin:/bin"}, timeout=timeout
-    )
+    return run_process(invocation.argv, cwd=cwd, env=dict(os.environ), timeout=timeout)
 
 
 def _confine(root: Path):
@@ -162,9 +168,9 @@ def test_invocation_parse_without_markers_returns_raw_output():
 def test_run_process_times_out_and_kills_the_group(tmp_path):
     started = time.monotonic()
     result = run_process(
-        ["/bin/sh", "-c", "echo early; sleep 30 | cat"],
+        [*_SH, "echo early; sleep 30 | cat"],
         cwd=tmp_path,
-        env={"PATH": "/usr/bin:/bin"},
+        env=dict(os.environ),
         timeout=0.5,
     )
     assert result.timed_out
@@ -312,9 +318,9 @@ def test_invocation_env_snapshot_survives_a_broken_path(tmp_path, command):
 def test_run_process_background_job_is_not_a_timeout(tmp_path):
     started = time.monotonic()
     result = run_process(
-        ["/bin/sh", "-c", "sleep 30 & echo started"],
+        [*_SH, "sleep 30 & echo started"],
         cwd=tmp_path,
-        env={"PATH": "/usr/bin:/bin"},
+        env=dict(os.environ),
         timeout=20,
     )
     assert time.monotonic() - started < 10
@@ -324,12 +330,17 @@ def test_run_process_background_job_is_not_a_timeout(tmp_path):
     assert "redirect" in result.stderr
 
 
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="a Git Bash background job's survival past the parent's exit "
+    "isn't reliable under Windows process semantics",
+)
 def test_run_process_redirected_background_job_keeps_running(tmp_path):
     marker = tmp_path / "done"
     result = run_process(
-        ["/bin/sh", "-c", f"(sleep 1.5; touch {marker}) > /dev/null 2>&1 & echo ok"],
+        [*_SH, f"(sleep 1.5; touch {marker}) > /dev/null 2>&1 & echo ok"],
         cwd=tmp_path,
-        env={"PATH": "/usr/bin:/bin"},
+        env=dict(os.environ),
         timeout=10,
     )
     assert (result.returncode, result.stdout, result.stderr) == (0, "ok\n", "")
@@ -341,9 +352,9 @@ def test_run_process_redirected_background_job_keeps_running(tmp_path):
 
 def test_run_process_feeds_input_and_translates_newlines(tmp_path):
     result = run_process(
-        ["/bin/sh", "-c", "cat; printf 'a\\r\\nb\\n' >&2"],
+        [*_SH, "cat; printf 'a\\r\\nb\\n' >&2"],
         cwd=tmp_path,
-        env={"PATH": "/usr/bin:/bin"},
+        env=dict(os.environ),
         timeout=10,
         input="hello",
     )

@@ -327,7 +327,7 @@ class Grep(Tool):
             return self._search(files, base, regex, context, files_only, max_results)
         except SandboxViolation as exc:
             return f"error: {exc}"
-        except OSError as exc:
+        except (OSError, ValueError) as exc:  # ValueError e.g. embedded NUL
             return f"error: {exc}"
 
     @staticmethod
@@ -496,7 +496,7 @@ class Glob(Tool):
                     break
         except SandboxViolation as exc:
             return f"error: {exc}"
-        except OSError as exc:
+        except (OSError, ValueError) as exc:  # ValueError e.g. embedded NUL
             return f"error: {exc}"
         if not found:
             return "no files match"

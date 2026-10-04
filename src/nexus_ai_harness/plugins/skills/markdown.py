@@ -68,7 +68,9 @@ def load_skills(directory: str | Path) -> list[MarkdownSkill]:
     if not root.is_dir():
         return []
     skills: list[MarkdownSkill] = []
-    for path in sorted(root.rglob("SKILL.md")):
+    # Sort by the POSIX string form: WindowsPath orders case-insensitively,
+    # which would otherwise shuffle sibling directories by casefolded name.
+    for path in sorted(root.rglob("SKILL.md"), key=lambda p: p.as_posix()):
         try:
             skills.append(MarkdownSkill(path))
         except (OSError, UnicodeDecodeError) as exc:

@@ -3,6 +3,7 @@ from __future__ import annotations
 import io
 import os
 import stat
+import sys
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -116,7 +117,7 @@ def test_path_with_null_byte_returns_error_with_sandbox(tmp_path):
 
 def test_read_numbers_lines_like_cat_n(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    (tmp_path / "f.py").write_text("a\n\n  b\r\nc")
+    (tmp_path / "f.py").write_text("a\n\n  b\r\nc", newline="")
     ctx = make_ctx()
 
     result = ReadFile().run({"path": "f.py"}, ctx)
@@ -380,6 +381,10 @@ def test_edit_missing_file_is_an_error(tmp_path, monkeypatch):
     assert not (tmp_path / "nope.py").exists()
 
 
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="Windows chmod can't represent POSIX permission bits",
+)
 def test_edit_preserves_permissions_and_leaves_no_temp_files(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     script = tmp_path / "run.sh"
@@ -432,7 +437,7 @@ def test_edit_snippet_numbers_match_read_file_with_form_feeds(tmp_path):
 
 
 def test_read_file_clips_a_huge_line_without_breaking_numbering(tmp_path):
-    (tmp_path / "big.txt").write_text("x" * 300_000 + "\r\nnext\n")
+    (tmp_path / "big.txt").write_text("x" * 300_000 + "\r\nnext\n", newline="")
     ctx = make_ctx(WorkspaceSandbox(tmp_path))
     lines = ReadFile().run({"path": "big.txt"}, ctx).splitlines()
     assert lines[0].endswith("... (line truncated)")

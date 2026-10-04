@@ -11,8 +11,44 @@ concurrency:
 
 jobs:
   test:
-    name: Tests
+    name: Tests (Linux)
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13", "3.14"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+        with:
+          python-version: ${{ matrix.python-version }}
+      - run: pytest
+
+  test-macos:
+    name: Tests (macOS)
+    runs-on: macos-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13", "3.14"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+        with:
+          python-version: ${{ matrix.python-version }}
+      - run: pytest
+
+  test-windows:
+    name: Tests (Windows)
+    runs-on: windows-latest
+    timeout-minutes: 15
+    # tau-bench's setup.py opens a file without an explicit encoding, which
+    # fails decoding under Windows' default (non-UTF-8) locale; force UTF-8
+    # mode so pip can build it like it does everywhere else.
+    env:
+      PYTHONUTF8: "1"
     strategy:
       fail-fast: false
       matrix:
@@ -26,7 +62,16 @@ jobs:
 
   min-version:
     name: Min Version
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    # Harmless on Linux/macOS; on Windows it works around tau-bench's setup.py
+    # failing to decode under the non-UTF-8 default locale (see test-windows).
+    env:
+      PYTHONUTF8: "1"
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -39,6 +84,7 @@ jobs:
   sandbox-bwrap:
     name: Sandbox (bubblewrap)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup
@@ -49,3 +95,34 @@ jobs:
       - run: pytest
         env:
           NEXUS_TEST_REQUIRE_BWRAP: "1"
+
+  coverage:
+    name: Coverage
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+      - run: >-
+          pytest --cov=src/nexus_ai_harness --cov-report=term-missing
+          --cov-report=xml --cov-fail-under=95
+      - uses: actions/upload-artifact@v4
+        with:
+          name: coverage-xml
+          path: coverage.xml
+
+  concurrency-repeat:
+    name: Concurrency repeat
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+      # Runs each timing-sensitive test many times with reruns disabled, so a
+      # race that only shows up once in a while can't hide behind a retry.
+      - run: >-
+          pytest -p no:rerunfailures --count=10
+          tests/test_approver.py::test_console_serializes_concurrent_prompts
+          tests/test_approver.py::test_console_concurrent_same_tool_prompts_once
+          tests/test_agentic_loop.py::test_parallel_tool_calls_run_concurrently
+          tests/test_memory.py::test_stores_on_one_directory_share_the_in_process_lock

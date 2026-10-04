@@ -464,6 +464,7 @@ def test_natural_exit_emits_completed():
     assert rec.reasons == ["completed"]
 
 
+@pytest.mark.flaky(reruns=2, reruns_delay=0.3)
 def test_parallel_tool_calls_run_concurrently():
     class SlowTool(Tool):
         def __init__(self, name):

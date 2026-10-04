@@ -748,6 +748,7 @@ def test_header_case_alias_ignored_when_it_names_another_file(tmp_path):
     assert store(tmp_path).get("foo").id == "foo"
 
 
+@pytest.mark.flaky(reruns=2, reruns_delay=0.3)
 def test_stores_on_one_directory_share_the_in_process_lock(tmp_path, monkeypatch):
     import threading
     import time as _time

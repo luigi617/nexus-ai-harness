@@ -218,6 +218,7 @@ def test_load_skills_missing_dir_returns_empty(tmp_path):
 
 def test_load_skills_expands_tilde(tmp_path, monkeypatch):
     monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))  # Path.expanduser() on Windows
     _write_skill(tmp_path, "skills/greet", "---\nname: greet\ndescription: G\n---\nhi")
     assert [s.name for s in load_skills("~/skills")] == ["greet"]
 
