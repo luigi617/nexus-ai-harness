@@ -14,6 +14,8 @@
 - [Skills](plugins/skills.md): load task-specific instructions on demand.
 - [Evaluators](plugins/evaluators.md): structured scoring of agent runs.
 - [Interventions](plugins/interventions.md): steer or stop a running agent.
+- [Coding tools](plugins/coding-tools.md): read, search, edit, and run code in a
+  workspace.
 - [Persistence](plugins/persistence.md): save, resume, and fork sessions.
 - [Observability](plugins/observability.md): logging, call timing, and usage totals.
 - [Sandbox](plugins/sandbox.md): confine file access and commands, with OS
@@ -21,5 +23,4 @@
 
 Other built-in plugins:
 
-- **Filesystem and shell tools**: `read_file`, `write_file`, `list_dir`, `shell`.
 - **MCP**: connect to MCP servers and use their tools.
