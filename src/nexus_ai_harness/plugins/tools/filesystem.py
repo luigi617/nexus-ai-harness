@@ -14,6 +14,7 @@ from nexus_ai_harness.plugins.tools._text import count_breaks, iter_lines, split
 from nexus_ai_harness.protocols.context import Context
 from nexus_ai_harness.protocols.sandbox import SandboxViolation
 from nexus_ai_harness.protocols.tool import Tool
+from nexus_ai_harness.services.fs import replace_retrying
 
 # Kept under their historical private names for callers that imported them.
 _confine = confine
@@ -408,7 +409,7 @@ def _atomic_write(path: Path, data: bytes) -> None:
         with os.fdopen(fd, "wb") as handle:
             handle.write(data)
         os.chmod(tmp, mode)
-        os.replace(tmp, path)
+        replace_retrying(tmp, path)
     except BaseException:
         with contextlib.suppress(OSError):
             os.unlink(tmp)

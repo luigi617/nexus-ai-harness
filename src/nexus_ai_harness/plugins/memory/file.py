@@ -18,6 +18,7 @@ from types import ModuleType
 
 from nexus_ai_harness.core.ids import new_id
 from nexus_ai_harness.protocols.memory import MemoryItem, MemoryStore
+from nexus_ai_harness.services.fs import replace_retrying
 
 _FORMAT_VERSION = "2"
 """Header ``format`` value marking a file whose body is stored verbatim."""
@@ -209,7 +210,12 @@ class FileMemoryStore(MemoryStore):
         name = f"{id}.md"
         candidate = (self._dir / name).resolve()
         # Requiring an exact name keeps ids canonical: no "./x" aliasing "x".
-        if candidate.parent != self._root or candidate.name != name:
+        # Casefold the name check only: a case-insensitive filesystem resolves
+        # to the on-disk spelling, which must still be accepted as that id.
+        if (
+            candidate.parent != self._root
+            or candidate.name.casefold() != name.casefold()
+        ):
             raise ValueError(f"invalid memory id: {id!r}")
         return candidate
 
@@ -287,7 +293,7 @@ class FileMemoryStore(MemoryStore):
                 f.write(data.encode("utf-8"))
                 f.flush()
                 os.fsync(f.fileno())
-            os.replace(tmp, path)
+            replace_retrying(tmp, path)
         except BaseException:
             with contextlib.suppress(OSError):
                 os.unlink(tmp)

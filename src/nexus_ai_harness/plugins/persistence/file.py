@@ -20,6 +20,7 @@ from nexus_ai_harness.plugins.persistence.schema import SCHEMA_VERSION, migrate
 from nexus_ai_harness.protocols.context import Context
 from nexus_ai_harness.protocols.intervention import Intervention
 from nexus_ai_harness.protocols.session_store import SessionStore
+from nexus_ai_harness.services.fs import replace_retrying
 
 _MESSAGE_FIELDS = {f.name for f in fields(Message)}
 """Field names accepted by :class:`Message`, used to filter loaded snapshots."""
@@ -188,9 +189,9 @@ class FileSessionStore(SessionStore):
                         raise FileExistsError(
                             f"session {session_id!r} already exists"
                         ) from None
-                    os.replace(tmp, path)
+                    replace_retrying(tmp, path)
             else:
-                os.replace(tmp, path)
+                replace_retrying(tmp, path)
             _fsync_dir(path.parent)
         finally:
             tmp.unlink(missing_ok=True)  # drop the temp if it wasn't moved into place
@@ -201,10 +202,13 @@ class FileSessionStore(SessionStore):
             raise ValueError(f"invalid session id: {session_id!r}")
         candidate = (self._dir / f"{session_id}.json").resolve()
         # Reject ids that normalize to another name (e.g. "./x" -> "x") too, so an
-        # id always maps to exactly one file and list_ids() round-trips it.
+        # id always maps to exactly one file and list_ids() round-trips it. Casefold
+        # the name check only: a case-insensitive filesystem resolves to the
+        # on-disk spelling, which must still be accepted as that id.
+        name = f"{session_id}.json"
         if (
             candidate.parent != self._dir.resolve()
-            or candidate.name != f"{session_id}.json"
+            or candidate.name.casefold() != name.casefold()
         ):
             raise ValueError(f"invalid session id: {session_id!r}")
         return candidate
