@@ -24,12 +24,16 @@ confirm it against the doc or the source.
 | Writing comments, docstrings, or formatting code | [docs/code-style.md](docs/code-style.md) |
 | Working on a model backend | [docs/plugins/models.md](docs/plugins/models.md) |
 | Working on model selection | [docs/plugins/routers.md](docs/plugins/routers.md) |
+| Working on context compaction or token budgets | [docs/plugins/context-managers.md](docs/plugins/context-managers.md) |
 | Working on long-term memory | [docs/plugins/memory.md](docs/plugins/memory.md) |
 | Working on task delegation | [docs/plugins/subagents.md](docs/plugins/subagents.md) |
 | Working on on-demand instructions | [docs/plugins/skills.md](docs/plugins/skills.md) |
+| Working on logging, events, or usage metrics | [docs/plugins/observability.md](docs/plugins/observability.md) |
 | Working on structured scoring | [docs/plugins/evaluators.md](docs/plugins/evaluators.md) |
 | Steering or stopping a running agent | [docs/plugins/interventions.md](docs/plugins/interventions.md) |
 | Working on filesystem, search, or shell tools | [docs/plugins/coding-tools.md](docs/plugins/coding-tools.md) |
+| Working on session save, resume, or fork | [docs/plugins/persistence.md](docs/plugins/persistence.md) |
+| Working on the sandbox or OS isolation | [docs/plugins/sandbox.md](docs/plugins/sandbox.md) |
 
 ## Project structure
 

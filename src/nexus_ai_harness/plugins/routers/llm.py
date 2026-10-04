@@ -4,6 +4,7 @@ from nexus_ai_harness.core.message import Message
 from nexus_ai_harness.protocols.context import Context
 from nexus_ai_harness.protocols.model import Model
 from nexus_ai_harness.protocols.router import Router
+from nexus_ai_harness.services.model_call import timed_complete
 
 _ROUTER_PROMPT = (
     "You are a model router. Given the user's request, choose the single most "
@@ -43,7 +44,7 @@ class LLMRouter(Router):
         ]
         decider = self._decider or candidates[0]
         # The decider only picks a model id; it calls no tools, so advertise none.
-        response = await ctx.invoke(decider.complete, request, [], ctx)
+        response = await timed_complete(decider, request, [], ctx)
         return self._match(response.text, candidates)
 
     @staticmethod

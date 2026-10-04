@@ -3,10 +3,18 @@ from __future__ import annotations
 from collections.abc import Iterable
 
 from nexus_ai_harness.harness import NexusAIHarness
-from nexus_ai_harness.plugins.context_manager import SummarizingContextManager
+from nexus_ai_harness.plugins.context_manager import (
+    CharTokenEstimator,
+    SummarizingContextManager,
+)
 from nexus_ai_harness.plugins.evaluators import JevEvaluator
 from nexus_ai_harness.plugins.guards import BudgetGuard, MaxIterations, Timeout
-from nexus_ai_harness.plugins.hooks import CostCounter, ElapsedTime, IterationCounter
+from nexus_ai_harness.plugins.hooks import (
+    CostCounter,
+    ElapsedTime,
+    IterationCounter,
+    LoggingHook,
+)
 from nexus_ai_harness.plugins.interventions import InjectMessage
 from nexus_ai_harness.plugins.loops import AgenticLoop, ChatLoop
 from nexus_ai_harness.plugins.mcp import MCPClient, MCPServer
@@ -62,6 +70,7 @@ __all__ = [
     "AutoSave",
     "BedrockModel",
     "BudgetGuard",
+    "CharTokenEstimator",
     "ChatLoop",
     "ConsoleApprover",
     "CostCounter",
@@ -84,6 +93,7 @@ __all__ = [
     "JevEvaluator",
     "LLMRouter",
     "ListDir",
+    "LoggingHook",
     "MCPClient",
     "MCPServer",
     "MarkdownSkill",
@@ -119,6 +129,7 @@ def default_harness(
     workspace: str | None = None,
     session_store: SessionStore | None = None,
     mcp_servers: Iterable[MCPServer] | None = None,
+    max_context_tokens: int | None = 100_000,
 ) -> NexusAIHarness:
     """A batteries-included harness built around the given Model.
 
@@ -143,6 +154,10 @@ def default_harness(
             runs are persisted and can be resumed with :func:`resume`.
         mcp_servers: When set, register an :class:`MCPClient` that exposes the
             configured MCP servers' tools to the loop.
+        max_context_tokens: Estimated prompt size above which the context
+            manager compacts the history, on top of its message budget. Set it
+            below the model's context window; ``None`` compacts by message
+            count only.
 
     Returns:
         A configured, unstarted harness.
@@ -155,7 +170,7 @@ def default_harness(
     harness = (
         NexusAIHarness()
         .use(AgenticLoop())
-        .use(SummarizingContextManager())
+        .use(SummarizingContextManager(max_tokens=max_context_tokens))
         .use(model)
         # long-term memory + its tools
         .use(FileMemoryStore(memory_dir))

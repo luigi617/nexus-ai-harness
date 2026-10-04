@@ -5,17 +5,40 @@ from typing import Any, ClassVar
 
 import boto3
 from botocore.config import Config
+from botocore.exceptions import ClientError
 from dotenv import load_dotenv
 
+from nexus_ai_harness.core.errors import ModelAPIError
 from nexus_ai_harness.core.message import Message
 from nexus_ai_harness.core.response import Response
 from nexus_ai_harness.plugins.models.base import BaseModel
+from nexus_ai_harness.plugins.models.retry import (
+    RetryPolicy,
+    classify_error,
+    is_retryable_status,
+)
 from nexus_ai_harness.protocols.tool import Tool
 
 DEFAULT_REGION = "us-east-1"
+# Converse error codes that describe a transient condition worth retrying.
+_RETRYABLE_CODES = frozenset(
+    {
+        "InternalServerException",
+        "ModelNotReadyException",
+        "ServiceUnavailableException",
+        "ThrottlingException",
+    }
+)
 
 
 class BedrockModel(BaseModel):
+    """Amazon Bedrock via the Converse API.
+
+    Retries are delegated to botocore's ``standard`` retry mode, which applies its
+    own backoff; only ``retry.max_retries`` is taken from the policy. Service
+    errors surface as typed ``ModelAPIError`` subclasses.
+    """
+
     provider = "bedrock"
     # USD per 1M tokens: (input, output). Models not listed here cost 0.
     pricing: ClassVar[dict[str, tuple[float, float]]] = {
@@ -386,6 +409,8 @@ class BedrockModel(BaseModel):
         api_key: str | None = None,
         max_tokens: int = 1024,
         timeout: float = 60.0,
+        max_retries: int | None = None,
+        retry: RetryPolicy | None = None,
         **params,
     ) -> None:
         self.name = model
@@ -398,6 +423,7 @@ class BedrockModel(BaseModel):
         # Accepted explicitly so it is not swept into self.params, where it would
         # pollute inferenceConfig (Converse rejects unknown members).
         self.timeout = timeout
+        self.retry = RetryPolicy.resolve(retry, max_retries)
         self._client: Any = None
 
     def _get_client(self) -> Any:
@@ -407,7 +433,14 @@ class BedrockModel(BaseModel):
             self._client = boto3.client(
                 "bedrock-runtime",
                 region_name=self.region,
-                config=Config(connect_timeout=self.timeout, read_timeout=self.timeout),
+                config=Config(
+                    connect_timeout=self.timeout,
+                    read_timeout=self.timeout,
+                    retries={
+                        "total_max_attempts": self.retry.max_retries + 1,
+                        "mode": "standard",
+                    },
+                ),
             )
         return self._client
 
@@ -422,10 +455,31 @@ class BedrockModel(BaseModel):
             kwargs["system"] = system
         if tools:
             kwargs["toolConfig"] = {"tools": [self._tool_spec(t) for t in tools]}
-        response = self._get_client().converse(**kwargs)
+        try:
+            response = self._get_client().converse(**kwargs)
+        except ClientError as exc:
+            raise self._api_error(exc) from exc
         parsed = self._parse(response)
         parsed.cost = self._cost(parsed.usage)
         return parsed
+
+    @staticmethod
+    def _api_error(exc: ClientError) -> ModelAPIError:
+        error = exc.response.get("Error", {})
+        meta = exc.response.get("ResponseMetadata", {})
+        status = meta.get("HTTPStatusCode")
+        code = error.get("Code", "")
+        retryable = code in _RETRYABLE_CODES or (
+            status is not None and is_retryable_status(status)
+        )
+        return classify_error(
+            str(exc),
+            status=status,
+            body=error.get("Message", ""),
+            retryable=retryable,
+            attempts=meta.get("RetryAttempts", 0) + 1,
+            rate_limited=code == "ThrottlingException",
+        )
 
     @staticmethod
     def _to_converse(history: list[Message]) -> tuple[list[dict], list[dict]]:

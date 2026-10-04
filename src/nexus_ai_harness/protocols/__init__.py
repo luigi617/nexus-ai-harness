@@ -19,6 +19,7 @@ from nexus_ai_harness.protocols.sandbox import (
 )
 from nexus_ai_harness.protocols.session_store import SessionStore
 from nexus_ai_harness.protocols.skill import Skill
+from nexus_ai_harness.protocols.token_estimator import TokenEstimator
 from nexus_ai_harness.protocols.tool import Tool
 from nexus_ai_harness.protocols.tool_provider import ToolProvider
 
@@ -40,6 +41,7 @@ __all__ = [
     "SessionStore",
     "ShellResult",
     "Skill",
+    "TokenEstimator",
     "Tool",
     "ToolProvider",
 ]

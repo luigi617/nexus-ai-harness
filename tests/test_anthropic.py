@@ -124,8 +124,10 @@ def test_cost_zero_for_unknown_model():
 def _patch_post_json(monkeypatch, response):
     captured: dict = {}
 
-    def fake_post_json(url, payload, headers, timeout):
-        captured.update(url=url, payload=payload, headers=headers, timeout=timeout)
+    def fake_post_json(url, payload, headers, timeout, retry=None):
+        captured.update(
+            url=url, payload=payload, headers=headers, timeout=timeout, retry=retry
+        )
         return response
 
     monkeypatch.setattr(
