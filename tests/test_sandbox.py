@@ -7,6 +7,7 @@ import pytest
 
 from nexus_ai_harness.plugins.sandbox import WorkspaceSandbox
 from nexus_ai_harness.protocols.sandbox import Sandbox, SandboxResult, SandboxViolation
+from nexus_ai_harness.services.shell import _denormalize_msys_path
 
 
 def test_satisfies_protocol(tmp_path):
@@ -420,7 +421,11 @@ def test_run_shell_returns_state(tmp_path):
     again = sandbox.run_shell(
         'echo "$K"; pwd -P', timeout=30, cwd=result.cwd, env=result.env
     )
-    assert again.stdout.splitlines() == ["v", str(sandbox.root / "sub")]
+    # pwd -P is the command's own output, not our tracked state: under Git
+    # Bash on Windows it reports its own MSYS form (/c/...) regardless.
+    out = again.stdout.splitlines()
+    out[1] = _denormalize_msys_path(out[1])
+    assert out == ["v", str(sandbox.root / "sub")]
 
 
 def test_run_shell_rejects_cwd_outside_root(tmp_path):

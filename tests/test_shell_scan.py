@@ -330,6 +330,11 @@ def test_run_process_background_job_is_not_a_timeout(tmp_path):
     assert "redirect" in result.stderr
 
 
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="a Git Bash background job's survival past the parent's exit "
+    "isn't reliable under Windows process semantics",
+)
 def test_run_process_redirected_background_job_keeps_running(tmp_path):
     marker = tmp_path / "done"
     result = run_process(
