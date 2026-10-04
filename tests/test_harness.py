@@ -211,3 +211,20 @@ def test_result_exposes_run_state(tmp_path):
     assert result.stop_reason == "completed"
     # cost is reachable via the returned session's typed state
     assert result.session.state(CostState).total == 0.0
+    assert result.cost == 0.0
+    assert result.usage == {"input_tokens": 0, "output_tokens": 0}
+
+
+def test_result_exposes_cost_and_token_usage(tmp_path):
+    from nexus_ai_harness.plugins import default_harness
+
+    model = ScriptedModel(
+        Response(
+            text="done",
+            usage={"input_tokens": 12, "output_tokens": 4},
+            cost=0.02,
+        )
+    )
+    result = default_harness(model, memory_dir=str(tmp_path)).run_sync("q")
+    assert result.cost == 0.02
+    assert result.usage == {"input_tokens": 12, "output_tokens": 4}

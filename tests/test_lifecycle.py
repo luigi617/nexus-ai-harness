@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import logging
 
 import pytest
 
@@ -174,6 +175,49 @@ def test_every_stop_runs_and_first_executed_error_is_reraised():
     with pytest.raises(ValueError, match="late"):
         asyncio.run(go())
     assert log == ["start:a", "start:b", "stop:late", "stop:b", "stop:early", "stop:a"]
+
+
+def test_stop_errors_that_are_not_reraised_are_logged(caplog):
+    class Boom(Plugin, Lifecycle):
+        def __init__(self, name: str) -> None:
+            self._name = name
+
+        async def stop(self) -> None:
+            raise ValueError(self._name)
+
+    h = build(Boom("early"), Boom("late"))
+
+    async def go() -> None:
+        await h.start()
+        await h.stop()
+
+    with (
+        caplog.at_level(logging.WARNING, logger="nexus_ai_harness"),
+        pytest.raises(ValueError, match="late"),
+    ):
+        asyncio.run(go())
+    # "late" is re-raised; only the swallowed "early" error needs a log record.
+    [record] = caplog.records
+    assert record.exc_info is not None and str(record.exc_info[1]) == "early"
+
+
+def test_rollback_teardown_error_is_logged(caplog):
+    class NoisyStop(Plugin, Lifecycle):
+        async def stop(self) -> None:
+            raise ValueError("teardown boom")
+
+    class FailStart(Plugin, Lifecycle):
+        async def start(self, ctx: Context) -> None:
+            raise RuntimeError("start failed")
+
+    h = build(NoisyStop(), FailStart())
+    with (
+        caplog.at_level(logging.WARNING, logger="nexus_ai_harness"),
+        pytest.raises(RuntimeError, match="start failed"),
+    ):
+        asyncio.run(h.start())
+    [record] = caplog.records
+    assert record.exc_info is not None and str(record.exc_info[1]) == "teardown boom"
 
 
 def test_partial_start_failure_rolls_back_started_plugins():

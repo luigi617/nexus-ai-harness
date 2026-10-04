@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import logging
 from types import TracebackType
 
 from nexus_ai_harness.core.invoke import call
@@ -14,6 +15,8 @@ from nexus_ai_harness.harness.validation import describe_registry, validate_regi
 from nexus_ai_harness.protocols.lifecycle import Lifecycle
 from nexus_ai_harness.protocols.plugin import Plugin
 from nexus_ai_harness.services.runner import run_session
+
+logger = logging.getLogger(__name__)
 
 
 class NexusAIHarness:
@@ -103,9 +106,14 @@ class NexusAIHarness:
                         self._registry.set_status(current, PluginStatus.FAILED)
                 for started_plugin in reversed(newly):  # roll back this pass only
                     try:
-                        # Best-effort rollback
-                        with contextlib.suppress(Exception):
+                        try:
                             await call(started_plugin.stop)
+                        except Exception:  # best-effort rollback
+                            logger.warning(
+                                "rollback stop of %s failed",
+                                type(started_plugin).__name__,
+                                exc_info=True,
+                            )
                     finally:
                         # Un-track even if stop() is interrupted, so a retry re-inits.
                         self._registry.set_status(
@@ -133,7 +141,12 @@ class NexusAIHarness:
                 try:
                     await call(plugin.stop)
                 except Exception as exc:  # keep tearing the rest down
-                    first_error = first_error or exc
+                    if first_error is None:
+                        first_error = exc
+                    else:  # only the first is re-raised; log the rest so none is lost
+                        logger.warning(
+                            "stop of %s failed", type(plugin).__name__, exc_info=exc
+                        )
                 # A BaseException here leaves the plugin started for a retried stop().
                 self._registry.set_status(plugin, PluginStatus.REGISTERED)
                 # Drop its subscriptions so a later start() adds no duplicates.

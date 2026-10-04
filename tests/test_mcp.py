@@ -1,11 +1,18 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 
 import pytest
 
+from nexus_ai_harness.core.events import Event, ToolCallCompleted
+from nexus_ai_harness.harness.context import RunContext
 from nexus_ai_harness.plugins.mcp import MCPClient, MCPServer
+from nexus_ai_harness.plugins.permissions import AutoApprove
+from nexus_ai_harness.protocols.context import Context
+from nexus_ai_harness.protocols.hook import Hook
 from nexus_ai_harness.protocols.tool import Tool
+from nexus_ai_harness.services.tool_runner import ToolRunner
 from tests.conftest import make_ctx
 
 READ_SPEC = {
@@ -94,7 +101,7 @@ def test_run_proxies_to_call_tool():
     assert result == "read -> {'path': 'a.txt'}"
 
 
-def test_run_returns_error_on_failure():
+def _failing_read_tool(*plugins: object) -> tuple[Tool, RunContext]:
     class BoomSession(FakeSession):
         async def call_tool(self, name: str, arguments: dict) -> str:
             raise RuntimeError("boom")
@@ -103,14 +110,58 @@ def test_run_returns_error_on_failure():
         [MCPServer(name="fs", command=["run-fs"])],
         connector=make_connector(BoomSession()),
     )
-    ctx = make_ctx()
+    ctx = make_ctx(AutoApprove(), *plugins)
     asyncio.run(client.start(ctx))
-    read = {t.name: t for t in client.provide_tools(ctx)}["fs__read"]
+    return {t.name: t for t in client.provide_tools(ctx)}["fs__read"], ctx
 
-    result = asyncio.run(read.run({"path": "a.txt"}, ctx))
 
-    assert result.startswith("error:")
-    assert "boom" in result
+def test_run_propagates_failure_to_the_tool_runner():
+    read, ctx = _failing_read_tool()
+    with pytest.raises(RuntimeError, match="boom"):
+        asyncio.run(read.run({"path": "a.txt"}, ctx))
+
+
+def test_failed_call_through_runner_returns_error_and_marks_event():
+    completed: list[ToolCallCompleted] = []
+
+    class Rec(Hook):
+        def on(self, event: Event, ctx: Context) -> None:
+            if isinstance(event, ToolCallCompleted):
+                completed.append(event)
+
+    read, ctx = _failing_read_tool(Rec())
+    call = {"id": "1", "name": "fs__read", "arguments": {"path": "a.txt"}}
+    result = asyncio.run(ToolRunner([read]).run(call, ctx))
+
+    assert result.content == "error: boom"  # unchanged string for the model
+    [event] = completed
+    assert isinstance(event.error, RuntimeError)
+
+
+def test_failed_call_logs_traceback_without_arguments(caplog):
+    read, ctx = _failing_read_tool()
+    call = {"id": "1", "name": "fs__read", "arguments": {"path": "secret.txt"}}
+
+    with caplog.at_level(logging.WARNING, logger="nexus_ai_harness"):
+        asyncio.run(ToolRunner([read]).run(call, ctx))
+
+    [record] = caplog.records
+    assert record.exc_info is not None and record.exc_info[0] is RuntimeError
+    assert "fs__read" in record.getMessage()
+    assert "secret.txt" not in caplog.text
+
+
+def test_start_logs_server_label_but_never_command_or_env(caplog):
+    client = MCPClient(
+        [MCPServer(name="fs", command=["run-fs", "--token=hush"], env={"K": "hush"})],
+        connector=make_connector(FakeSession()),
+    )
+    with caplog.at_level(logging.DEBUG, logger="nexus_ai_harness"):
+        asyncio.run(client.start(make_ctx()))
+    assert any(
+        "'fs'" in r.getMessage() and "2 tools" in r.getMessage() for r in caplog.records
+    )
+    assert "hush" not in caplog.text
 
 
 def test_names_namespaced_across_servers():
