@@ -52,6 +52,6 @@ jobs:
           commit-message: "Refresh pricing from models.dev"
           title: "Refresh model pricing"
           body-path: pricing-summary.md
-          labels: dependencies, automated
+          labels: dependencies, automated, skip-changelog
           add-paths: |
             src/nexus_ai_harness/plugins/models/*.py

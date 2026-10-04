@@ -69,7 +69,7 @@ class GeminiModel(BaseModel):
         if self.api_key:
             headers["x-goog-api-key"] = self.api_key
         url = f"{self.base_url}/models/{self.name}:generateContent"
-        response = post_json(url, payload, headers, self.timeout)
+        response = post_json(url, payload, headers, self.timeout, retry=self.retry)
         parsed = self._parse(response)
         parsed.cost = self._cost(parsed.usage)
         return parsed

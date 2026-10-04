@@ -4,8 +4,16 @@ import os
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
+import pytest
+from botocore.exceptions import ClientError
+
+from nexus_ai_harness.core.errors import (
+    ContextLengthExceeded,
+    ModelAPIError,
+    RateLimitError,
+)
 from nexus_ai_harness.core.message import Message
-from nexus_ai_harness.plugins.models import bedrock
+from nexus_ai_harness.plugins.models import RetryPolicy, bedrock
 from nexus_ai_harness.plugins.models.bedrock import DEFAULT_REGION, BedrockModel
 
 
@@ -306,3 +314,79 @@ def test_bedrock_honors_timeout_kwarg(monkeypatch):
     model = BedrockModel(model="us.anthropic.claude-opus-4-8", timeout=30)
     assert model.timeout == 30
     assert "timeout" not in model.params
+
+
+# --- retries and typed errors --------------------------------------------
+
+
+def test_get_client_configures_botocore_retries(monkeypatch):
+    _no_dotenv(monkeypatch)
+    factory = MagicMock()
+    monkeypatch.setattr(bedrock.boto3, "client", factory)
+
+    BedrockModel(model="m", region="us-east-1", max_retries=5)._get_client()
+    config = factory.call_args.kwargs["config"]
+    assert config.retries == {"total_max_attempts": 6, "mode": "standard"}
+
+
+def test_bedrock_retry_settings_stay_out_of_inference_config(monkeypatch):
+    _no_dotenv(monkeypatch)
+    model = BedrockModel(model="m", max_retries=0, retry=RetryPolicy())
+    assert model.retry.max_retries == 0
+    assert model.params == {}
+
+
+def _client_error(code, message, status, retry_attempts=0):
+    return ClientError(
+        {
+            "Error": {"Code": code, "Message": message},
+            "ResponseMetadata": {
+                "HTTPStatusCode": status,
+                "RetryAttempts": retry_attempts,
+            },
+        },
+        "Converse",
+    )
+
+
+def _failing_client(monkeypatch, error):
+    client = MagicMock()
+    client.converse.side_effect = error
+    monkeypatch.setattr(bedrock.boto3, "client", MagicMock(return_value=client))
+
+
+def test_bedrock_throttling_becomes_rate_limit_error(monkeypatch):
+    _no_dotenv(monkeypatch)
+    _failing_client(monkeypatch, _client_error("ThrottlingException", "slow", 400, 3))
+    model = BedrockModel(model="m", region="us-east-1")
+    with pytest.raises(RateLimitError) as excinfo:
+        model._generate([Message(role="user", content="hi")], [])
+    error = excinfo.value
+    assert error.retryable is True
+    assert error.attempts == 4  # botocore's retries plus the first attempt
+    assert error.status == 400
+    assert isinstance(error.__cause__, ClientError)
+
+
+def test_bedrock_context_overflow_becomes_context_length_exceeded(monkeypatch):
+    _no_dotenv(monkeypatch)
+    _failing_client(
+        monkeypatch,
+        _client_error("ValidationException", "Input is too long for model.", 400),
+    )
+    model = BedrockModel(model="m", region="us-east-1")
+    with pytest.raises(ContextLengthExceeded):
+        model._generate([Message(role="user", content="hi")], [])
+
+
+def test_bedrock_other_client_errors_are_model_api_errors(monkeypatch):
+    _no_dotenv(monkeypatch)
+    _failing_client(
+        monkeypatch, _client_error("AccessDeniedException", "no access", 403)
+    )
+    model = BedrockModel(model="m", region="us-east-1")
+    with pytest.raises(ModelAPIError) as excinfo:
+        model._generate([Message(role="user", content="hi")], [])
+    assert excinfo.value.retryable is False
+    assert excinfo.value.status == 403
+    assert "AccessDeniedException" in str(excinfo.value)

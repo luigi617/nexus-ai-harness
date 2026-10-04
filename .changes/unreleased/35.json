@@ -1,0 +1,4 @@
+{
+  "id": 35,
+  "description": "Run HumanEval completions in isolation (WorkspaceSandbox with resource limits, or Docker) instead of an unconfined subprocess, configurable via the new `isolation` option."
+}

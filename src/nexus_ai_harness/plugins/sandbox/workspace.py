@@ -5,9 +5,18 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import warnings
 from collections.abc import Iterable
 from pathlib import Path
 
+from nexus_ai_harness.plugins.sandbox.isolation import (
+    IsolationBackend,
+    IsolationSpec,
+    IsolationWarning,
+    SandboxExecBackend,
+    sbpl_escape,
+    select_backend,
+)
 from nexus_ai_harness.protocols.context import Context
 from nexus_ai_harness.protocols.lifecycle import Lifecycle
 from nexus_ai_harness.protocols.sandbox import Sandbox, SandboxResult, SandboxViolation
@@ -16,24 +25,37 @@ from nexus_ai_harness.protocols.sandbox import Sandbox, SandboxResult, SandboxVi
 # the conventional shell code for a process terminated by ``timeout(1)``.
 _TIMEOUT_RETURNCODE = 124
 
+# Set after the first degraded-isolation warning so a process warns only once.
+_warned_unenforced = False
+
 
 class WorkspaceSandbox(Sandbox, Lifecycle):
     """A :class:`Sandbox` confined to a single workspace root directory.
 
     Paths are resolved and rejected if they escape the root (symlinks included);
     this path confinement holds on every platform. Commands are checked against
-    an optional allowlist and a denylist before running. On macOS the process is
-    wrapped in a ``sandbox-exec`` profile confining writes to the root (plus a
-    private scratch dir exposed as ``$TMPDIR``) and denying network by default.
-    Off macOS (or where ``sandbox-exec`` is absent)
-    OS-level isolation is best-effort: the command still runs with ``cwd`` at the
-    root, a scrubbed environment, ``shell=False``, and a mandatory timeout, but
-    write confinement and network denial are not kernel-enforced.
+    an optional allowlist and a denylist before running, then run under an
+    :class:`~nexus_ai_harness.plugins.sandbox.isolation.IsolationBackend` that
+    confines writes to the root (plus a private scratch dir exposed as
+    ``$TMPDIR``) and denies network by default:
+
+    * macOS: a ``sandbox-exec`` profile.
+    * Linux: ``bwrap`` (bubblewrap) with a read-only ``/``, writable binds of
+      the root and scratch dir, private empty ``/tmp`` and ``/run`` (hiding host
+      files and Unix sockets there), and an unshared network.
+
+    When no backend is usable (Linux without a working ``bwrap``, other
+    platforms) the command still runs with ``cwd`` at the root, a scrubbed
+    environment, ``shell=False``, and a mandatory timeout, but write confinement
+    and network denial are not kernel-enforced. That degradation is observable:
+    :attr:`isolation_enforced` is ``False`` and an :class:`IsolationWarning` is
+    emitted once per process. Pass ``require_isolation=True`` to raise instead.
 
     Scope of confinement, by design:
 
-    * The macOS profile narrows *writes* and network only — *reads* are not
-      restricted (denying them would break loading the program's own binary), so
+    * Isolation narrows *writes* and network only — *reads* are not
+      restricted (denying them would break loading the program's own binary),
+      apart from the directories the Linux backend masks, so
       callers who must prevent exfiltration should also restrict which commands
       may run via ``allowed_commands``/``denied_commands``.
     * Command policy matches ``argv[0]`` (and its basename); it does not see
@@ -56,6 +78,8 @@ class WorkspaceSandbox(Sandbox, Lifecycle):
         allow_network: bool = False,
         allowed_commands: Iterable[str] | None = None,
         denied_commands: Iterable[str] = (),
+        isolation: IsolationBackend | str = "auto",
+        require_isolation: bool = False,
     ) -> None:
         """Create a sandbox rooted at ``root``, creating the directory if absent.
 
@@ -67,22 +91,54 @@ class WorkspaceSandbox(Sandbox, Lifecycle):
                 against ``argv[0]``) may run; anything else is denied.
             denied_commands: Program names that are always denied, even if they
                 appear in ``allowed_commands``.
+            isolation: The OS isolation backend. ``"auto"`` (default) picks the
+                platform's backend and degrades to none, with a warning, when it
+                is unavailable. A name (``"sandbox-exec"``, ``"bubblewrap"``,
+                ``"none"``) or an ``IsolationBackend`` instance forces a choice;
+                ``"none"`` opts out of OS isolation without a warning.
+            require_isolation: If ``True``, raise rather than run commands
+                without kernel-enforced isolation.
+
+        Raises:
+            IsolationUnavailable: If an explicitly chosen backend is unavailable,
+                or ``require_isolation`` is set and no backend is usable.
+            ValueError: If ``isolation`` is an unknown name, or a non-enforcing
+                backend is combined with ``require_isolation``.
         """
+        # Selected first so a failed strict check leaves no scratch dir behind.
+        self._isolation = select_backend(isolation, require=require_isolation)
         self._root = Path(root).expanduser().resolve()
         self._root.mkdir(parents=True, exist_ok=True)
         # A dedicated scratch dir exposed as $TMPDIR: outside the root so it
-        # never pollutes the listing, private so the profile's write grant stays narrow.
+        # never pollutes the listing, private so the backend's write grant stays narrow.
         self._tmpdir = Path(tempfile.mkdtemp(prefix="nexus-sandbox-")).resolve()
         self.allow_network = allow_network
         self._allowed = (
             frozenset(allowed_commands) if allowed_commands is not None else None
         )
         self._denied = frozenset(denied_commands)
+        if isolation == "auto" and not self._isolation.enforced:
+            _warn_unenforced_once()
 
     @property
     def root(self) -> Path:
         """The resolved confinement root directory."""
         return self._root
+
+    @property
+    def isolation(self) -> IsolationBackend:
+        """The OS isolation backend commands run under."""
+        return self._isolation
+
+    @property
+    def isolation_level(self) -> str:
+        """The active backend's name: ``"sandbox-exec"``, ``"bubblewrap"``, etc."""
+        return self._isolation.name
+
+    @property
+    def isolation_enforced(self) -> bool:
+        """Whether writes and network are kernel-confined for commands."""
+        return self._isolation.enforced
 
     async def start(self, ctx: Context) -> None:
         """Recreate the private scratch dir, so the sandbox is restart-safe."""
@@ -193,7 +249,7 @@ class WorkspaceSandbox(Sandbox, Lifecycle):
         """Build a scrubbed minimal environment for the sandboxed process.
 
         ``TMPDIR`` is the sandbox's private scratch dir (writes to it are allowed
-        by the macOS profile), so a subprocess that follows ``$TMPDIR``
+        by every isolation backend), so a subprocess that follows ``$TMPDIR``
         (compilers, ``tempfile``, ``mktemp``) can write scratch files without
         those landing in — or being visible in — the user's workspace root.
         """
@@ -205,39 +261,39 @@ class WorkspaceSandbox(Sandbox, Lifecycle):
         }
 
     def _wrap(self, argv: list[str]) -> list[str]:
-        """Wrap ``argv`` in ``sandbox-exec`` on macOS when it is available."""
-        if sys.platform != "darwin":
-            return list(argv)
-        sandbox_exec = shutil.which("sandbox-exec")
-        if sandbox_exec is None:
-            return list(argv)
-        return [sandbox_exec, "-p", self._profile(), *argv]
+        """Wrap ``argv`` with the selected isolation backend."""
+        # A backend may bind the scratch dir, so it must exist even after stop()
+        # or a host tmp cleaner removed it; otherwise every command would fail.
+        self._tmpdir.mkdir(parents=True, exist_ok=True)
+        return self._isolation.wrap(argv, self._spec())
+
+    def _spec(self) -> IsolationSpec:
+        return IsolationSpec(
+            root=self._root, tmpdir=self._tmpdir, allow_network=self.allow_network
+        )
 
     def _profile(self) -> str:
-        """Build the macOS ``sandbox-exec`` profile string.
-
-        The profile allows everything by default, then narrows file writes to
-        the root, the process temp dir, and ``/dev`` (for stdio), and denies
-        network unless :attr:`allow_network` is set.
-        """
-        lines = [
-            "(version 1)",
-            "(allow default)",
-            "(deny file-write*)",
-            f'(allow file-write* (subpath "{self._sbpl(self._root)}"))',
-            f'(allow file-write* (subpath "{self._sbpl(self._tmpdir)}"))',
-            '(allow file-write* (subpath "/dev"))',
-        ]
-        if not self.allow_network:
-            lines.append("(deny network*)")
-        return "\n".join(lines)
+        """Build the macOS ``sandbox-exec`` profile string for this sandbox."""
+        return SandboxExecBackend().profile(self._spec())
 
     @staticmethod
     def _sbpl(path: Path) -> str:
-        r"""Escape ``path`` for use inside an SBPL double-quoted string literal.
+        """Escape ``path`` for use inside an SBPL double-quoted string literal."""
+        return sbpl_escape(path)
 
-        SBPL (TinyScheme) escapes with backslash, so backslashes must be doubled
-        before quotes are escaped — otherwise a path byte like ``\"`` would
-        terminate the literal early and let trailing bytes parse as directives.
-        """
-        return str(path).replace("\\", "\\\\").replace('"', '\\"')
+
+def _warn_unenforced_once() -> None:
+    """Warn, once per process, that auto-selection found no isolation backend."""
+    global _warned_unenforced
+    if _warned_unenforced:
+        return
+    _warned_unenforced = True
+    warnings.warn(
+        f"WorkspaceSandbox: no OS isolation backend is available on {sys.platform}; "
+        "write confinement and network denial are NOT enforced for sandboxed "
+        "commands. Install bubblewrap (bwrap) on Linux, pass "
+        "require_isolation=True to fail instead, or isolation='none' to opt out "
+        "explicitly.",
+        IsolationWarning,
+        stacklevel=3,
+    )

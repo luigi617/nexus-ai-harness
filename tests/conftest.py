@@ -49,6 +49,21 @@ class ScriptedModel(Model):
         return self._responses[idx]
 
 
+class FailingModel(ScriptedModel):
+    """Returns the queued Responses, then raises ``error`` on every later call."""
+
+    def __init__(self, error: Exception, *responses: Response) -> None:
+        super().__init__(*responses)
+        self._scripted = len(responses)
+        self._error = error
+
+    async def complete(self, history, tools, ctx) -> Response:
+        if len(self.calls) >= self._scripted:
+            self.calls.append(list(history))
+            raise self._error
+        return await super().complete(history, tools, ctx)
+
+
 class RecordingTool(Tool):
     """A sync tool that records its invocations and returns a fixed result."""
 

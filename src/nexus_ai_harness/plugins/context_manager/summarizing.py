@@ -9,6 +9,7 @@ from nexus_ai_harness.core.events import (
     ResponseReceived,
 )
 from nexus_ai_harness.core.message import Message
+from nexus_ai_harness.core.persistable import persistable
 from nexus_ai_harness.plugins.context_manager.token_estimator import (
     CharTokenEstimator,
 )
@@ -17,8 +18,10 @@ from nexus_ai_harness.protocols.context_manager import ContextManager
 from nexus_ai_harness.protocols.lifecycle import Lifecycle
 from nexus_ai_harness.protocols.model import Model
 from nexus_ai_harness.protocols.token_estimator import TokenEstimator
+from nexus_ai_harness.services.model_call import timed_complete
 
 
+@persistable("summarizing.summary")
 @dataclass
 class SummaryState:
     """Compaction bookkeeping of one :class:`SummarizingContextManager` in a session.
@@ -64,6 +67,8 @@ class _Slots:
     """Session state keyed by manager, so chained instances don't share cuts."""
 
     by_manager: dict[object, _Slot] = field(default_factory=dict)
+    # Only the first manager to ask gets the persistable SummaryState singleton.
+    claimed: bool = False
 
 
 _SUMMARY_HEADER = "[Conversation summary so far]"
@@ -226,11 +231,15 @@ class SummarizingContextManager(ContextManager, Lifecycle):
         self._max_summary_tokens = max_summary_tokens
         self._estimator_override = estimator
         self._default_estimator = CharTokenEstimator()
+        self._anchor_eligible = True
 
     async def start(self, ctx: Context) -> None:
         """Subscribe to model calls so estimates can use reported token usage."""
         ctx.on(ModelCallStarted, self._on_model_call)
         ctx.on(ResponseReceived, self._on_response)
+        # A non-last chained manager's view isn't what the model actually saw.
+        peers = ctx.all(SummarizingContextManager)
+        self._anchor_eligible = not peers or peers[-1] is self
 
     def state(self, ctx: Context) -> SummaryState:
         """Return this manager's compaction bookkeeping for ``ctx``'s session.
@@ -244,10 +253,13 @@ class SummarizingContextManager(ContextManager, Lifecycle):
         return self._slot(ctx).summary
 
     def _slot(self, ctx: Context) -> _Slot:
-        slots = ctx.state(_Slots).by_manager
-        slot = slots.get(self)
+        slots = ctx.state(_Slots)
+        slot = slots.by_manager.get(self)
         if slot is None:
-            slot = slots[self] = _Slot()
+            # First manager to ask reuses the persistable singleton, so resume works.
+            summary = ctx.state(SummaryState) if not slots.claimed else SummaryState()
+            slots.claimed = True
+            slot = slots.by_manager[self] = _Slot(summary=summary)
         return slot
 
     async def process(self, history: list[Message], ctx: Context) -> list[Message]:
@@ -337,9 +349,8 @@ class SummarizingContextManager(ContextManager, Lifecycle):
         """Estimate the prompt tokens of ``messages``, anchored to reported usage."""
         estimate = self._estimator(ctx).estimate(messages)
         usage = self._slot(ctx).usage
-        if usage.input_tokens:
-            # Shift by the known error on the last sent prompt, not a ratio, so a
-            # large fixed overhead like tool schemas isn't scaled with history.
+        if usage.input_tokens and self._anchor_eligible:
+            # A fixed shift, not a ratio, so overhead like tool schemas doesn't scale.
             return max(0, usage.input_tokens + estimate - usage.sent_estimate)
         return estimate
 
@@ -648,7 +659,7 @@ class SummarizingContextManager(ContextManager, Lifecycle):
         ]
         try:
             # Summarization is a plain completion with no tools to offer.
-            response = await ctx.invoke(model.complete, request, [], ctx)
+            response = await timed_complete(model, request, [], ctx)
         except Exception:
             return None
         text = (response.text or "").strip()

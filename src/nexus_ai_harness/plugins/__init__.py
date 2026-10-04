@@ -9,7 +9,12 @@ from nexus_ai_harness.plugins.context_manager import (
 )
 from nexus_ai_harness.plugins.evaluators import JevEvaluator
 from nexus_ai_harness.plugins.guards import BudgetGuard, MaxIterations, Timeout
-from nexus_ai_harness.plugins.hooks import CostCounter, ElapsedTime, IterationCounter
+from nexus_ai_harness.plugins.hooks import (
+    CostCounter,
+    ElapsedTime,
+    IterationCounter,
+    LoggingHook,
+)
 from nexus_ai_harness.plugins.interventions import InjectMessage
 from nexus_ai_harness.plugins.loops import AgenticLoop, ChatLoop
 from nexus_ai_harness.plugins.mcp import MCPClient, MCPServer
@@ -82,6 +87,7 @@ __all__ = [
     "JevEvaluator",
     "LLMRouter",
     "ListDir",
+    "LoggingHook",
     "MCPClient",
     "MCPServer",
     "MarkdownSkill",
