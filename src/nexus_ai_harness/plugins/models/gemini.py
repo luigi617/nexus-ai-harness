@@ -31,6 +31,7 @@ class GeminiModel(BaseModel):
         "gemini-3.6-flash": (0.75, 3.75),
         "gemini-3.7-flash": (0.75, 3.75),
         "gemini-3.8-flash": (0.75, 3.75),
+        "gemini-4-argon": (2.0, 10.0),
         "gemini-flash-latest": (0.75, 3.75),
         "gemini-flash-lite-latest": (0.3, 2.5),
     }
@@ -49,6 +50,7 @@ class GeminiModel(BaseModel):
         "gemini-3.6-flash": "Fast Gemini model balancing multimodal reasoning, tool us",
         "gemini-3.7-flash": "High-efficiency Gemini model for agentic workflows, codin",
         "gemini-3.8-flash": "Google's most intelligent Flash model, engineered for lon",
+        "gemini-4-argon": "Google's flagship reasoning model for complex software engineering, deep math and science, and long-horizon autonomous agents",  # noqa: E501
         "gemini-flash-latest": "High-efficiency Gemini model for agentic workflows, co",
         "gemini-flash-lite-latest": "Fast Gemini model balancing multimodal reasoning,",
     }
