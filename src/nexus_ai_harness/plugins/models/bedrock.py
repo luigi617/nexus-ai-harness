@@ -49,6 +49,7 @@ class BedrockModel(BaseModel):
         "anthropic.claude-fable-5": (10.0, 50.0),
         "anthropic.claude-fable-5-1": (10.0, 50.0),
         "anthropic.claude-haiku-4-5-20251001-v1:0": (1.0, 5.0),
+        "anthropic.claude-haiku-5-5": (0.1, 0.5),
         "anthropic.claude-opus-4-1-20250805-v1:0": (15.0, 75.0),
         "anthropic.claude-opus-4-5-20251101-v1:0": (5.0, 25.0),
         "anthropic.claude-opus-4-6-v1": (5.5, 27.5),
@@ -65,6 +66,7 @@ class BedrockModel(BaseModel):
         "apac.amazon.nova-pro-v1:0": (0.84, 3.36),
         "apac.anthropic.claude-sonnet-4-20250514-v1:0": (3.0, 15.0),
         "au.anthropic.claude-haiku-4-5-20251001-v1:0": (1.1, 5.5),
+        "au.anthropic.claude-haiku-5-5": (0.11, 0.55),
         "au.anthropic.claude-opus-4-6-v1": (5.5, 27.5),
         "au.anthropic.claude-opus-4-7": (5.5, 27.5),
         "au.anthropic.claude-opus-4-8": (5.5, 27.5),
@@ -83,6 +85,7 @@ class BedrockModel(BaseModel):
         "eu.amazon.nova-pro-v1:0": (0.92, 3.68),
         "eu.anthropic.claude-fable-5": (11.0, 55.0),
         "eu.anthropic.claude-haiku-4-5-20251001-v1:0": (1.1, 5.5),
+        "eu.anthropic.claude-haiku-5-5": (0.11, 0.55),
         "eu.anthropic.claude-opus-4-5-20251101-v1:0": (5.5, 27.5),
         "eu.anthropic.claude-opus-4-6-v1": (5.5, 27.5),
         "eu.anthropic.claude-opus-4-7": (5.5, 27.5),
@@ -99,6 +102,7 @@ class BedrockModel(BaseModel):
         "global.anthropic.claude-fable-5": (10.0, 50.0),
         "global.anthropic.claude-fable-5-1": (10.0, 50.0),
         "global.anthropic.claude-haiku-4-5-20251001-v1:0": (1.0, 5.0),
+        "global.anthropic.claude-haiku-5-5": (0.1, 0.5),
         "global.anthropic.claude-opus-4-5-20251101-v1:0": (5.0, 25.0),
         "global.anthropic.claude-opus-4-6-v1": (5.0, 25.0),
         "global.anthropic.claude-opus-4-7": (5.0, 25.0),
@@ -120,6 +124,7 @@ class BedrockModel(BaseModel):
         "global.openai.gpt-6.1-sol": (2.0, 10.0),
         "global.xai.grok-4.6": (2.0, 6.0),
         "global.xai.grok-4.7": (2.0, 6.0),
+        "global.zai.glm-5.3": (1.68, 5.28),
         "google.gemma-3-12b-it": (0.09, 0.29),
         "google.gemma-3-27b-it": (0.23, 0.38),
         "google.gemma-4-26b-a4b": (0.13, 0.4),
@@ -132,6 +137,7 @@ class BedrockModel(BaseModel):
         "in.openai.gpt-5.6-terra": (2.2, 13.2),
         "jp.amazon.nova-2-lite-v1:0": (0.396, 3.311),
         "jp.anthropic.claude-haiku-4-5-20251001-v1:0": (1.1, 5.5),
+        "jp.anthropic.claude-haiku-5-5": (0.11, 0.55),
         "jp.anthropic.claude-opus-4-7": (5.5, 27.5),
         "jp.anthropic.claude-opus-4-8": (5.5, 27.5),
         "jp.anthropic.claude-opus-5": (5.5, 27.5),
@@ -194,6 +200,7 @@ class BedrockModel(BaseModel):
         "us.anthropic.claude-fable-5": (11.0, 55.0),
         "us.anthropic.claude-fable-5-1": (11.0, 55.0),
         "us.anthropic.claude-haiku-4-5-20251001-v1:0": (1.1, 5.5),
+        "us.anthropic.claude-haiku-5-5": (0.11, 0.55),
         "us.anthropic.claude-opus-4-1-20250805-v1:0": (15.0, 75.0),
         "us.anthropic.claude-opus-4-5-20251101-v1:0": (5.5, 27.5),
         "us.anthropic.claude-opus-4-6-v1": (5.5, 27.5),
@@ -225,6 +232,7 @@ class BedrockModel(BaseModel):
         "us.writer.palmyra-x5-v1:0": (0.6, 6.0),
         "us.xai.grok-4.6": (2.2, 6.6),
         "us.xai.grok-4.7": (2.2, 6.6),
+        "us.zai.glm-5.3": (1.848, 5.808),
         "writer.palmyra-x4-v1:0": (2.5, 10.0),
         "writer.palmyra-x5-v1:0": (0.6, 6.0),
         "xai.grok-4.3": (1.25, 2.5),
@@ -241,6 +249,7 @@ class BedrockModel(BaseModel):
         "anthropic.claude-fable-5": "Claude model for creative writing, analysis, and controlled agent workflows",  # noqa: E501
         "anthropic.claude-fable-5-1": "Claude model for demanding reasoning and long-horizon agentic work",  # noqa: E501
         "anthropic.claude-haiku-4-5-20251001-v1:0": "Fast Claude model for responsive assistance, classification, and lightweight agents",  # noqa: E501
+        "anthropic.claude-haiku-5-5": "Fast Claude model for responsive assistance, classification, and lightweight agents",  # noqa: E501
         "anthropic.claude-opus-4-1-20250805-v1:0": "Flagship Claude model for deep reasoning, coding, and long-horizon agents",  # noqa: E501
         "anthropic.claude-opus-4-5-20251101-v1:0": "Flagship Claude model for deep reasoning, coding, and long-horizon agents",  # noqa: E501
         "anthropic.claude-opus-4-6-v1": "High-end Claude for difficult coding, planning, and slower expert reasoning",  # noqa: E501
@@ -257,6 +266,7 @@ class BedrockModel(BaseModel):
         "apac.amazon.nova-pro-v1:0": "Flagship model for demanding analysis, coding, and production agent workflows",  # noqa: E501
         "apac.anthropic.claude-sonnet-4-20250514-v1:0": "Balanced Claude model for coding, analysis, agent workflows, and cost control",  # noqa: E501
         "au.anthropic.claude-haiku-4-5-20251001-v1:0": "Fast Claude model for responsive assistance, classification, and lightweight agents",  # noqa: E501
+        "au.anthropic.claude-haiku-5-5": "Fast Claude model for responsive assistance, classification, and lightweight agents",  # noqa: E501
         "au.anthropic.claude-opus-4-6-v1": "High-end Claude for difficult coding, planning, and slower expert reasoning",  # noqa: E501
         "au.anthropic.claude-opus-4-7": "Stronger Opus tier for advanced software work and high-stakes reasoning",  # noqa: E501
         "au.anthropic.claude-opus-4-8": "Top Claude Opus tier for the hardest reasoning, coding, and long-horizon agents",  # noqa: E501
@@ -275,6 +285,7 @@ class BedrockModel(BaseModel):
         "eu.amazon.nova-pro-v1:0": "Flagship model for demanding analysis, coding, and production agent workflows",  # noqa: E501
         "eu.anthropic.claude-fable-5": "Claude model for creative writing, analysis, and controlled agent workflows",  # noqa: E501
         "eu.anthropic.claude-haiku-4-5-20251001-v1:0": "Fast Claude model for responsive assistance, classification, and lightweight agents",  # noqa: E501
+        "eu.anthropic.claude-haiku-5-5": "Fast Claude model for responsive assistance, classification, and lightweight agents",  # noqa: E501
         "eu.anthropic.claude-opus-4-5-20251101-v1:0": "Flagship Claude model for deep reasoning, coding, and long-horizon agents",  # noqa: E501
         "eu.anthropic.claude-opus-4-6-v1": "High-end Claude for difficult coding, planning, and slower expert reasoning",  # noqa: E501
         "eu.anthropic.claude-opus-4-7": "Stronger Opus tier for advanced software work and high-stakes reasoning",  # noqa: E501
@@ -291,6 +302,7 @@ class BedrockModel(BaseModel):
         "global.anthropic.claude-fable-5": "Claude model for creative writing, analysis, and controlled agent workflows",  # noqa: E501
         "global.anthropic.claude-fable-5-1": "Claude model for demanding reasoning and long-horizon agentic work",  # noqa: E501
         "global.anthropic.claude-haiku-4-5-20251001-v1:0": "Fast Claude model for responsive assistance, classification, and lightweight agents",  # noqa: E501
+        "global.anthropic.claude-haiku-5-5": "Fast Claude model for responsive assistance, classification, and lightweight agents",  # noqa: E501
         "global.anthropic.claude-opus-4-5-20251101-v1:0": "Flagship Claude model for deep reasoning, coding, and long-horizon agents",  # noqa: E501
         "global.anthropic.claude-opus-4-6-v1": "High-end Claude for difficult coding, planning, and slower expert reasoning",  # noqa: E501
         "global.anthropic.claude-opus-4-7": "Stronger Opus tier for advanced software work and high-stakes reasoning",  # noqa: E501
@@ -312,6 +324,7 @@ class BedrockModel(BaseModel):
         "global.openai.gpt-6.1-sol": "Near-Astra performance for complex coding, computer use, and professional work at a lower cost.",  # noqa: E501
         "global.xai.grok-4.6": "xAI's frontier model for long-running agents, coding, knowledge work, and visual projects",  # noqa: E501
         "global.xai.grok-4.7": "xAI's frontier model for long-running agents, coding, knowledge work, and visual projects",  # noqa: E501
+        "global.zai.glm-5.3": "Flagship GLM model for long-horizon coding, agents, and complex project delivery",  # noqa: E501
         "google.gemma-3-12b-it": "Open multimodal Gemma instruction model for multilingual text generation and image understanding",  # noqa: E501
         "google.gemma-3-27b-it": "Largest open Gemma 3 instruction model for multilingual text generation and visual understanding",  # noqa: E501
         "google.gemma-4-26b-a4b": "Open Gemma instruction model for efficient chat and self-hosted deployments",  # noqa: E501
@@ -324,6 +337,7 @@ class BedrockModel(BaseModel):
         "in.openai.gpt-5.6-terra": "Balanced GPT-5.6 model for capable, cost-efficient everyday work",  # noqa: E501
         "jp.amazon.nova-2-lite-v1:0": "Multimodal reasoning model for visual analysis, planning, and tool use",  # noqa: E501
         "jp.anthropic.claude-haiku-4-5-20251001-v1:0": "Fast Claude model for responsive assistance, classification, and lightweight agents",  # noqa: E501
+        "jp.anthropic.claude-haiku-5-5": "Fast Claude model for responsive assistance, classification, and lightweight agents",  # noqa: E501
         "jp.anthropic.claude-opus-4-7": "Stronger Opus tier for advanced software work and high-stakes reasoning",  # noqa: E501
         "jp.anthropic.claude-opus-4-8": "Top Claude Opus tier for the hardest reasoning, coding, and long-horizon agents",  # noqa: E501
         "jp.anthropic.claude-opus-5": "Strongest Claude Opus model for coding, agents, and professional work",  # noqa: E501
@@ -386,6 +400,7 @@ class BedrockModel(BaseModel):
         "us.anthropic.claude-fable-5": "Claude model for creative writing, analysis, a",
         "us.anthropic.claude-fable-5-1": "Claude model for demanding reasoning and lon",
         "us.anthropic.claude-haiku-4-5-20251001-v1:0": "Fast Claude model for responsi",
+        "us.anthropic.claude-haiku-5-5": "Fast Claude model for responsive assistance, classification, and lightweight agents",  # noqa: E501
         "us.anthropic.claude-opus-4-1-20250805-v1:0": "Flagship Claude model for deep",
         "us.anthropic.claude-opus-4-5-20251101-v1:0": "Flagship Claude model for deep",
         "us.anthropic.claude-opus-4-6-v1": "High-end Claude for difficult coding, plan",
@@ -417,6 +432,7 @@ class BedrockModel(BaseModel):
         "us.writer.palmyra-x5-v1:0": "Reasoning model for deliberate analysis, multi-step problem solving, and tool use",  # noqa: E501
         "us.xai.grok-4.6": "xAI's frontier model for long-running agents, coding, knowledge work, and visual projects",  # noqa: E501
         "us.xai.grok-4.7": "xAI's frontier model for long-running agents, coding, knowledge work, and visual projects",  # noqa: E501
+        "us.zai.glm-5.3": "Flagship GLM model for long-horizon coding, agents, and complex project delivery",  # noqa: E501
         "writer.palmyra-x4-v1:0": "Enterprise language model for workflow automation, coding, data analysis, and tool use",  # noqa: E501
         "writer.palmyra-x5-v1:0": "Reasoning model for deliberate analysis, multi-step problem solving, and tool use",  # noqa: E501
         "xai.grok-4.3": "xAI's default Grok for chat, coding, agentic tools, and lower hallucination risk",  # noqa: E501
