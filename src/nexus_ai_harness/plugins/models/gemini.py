@@ -31,8 +31,14 @@ class GeminiModel(BaseModel):
         "gemini-3.6-flash": (0.75, 3.75),
         "gemini-3.7-flash": (0.75, 3.75),
         "gemini-3.8-flash": (0.75, 3.75),
+        "gemini-4-argon": (2.0, 10.0),
+        "gemini-4-carbon": (2.0, 10.0),
+        "gemini-4-hydrogen": (1.5, 7.5),
         "gemini-flash-latest": (0.75, 3.75),
         "gemini-flash-lite-latest": (0.3, 2.5),
+        "gemini-pro-latest": (2.0, 12.0),
+        "gemma-4-26b-a4b-it": (0.0, 0.0),
+        "gemma-4-31b-it": (0.0, 0.0),
     }
     descriptions: ClassVar[dict[str, str]] = {
         "gemini-2.5-computer-use-preview-10-2025": "Specialized Gemini 2.5 model for b",
@@ -49,8 +55,14 @@ class GeminiModel(BaseModel):
         "gemini-3.6-flash": "Fast Gemini model balancing multimodal reasoning, tool us",
         "gemini-3.7-flash": "High-efficiency Gemini model for agentic workflows, codin",
         "gemini-3.8-flash": "Google's most intelligent Flash model, engineered for lon",
+        "gemini-4-argon": "Google's flagship reasoning model for complex software engineering, deep math and science, and long-horizon autonomous agents",  # noqa: E501
+        "gemini-4-carbon": "Google's most capable reasoning model for complex software engineering, deep math and science, high factual accuracy, and long-horizon autonomous agents",  # noqa: E501
+        "gemini-4-hydrogen": "Google's Gemini 4 model for everyday coding and agentic workflows, with four thinking levels and a 1M-token context window",  # noqa: E501
         "gemini-flash-latest": "High-efficiency Gemini model for agentic workflows, co",
         "gemini-flash-lite-latest": "Fast Gemini model balancing multimodal reasoning,",
+        "gemini-pro-latest": "Reasoning-first Gemini preview for agentic coding and complex problem solving",  # noqa: E501
+        "gemma-4-26b-a4b-it": "Open Gemma instruction model for efficient chat and self-hosted deployments",  # noqa: E501
+        "gemma-4-31b-it": "Largest Gemma 4 instruction model for open, self-hosted chat and reasoning",  # noqa: E501
     }
 
     def _generate(self, history: list[Message], tools: list[Tool]) -> Response:

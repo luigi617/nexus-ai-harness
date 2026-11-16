@@ -26,9 +26,7 @@ class OpenAIModel(OpenAICompatibleModel):
         "gpt-5-pro": (15.0, 120.0),
         "gpt-5.1": (1.25, 10.0),
         "gpt-5.2": (1.75, 14.0),
-        "gpt-5.2-chat-latest": (1.75, 14.0),
         "gpt-5.2-pro": (21.0, 168.0),
-        "gpt-5.3-chat-latest": (1.75, 14.0),
         "gpt-5.3-codex": (1.75, 14.0),
         "gpt-5.3-codex-spark": (1.75, 14.0),
         "gpt-5.4": (2.5, 15.0),
@@ -45,6 +43,7 @@ class OpenAIModel(OpenAICompatibleModel):
         "gpt-6-luna": (0.1, 0.5),
         "gpt-6-sol": (2.0, 10.0),
         "gpt-6.1-sol": (2.0, 10.0),
+        "gpt-6.1-terra": (1.0, 5.0),
         "gpt-daybreak-blue-latest": (4.0, 20.0),
         "gpt-daybreak-red-latest": (12.5, 75.0),
         "o1": (15.0, 60.0),
@@ -71,9 +70,7 @@ class OpenAIModel(OpenAICompatibleModel):
         "gpt-5-pro": "Higher-accuracy GPT-5 tier for tough analysis, coding reviews, a",
         "gpt-5.1": "Sharper GPT-5 generation for coding, product work, and tool-assist",
         "gpt-5.2": "Reliable GPT generation for broad coding, writing, and tool-assist",
-        "gpt-5.2-chat-latest": "Chat-tuned GPT model for conversational assistance, wr",
         "gpt-5.2-pro": "Higher-accuracy GPT-5.2 variant for tougher reasoning and revi",
-        "gpt-5.3-chat-latest": "Chat-tuned GPT model for conversational assistance, wr",
         "gpt-5.3-codex": "Coding-optimized GPT model for repository edits, reviews, an",
         "gpt-5.3-codex-spark": "Coding-optimized GPT model for repository edits, revie",
         "gpt-5.4": "Agent-ready GPT for coding and computer-use workflows at a lower c",
@@ -90,6 +87,7 @@ class OpenAIModel(OpenAICompatibleModel):
         "gpt-6-luna": "OpenAI's most efficient model for focused, high-volume tasks",
         "gpt-6-sol": "OpenAI model for complex coding and agentic workflows",
         "gpt-6.1-sol": "Near-Astra performance for complex coding, computer use, and professional work at a lower cost.",  # noqa: E501
+        "gpt-6.1-terra": "Fast, efficient model for visual reasoning, precise computer use, and clear, natural writing.",  # noqa: E501
         "gpt-daybreak-blue-latest": "Alias for flagship general-purpose models with safeguards for defensive cybersecurity work",  # noqa: E501
         "gpt-daybreak-red-latest": "Alias for advanced cybersecurity models for authorized vulnerability research and security testing",  # noqa: E501
         "o1": "O-series reasoning model for hard analysis, math, coding, and planning",
