@@ -17,6 +17,7 @@ class MiniMaxModel(OpenAICompatibleModel):
         "MiniMax-M2.7": (0.3, 1.2),
         "MiniMax-M2.7-highspeed": (0.6, 2.4),
         "MiniMax-M3": (0.3, 1.2),
+        "MiniMax-M3.1-Flash": (0.15, 0.6),
     }
     descriptions: ClassVar[dict[str, str]] = {
         "MiniMax-M2": "Efficient open MiniMax model built for coding agents and tool-h",
@@ -26,4 +27,5 @@ class MiniMaxModel(OpenAICompatibleModel):
         "MiniMax-M2.7": "Open MiniMax flagship for coding agents, office automation, a",
         "MiniMax-M2.7-highspeed": "Low-latency M2.7 variant for interactive coding pla",
         "MiniMax-M3": "MiniMax multimodal model for long-context coding, perception, a",
+        "MiniMax-M3.1-Flash": "Frontier multimodal coding model with 1M context window and tunable thinking depth",  # noqa: E501
     }

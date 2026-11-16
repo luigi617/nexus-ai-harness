@@ -21,8 +21,10 @@ class AnthropicModel(BaseModel):
     pricing: ClassVar[dict[str, tuple[float, float]]] = {
         "claude-fable-5": (10.0, 50.0),
         "claude-fable-5-1": (10.0, 50.0),
+        "claude-fable-5-2": (8.0, 40.0),
         "claude-haiku-4-5": (1.0, 5.0),
         "claude-haiku-4-5-20251001": (1.0, 5.0),
+        "claude-haiku-5-5": (0.1, 0.5),
         "claude-opus-4-5": (5.0, 25.0),
         "claude-opus-4-5-20251101": (5.0, 25.0),
         "claude-opus-4-6": (5.0, 25.0),
@@ -39,8 +41,10 @@ class AnthropicModel(BaseModel):
     descriptions: ClassVar[dict[str, str]] = {
         "claude-fable-5": "Claude model for creative writing, analysis, and controlled",
         "claude-fable-5-1": "Claude model for demanding reasoning and long-horizon age",
+        "claude-fable-5-2": "Claude model for demanding reasoning and long-horizon agentic work",  # noqa: E501
         "claude-haiku-4-5": "Fast Claude lane for lightweight agents, office tasks, an",
         "claude-haiku-4-5-20251001": "Fast Claude model for responsive assistance, cla",
+        "claude-haiku-5-5": "Fast Claude model for responsive assistance, classification, and lightweight agents",  # noqa: E501
         "claude-opus-4-5": "Flagship Claude model for deep reasoning, coding, and long",
         "claude-opus-4-5-20251101": "Flagship Claude model for deep reasoning, coding,",
         "claude-opus-4-6": "High-end Claude for difficult coding, planning, and slower",
